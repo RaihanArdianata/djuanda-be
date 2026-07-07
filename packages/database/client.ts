@@ -4,6 +4,13 @@ import { Pool } from 'pg';
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL!,
+  max: parseInt(process.env.DB_POOL_MAX || '10', 10),
+  idleTimeoutMillis: parseInt(process.env.DB_POOL_IDLE_TIMEOUT_MS || '30000', 10),
+  connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT_MS || '5000', 10),
+});
+
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle DB client', err);
 });
 
 export const db = drizzle({ client: pool });

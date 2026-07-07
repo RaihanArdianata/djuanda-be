@@ -1,0 +1,98 @@
+name: Deploy Backend Djuanda
+
+on:
+  push:
+    branches:
+      - development
+
+jobs:
+  deploy:
+    concurrency:
+      group: backend-djuanda-production
+      cancel-in-progress: true
+    runs-on: [self-hosted, production, kantor-231]
+    timeout-minutes: 30
+
+    # DEPLOY_PATH: set as a GitHub Actions Variable (repo Settings -> Variables -> DEPLOY_PATH)
+    # Must be an absolute path, e.g. /home/mid/apps/backend-djuanda
+    # Tilde (~) is NOT expanded by GitHub Actions expressions.
+    env:
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/apps/backend-djuanda' }}
+
+    steps:
+      - name: Resolve deploy path
+        run: |
+          RESOLVED="${DEPLOY_PATH/#\~/$HOME}"
+          echo "DEPLOY_PATH=$RESOLVED" >> "$GITHUB_ENV"
+
+      - name: Sync latest code
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: |
+          git fetch --all
+          git reset --hard origin/development
+          git clean -fd
+
+      - name: Verify environment
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: |
+          if [ ! -f .env ]; then
+            echo "FATAL: .env file not found at $(pwd)/.env"
+            exit 1
+          fi
+          for var in JWT_SECRET DATABASE_URL DB_HOST POSTGRES_PASSWORD; do
+            val=$(grep "^${var}=" .env | cut -d'=' -f2-)
+            if [ -z "$val" ] || echo "$val" | grep -qi "change-me"; then
+              echo "FATAL: $var is missing or still has a placeholder value"
+              exit 1
+            fi
+          done
+          echo "Environment OK"
+
+      - name: Build images
+        working-directory: ${{ env.DEPLOY_PATH }}
+        env:
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
+        run: docker compose build --pull
+
+      - name: Run database migrations
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: |
+          # Tidak ada container postgres lokal -- DB-nya di VPS terpisah. pgbouncer
+          # yang jadi perantara, jadi cukup tunggu itu jalan lalu coba migrate
+          # (retry beberapa kali kalau jaringan ke VPS DB belum siap).
+          docker compose up -d pgbouncer
+
+          for i in $(seq 1 10); do
+            if docker compose run --rm --no-deps auth-service sh -c "cd ../../packages/database && bun run db:migrate"; then
+              echo "Migrations done"
+              break
+            fi
+            [ $i -eq 10 ] && { echo "Migration failed after 10 attempts (cek koneksi ke DB VPS)"; exit 1; }
+            echo "  migrate attempt $i failed, retrying in 5s..."
+            sleep 5
+          done
+
+      - name: Deploy
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: docker compose up -d
+
+      - name: Wait for gateway healthy
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: |
+          for i in $(seq 1 18); do
+            status=$(docker inspect backend-djuanda-gateway-1 --format='{{.State.Health.Status}}' 2>/dev/null)
+            if [ "$status" = "healthy" ]; then
+              echo "gateway is healthy"
+              break
+            fi
+            [ $i -eq 18 ] && { echo "gateway did not become healthy"; docker compose logs gateway --tail=30; }
+            sleep 10
+          done
+          docker compose ps
+
+      - name: Cleanup old images
+        working-directory: ${{ env.DEPLOY_PATH }}
+        run: |
+          docker image prune -af
+          docker builder prune -f

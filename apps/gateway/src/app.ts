@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { metricsMiddleware, metricsHandler } from '@repo/shared';
 import { requestId } from './middleware/request-id';
 import { requestLogger } from './middleware/logger';
 import { security } from './middleware/security';
@@ -18,6 +19,8 @@ const app = new Hono()
   .use(corsMiddleware)
   .use(compression)
   .use(requestTimeout)
+  .use(metricsMiddleware)
+  .get('/metrics', metricsHandler)
   .use(rateLimit)
   .route('/', routes)
   .notFound(notFound)

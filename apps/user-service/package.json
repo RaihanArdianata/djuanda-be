@@ -4,11 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "bun --env-file=../../.env run --hot src/index.ts",
+    "start": "bun run src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@repo/logger": "workspace:*",
     "@repo/database": "workspace:*",
+    "@repo/shared": "workspace:*",
     "hono": "^4.12.27"
   }
 }

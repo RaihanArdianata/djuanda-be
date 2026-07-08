@@ -60,12 +60,20 @@ jobs:
           # (retry beberapa kali kalau jaringan ke VPS DB belum siap).
           docker compose up -d pgbouncer
 
+          echo "--- pgbouncer status ---"
+          docker compose ps pgbouncer
+
           for i in $(seq 1 10); do
             if docker compose run --rm --no-deps auth-service sh -c "cd ../../packages/database && bun run db:migrate"; then
               echo "Migrations done"
               break
             fi
-            [ $i -eq 10 ] && { echo "Migration failed after 10 attempts (cek koneksi ke DB VPS)"; exit 1; }
+            [ $i -eq 10 ] && {
+              echo "Migration failed after 10 attempts (cek koneksi ke DB VPS: DB_HOST/DB_PORT/POSTGRES_USER/POSTGRES_PASSWORD di .env, firewall, pg_hba.conf)"
+              echo "--- pgbouncer logs ---"
+              docker compose logs pgbouncer --tail=50
+              exit 1
+            }
             echo "  migrate attempt $i failed, retrying in 5s..."
             sleep 5
           done

@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
-import { createBunWebSocket, serveStatic } from 'hono/bun';
+import { websocket, serveStatic } from 'hono/bun';
 import { logger } from 'hono/logger';
 import { errorHandler, metricsMiddleware, metricsHandler } from '@repo/shared';
 import { join } from 'path';
 import routes from './routes';
 import { wsHandler } from './websocket';
-
-const { websocket } = createBunWebSocket();
+import { sseHandler } from './sse';
 
 const app = new Hono()
   .use(logger())
@@ -17,11 +16,15 @@ const app = new Hono()
     const filePath = join(publicPath, c.req.path.replace('/public/', ''));
     return new Response(Bun.file(filePath));
   })
-  .use('/file-data/*', serveStatic({
-    root: './public',
-    rewriteRequestPath: (path) => path.replace('/file-data/', ''),
-  }))
+  .use(
+    '/file-data/*',
+    serveStatic({
+      root: './public',
+      rewriteRequestPath: (path) => path.replace('/file-data/', ''),
+    })
+  )
   .get('/ws/:topic', wsHandler)
+  .get('/sse/:topic', sseHandler)
   .route('/', routes)
   .onError(errorHandler);
 

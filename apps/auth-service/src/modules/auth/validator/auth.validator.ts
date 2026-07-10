@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const passwordSchema = z
   .string()
+<<<<<<< HEAD
   .min(1, "Password must be at least 1 character long.")
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter.")
   .regex(/\d/, "Password must contain at least one number.")
@@ -9,9 +10,15 @@ const passwordSchema = z
     /[!@#$%^&*(),.?":{}|<>]/,
     "Password must contain at least one symbol.",
   );
+=======
+  .min(1, 'Password must be at least 1 character long.')
+  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
+  .regex(/\d/, 'Password must contain at least one number.')
+  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one symbol.');
+>>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
 export const loginSchema = z.object({
-  username: z.string().min(1),
+  identifier: z.string().min(1),
   password: z.string().min(1),
 });
 
@@ -19,8 +26,7 @@ export type loginSchemaType = z.infer<typeof loginSchema>;
 
 export const registerSchema = z.object({
   email: z.string().min(1),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  name: z.string().min(1),
   username: z.string().min(1),
   password: passwordSchema,
   phone: z.string().min(1),
@@ -29,7 +35,7 @@ export const registerSchema = z.object({
 export type registerSchemaType = z.infer<typeof registerSchema>;
 
 export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, "Refresh token is required."),
+  refreshToken: z.string().min(1, 'Refresh token is required.'),
 });
 
 export type refreshTokenSchemaType = z.infer<typeof refreshTokenSchema>;

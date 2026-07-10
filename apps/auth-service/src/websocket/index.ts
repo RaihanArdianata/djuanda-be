@@ -1,7 +1,5 @@
 import { ServerWebSocket } from 'bun';
-import { createBunWebSocket } from 'hono/bun';
-
-const { upgradeWebSocket } = createBunWebSocket();
+import { upgradeWebSocket } from 'hono/bun';
 
 const clients = new Map<ServerWebSocket, Set<string>>();
 

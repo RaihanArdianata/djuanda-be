@@ -1,14 +1,4 @@
-import {
-  pgTable,
-  serial,
-  uuid,
-  varchar,
-  text,
-  timestamp,
-  integer,
-  jsonb,
-  primaryKey,
-} from 'drizzle-orm/pg-core';
+import { pgTable, serial, uuid, varchar, text, timestamp, integer, jsonb, primaryKey } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 export const userRoles = pgTable('user_roles', {
@@ -24,17 +14,27 @@ export const permissions = pgTable('permissions', {
   description: text('description'),
 });
 
-export const rolePermissions = pgTable('role_permissions', {
-  roleId: integer('role_id').notNull().references(() => userRoles.id),
-  permissionId: uuid('permission_id').notNull().references(() => permissions.id),
-}, (t) => ({
-  pk: primaryKey({ columns: [t.roleId, t.permissionId] }),
-}));
+export const rolePermissions = pgTable(
+  'role_permissions',
+  {
+    roleId: integer('role_id')
+      .notNull()
+      .references(() => userRoles.id),
+    permissionId: uuid('permission_id')
+      .notNull()
+      .references(() => permissions.id),
+  },
+  (t) => [primaryKey({ columns: [t.roleId, t.permissionId] })]
+);
 
 export const auditRoleChanges = pgTable('audit_role_changes', {
   id: uuid('id').defaultRandom().primaryKey(),
-  changedByUserId: uuid('changed_by_user_id').notNull().references(() => users.id),
-  targetUserId: uuid('target_user_id').notNull().references(() => users.id),
+  changedByUserId: uuid('changed_by_user_id')
+    .notNull()
+    .references(() => users.id),
+  targetUserId: uuid('target_user_id')
+    .notNull()
+    .references(() => users.id),
   oldRoleId: integer('old_role_id').references(() => userRoles.id),
   newRoleId: integer('new_role_id').references(() => userRoles.id),
   oldPermissions: jsonb('old_permissions'),

@@ -4,3 +4,4 @@ export * from './rbac';
 export * from './notifications';
 export * from './logs';
 export * from './aeroswarm';
+export * from './relations';

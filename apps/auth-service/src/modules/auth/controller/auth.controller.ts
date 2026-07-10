@@ -1,33 +1,34 @@
-import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken } from "../service/auth.service";
-import { catchAsync, success, ApiError } from "@repo/shared";
-import { loginSchemaType, registerSchemaType, refreshTokenSchemaType } from "../validator/auth.validator";
-import { bcryptHash, bcryptVerify } from "@/utils/hashing";
-import { checkRateLimit, resetRateLimit } from "@repo/shared";
-import { loginRateLimitConfig } from "@repo/config";
-import { generateToken, generateRefreshToken, verifyToken } from "@/utils/jwt";
-import * as HttpStatus from "http-status";
+import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken, createUserSession, getUserSession } from '../service/auth.service';
+import { catchAsync, success, ApiError } from '@repo/shared';
+import { loginSchemaType, registerSchemaType, refreshTokenSchemaType } from '../validator/auth.validator';
+import { bcryptHash, bcryptVerify, sha256Hash } from '@/utils/hashing';
+import { checkRateLimit, resetRateLimit } from '@repo/shared';
+import { loginRateLimitConfig } from '@repo/config';
+import { generateToken, generateRefreshToken, verifyToken } from '@/utils/jwt';
+import * as HttpStatus from 'http-status';
+import { logger } from '@repo/logger';
+import { getConnInfo } from 'hono/bun';
 
-const dummyPasswordHash = bcryptHash("dummy-password-for-timing-safety");
+const dummyPasswordHash = bcryptHash('dummy-password-for-timing-safety');
 
 export const register = catchAsync(async (c) => {
-  const { email, firstName, lastName, password, phone, username }: registerSchemaType = await c.req.parseBody();
+  const { email, name, password, phone, username }: registerSchemaType = await c.req.parseBody();
 
   const result = await createUser({
     email,
-    firstName,
-    lastName,
+    name,
     password,
     phone,
     username,
   });
 
-  return success(c, result, { code: HttpStatus.default.CREATED, message: "User registered successfully" });
+  return success(c, result, { code: HttpStatus.default.CREATED, message: 'User registered successfully' });
 });
 
 export const login = catchAsync(async (c) => {
-  const { password, username }: loginSchemaType = await c.req.parseBody();
+  const { password, identifier }: loginSchemaType = await c.req.parseBody();
 
-  const rateLimitKey = `login:${username.toLowerCase()}`;
+  const rateLimitKey = `login:${identifier.toLowerCase()}`;
   const { allowed } = await checkRateLimit({
     key: rateLimitKey,
     limit: loginRateLimitConfig.maxAttempts,
@@ -38,7 +39,7 @@ export const login = catchAsync(async (c) => {
     throw new ApiError('TOO_MANY_ATTEMPTS');
   }
 
-  const findUser = await getUser({ identifier: username });
+  const findUser = await getUser({ identifier });
 
   if (!findUser) {
     await bcryptVerify(password, await dummyPasswordHash);
@@ -50,29 +51,57 @@ export const login = catchAsync(async (c) => {
     throw new ApiError('INVALID_CREDENTIALS');
   }
 
+  const isUserActive = findUser.status === 'ACTIVE';
+  if (!isUserActive) {
+    throw new ApiError('ACCOUNT_INACTIVE');
+  }
+
   await resetRateLimit(rateLimitKey);
 
   const payload = {
     id: findUser.id,
     email: findUser.email,
-    roles: findUser.roles || ""
+    role: findUser.role?.name || '',
   };
 
   const accessToken = await generateToken(payload);
   const { token, tmpExp } = await generateRefreshToken(payload);
 
-  await saveRefreshToken(findUser.id, token, new Date(tmpExp));
+  await saveRefreshToken(findUser.id, token, new Date(tmpExp * 1000));
 
-  return success(c, {
-    firstName: findUser.firstName,
-    lastName: findUser.lastName,
-    email: findUser.email,
-    roles: payload.roles,
-    authorization: {
-      token: accessToken,
+  const existingSession = await getUserSession(findUser.id);
+
+  if (existingSession) {
+    throw new ApiError('SESSION_TERMINATED', { message: 'You are already logged in from another device. Please logout from that device first.' });
+  }
+
+  const [newSession] = await createUserSession({
+    expiresAt: new Date(tmpExp * 1000),
+    refreshTokenHash: sha256Hash(token),
+    userId: findUser.id,
+    deviceInfo: c.req.header('User-Agent') || '',
+    ipAddress:
+      c.req.header('X-Forwarded-For') || c.req.header('CF-Connecting-IP') || c.req.header('True-Client-IP') || c.req.header('X-Real-IP') || getConnInfo(c).remote.address || '',
+  });
+
+  logger.debug(`User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`);
+
+  return success(
+    c,
+    {
+      accessToken,
       refreshToken: token,
+      user: {
+        id: findUser.id,
+        username: findUser.username,
+        email: findUser.email,
+        name: findUser.name,
+      },
+      role: findUser.role?.name || '',
+      permissions: findUser.permissions || [],
     },
-  }, { message: "Login successful" });
+    { message: 'Login successful' }
+  );
 });
 
 export const refreshToken = catchAsync(async (c) => {
@@ -90,7 +119,7 @@ export const refreshToken = catchAsync(async (c) => {
   const payload = {
     id: decoded.id as string,
     email: decoded.email as string,
-    roles: decoded.roles as string,
+    role: decoded.role as string,
   };
 
   const newAccessToken = await generateToken(payload);
@@ -107,10 +136,14 @@ export const refreshToken = catchAsync(async (c) => {
     throw new ApiError('REFRESH_TOKEN_REVOKED');
   }
 
-  return success(c, {
-    token: newAccessToken,
-    refreshToken: newRefreshToken,
-  }, { message: "Token refreshed successfully" });
+  return success(
+    c,
+    {
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    },
+    { message: 'Token refreshed successfully' }
+  );
 });
 
 export const logout = catchAsync(async (c) => {
@@ -127,5 +160,5 @@ export const logout = catchAsync(async (c) => {
 
   await revokeRefreshToken(refreshToken);
 
-  return success(c, null, { message: "Logout successful" });
+  return success(c, null, { message: 'Logout successful' });
 });

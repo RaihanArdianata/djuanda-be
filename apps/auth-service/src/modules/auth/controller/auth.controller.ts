@@ -1,4 +1,4 @@
-import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken, createUserSession } from '../service/auth.service';
+import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken, createUserSession, getUserSession } from '../service/auth.service';
 import { catchAsync, success, ApiError } from '@repo/shared';
 import { loginSchemaType, registerSchemaType, refreshTokenSchemaType } from '../validator/auth.validator';
 import { bcryptHash, bcryptVerify, sha256Hash } from '@/utils/hashing';
@@ -64,11 +64,16 @@ export const login = catchAsync(async (c) => {
     role: findUser.role?.name || '',
   };
 
-  const { accessToken, expiresAt } = await generateToken(payload);
+  const accessToken = await generateToken(payload);
   const { token, tmpExp } = await generateRefreshToken(payload);
 
   await saveRefreshToken(findUser.id, token, new Date(tmpExp * 1000));
-  await saveRefreshToken(findUser.id, accessToken, expiresAt);
+
+  const existingSession = await getUserSession(findUser.id);
+
+  if (existingSession) {
+    throw new ApiError('SESSION_TERMINATED', { message: 'You are already logged in from another device. Please logout from that device first.' });
+  }
 
   const [newSession] = await createUserSession({
     expiresAt: new Date(tmpExp * 1000),

@@ -21,10 +21,7 @@ export const generateToken = async ({ email, id, role }: tokenParams) => {
   const secret = process.env.JWT_SECRET || 'default';
   const token = await sign(payload, secret, 'HS256');
 
-  return {
-    accessToken: token,
-    expiresAt: new Date(exp * 1000),
-  };
+  return token;
 };
 
 export const generateRefreshToken = async ({ email, national_id, id }: tokenParams) => {

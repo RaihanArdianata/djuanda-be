@@ -5,12 +5,11 @@ import { failureFromCode } from '@repo/shared';
 export const validate = (schema: ZodType) => {
   return async (c: Context, next: Next) => {
     try {
-      const body = await c.req.parseBody();
+      const body = await parseRequestBody(c);
       const parsedData = schema.parse(body);
       c.set('parsedData', parsedData);
       await next();
     } catch (error) {
-
       if (error instanceof SyntaxError) {
         return failureFromCode(c, 'INVALID_JSON');
       } else if (error instanceof ZodError) {
@@ -22,4 +21,18 @@ export const validate = (schema: ZodType) => {
       }
     }
   };
+};
+
+export const parseRequestBody = (c: Context): Promise<any> => {
+  const contentType = c.req.header('Content-Type') || '';
+
+  if (contentType.includes('application/json')) {
+    return c.req.json();
+  }
+
+  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+    return c.req.parseBody();
+  }
+
+  return c.req.json();
 };

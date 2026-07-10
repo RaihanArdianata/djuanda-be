@@ -1,15 +1,15 @@
-import { Hono } from 'hono';
-import { metricsMiddleware, metricsHandler } from '@repo/shared';
-import { requestId } from './middleware/request-id';
-import { requestLogger } from './middleware/logger';
-import { security } from './middleware/security';
-import { corsMiddleware } from './middleware/cors';
-import { compression } from './middleware/compression';
-import { requestTimeout } from './middleware/timeout';
-import { rateLimit } from './middleware/rate-limit';
-import { errorHandler } from './middleware/error-handler';
-import { notFound } from './middleware/not-found';
-import routes from './routes';
+import { metricsHandler, metricsMiddleware } from "@repo/shared";
+import { Hono } from "hono";
+import { compression } from "./middleware/compression";
+import { corsMiddleware } from "./middleware/cors";
+import { errorHandler } from "./middleware/error-handler";
+import { requestLogger } from "./middleware/logger";
+import { notFound } from "./middleware/not-found";
+import { rateLimit } from "./middleware/rate-limit";
+import { requestId } from "./middleware/request-id";
+import { security } from "./middleware/security";
+import { requestTimeout } from "./middleware/timeout";
+import routes from "./routes";
 
 // Urutan: RequestID -> Logger -> Security -> CORS -> Compression -> Timeout -> Rate Limit -> (JWT per-route) -> Proxy
 const app = new Hono()
@@ -20,9 +20,9 @@ const app = new Hono()
   .use(compression)
   .use(requestTimeout)
   .use(metricsMiddleware)
-  .get('/metrics', metricsHandler)
+  .get("/metrics", metricsHandler)
   .use(rateLimit)
-  .route('/', routes)
+  .route("/", routes)
   .notFound(notFound)
   .onError(errorHandler);
 

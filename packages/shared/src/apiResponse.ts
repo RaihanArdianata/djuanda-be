@@ -1,13 +1,17 @@
-import { Context } from "hono";
-import { ContentfulStatusCode } from "hono/utils/http-status";
-import type { ApiSuccessResponse, ApiErrorResponse, ErrorContract } from "./types/api-response";
-import { ErrorCode, resolveError } from "./constants/errors";
+import type { Context } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { type ErrorCode, resolveError } from "./constants/errors";
+import type {
+  ApiErrorResponse,
+  ApiSuccessResponse,
+  ErrorContract,
+} from "./types/api-response";
 
 export const success = <T>(
   c: Context,
   data: T,
-  options?: { code?: ContentfulStatusCode; message?: string; }
-) => {
+  options?: { code?: ContentfulStatusCode; message?: string },
+): Response => {
   const code = options?.code ?? 200;
   const body: ApiSuccessResponse<T> = {
     data,
@@ -25,8 +29,8 @@ export const success = <T>(
 export const failure = (
   c: Context,
   statusCode: ContentfulStatusCode,
-  error: ErrorContract
-) => {
+  error: ErrorContract,
+): Response => {
   const body: ApiErrorResponse = {
     data: null,
     error,
@@ -42,8 +46,13 @@ export const failure = (
 export const failureFromCode = (
   c: Context,
   code: ErrorCode,
-  overrides?: { message?: string; statusCode?: ContentfulStatusCode; fields?: Record<string, string[]>; details?: unknown; }
-) => {
+  overrides?: {
+    message?: string;
+    statusCode?: ContentfulStatusCode;
+    fields?: Record<string, string[]>;
+    details?: unknown;
+  },
+): Response => {
   const resolved = resolveError(code, overrides);
 
   return failure(c, resolved.statusCode, {

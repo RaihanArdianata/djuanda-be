@@ -1,16 +1,38 @@
-import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken } from "../service/auth.service";
-import { catchAsync, success, ApiError } from "@repo/shared";
-import { loginSchemaType, registerSchemaType, refreshTokenSchemaType } from "../validator/auth.validator";
-import { bcryptHash, bcryptVerify } from "@/utils/hashing";
-import { checkRateLimit, resetRateLimit } from "@repo/shared";
 import { loginRateLimitConfig } from "@repo/config";
-import { generateToken, generateRefreshToken, verifyToken } from "@/utils/jwt";
+import {
+  ApiError,
+  catchAsync,
+  checkRateLimit,
+  resetRateLimit,
+  success,
+} from "@repo/shared";
 import * as HttpStatus from "http-status";
+import { bcryptHash, bcryptVerify } from "@/utils/hashing";
+import { generateRefreshToken, generateToken, verifyToken } from "@/utils/jwt";
+import {
+  createUser,
+  getUser,
+  revokeRefreshToken,
+  rotateRefreshToken,
+  saveRefreshToken,
+} from "../service/auth.service";
+import type {
+  loginSchemaType,
+  refreshTokenSchemaType,
+  registerSchemaType,
+} from "../validator/auth.validator";
 
 const dummyPasswordHash = bcryptHash("dummy-password-for-timing-safety");
 
 export const register = catchAsync(async (c) => {
-  const { email, firstName, lastName, password, phone, username }: registerSchemaType = await c.req.parseBody();
+  const {
+    email,
+    firstName,
+    lastName,
+    password,
+    phone,
+    username,
+  }: registerSchemaType = await c.req.parseBody();
 
   const result = await createUser({
     email,
@@ -21,7 +43,10 @@ export const register = catchAsync(async (c) => {
     username,
   });
 
-  return success(c, result, { code: HttpStatus.default.CREATED, message: "User registered successfully" });
+  return success(c, result, {
+    code: HttpStatus.default.CREATED,
+    message: "User registered successfully",
+  });
 });
 
 export const login = catchAsync(async (c) => {
@@ -35,19 +60,19 @@ export const login = catchAsync(async (c) => {
   });
 
   if (!allowed) {
-    throw new ApiError('TOO_MANY_ATTEMPTS');
+    throw new ApiError("TOO_MANY_ATTEMPTS");
   }
 
   const findUser = await getUser({ identifier: username });
 
   if (!findUser) {
     await bcryptVerify(password, await dummyPasswordHash);
-    throw new ApiError('INVALID_CREDENTIALS');
+    throw new ApiError("INVALID_CREDENTIALS");
   }
 
   const verifiedPassword = await bcryptVerify(password, findUser.passwordHash);
   if (!verifiedPassword) {
-    throw new ApiError('INVALID_CREDENTIALS');
+    throw new ApiError("INVALID_CREDENTIALS");
   }
 
   await resetRateLimit(rateLimitKey);
@@ -55,7 +80,7 @@ export const login = catchAsync(async (c) => {
   const payload = {
     id: findUser.id,
     email: findUser.email,
-    roles: findUser.roles || ""
+    roles: findUser.roles || "",
   };
 
   const accessToken = await generateToken(payload);
@@ -63,28 +88,32 @@ export const login = catchAsync(async (c) => {
 
   await saveRefreshToken(findUser.id, token, new Date(tmpExp));
 
-  return success(c, {
-    firstName: findUser.firstName,
-    lastName: findUser.lastName,
-    email: findUser.email,
-    roles: payload.roles,
-    authorization: {
-      token: accessToken,
-      refreshToken: token,
+  return success(
+    c,
+    {
+      firstName: findUser.firstName,
+      lastName: findUser.lastName,
+      email: findUser.email,
+      roles: payload.roles,
+      authorization: {
+        token: accessToken,
+        refreshToken: token,
+      },
     },
-  }, { message: "Login successful" });
+    { message: "Login successful" },
+  );
 });
 
 export const refreshToken = catchAsync(async (c) => {
   const { refreshToken }: refreshTokenSchemaType = await c.req.parseBody();
 
   if (!refreshToken) {
-    throw new ApiError('REFRESH_TOKEN_REQUIRED');
+    throw new ApiError("REFRESH_TOKEN_REQUIRED");
   }
 
   const decoded = await verifyToken(refreshToken);
   if (!decoded) {
-    throw new ApiError('INVALID_REFRESH_TOKEN');
+    throw new ApiError("INVALID_REFRESH_TOKEN");
   }
 
   const payload = {
@@ -94,7 +123,8 @@ export const refreshToken = catchAsync(async (c) => {
   };
 
   const newAccessToken = await generateToken(payload);
-  const { token: newRefreshToken, tmpExp } = await generateRefreshToken(payload);
+  const { token: newRefreshToken, tmpExp } =
+    await generateRefreshToken(payload);
 
   const rotated = await rotateRefreshToken({
     oldToken: refreshToken,
@@ -104,25 +134,29 @@ export const refreshToken = catchAsync(async (c) => {
   });
 
   if (!rotated) {
-    throw new ApiError('REFRESH_TOKEN_REVOKED');
+    throw new ApiError("REFRESH_TOKEN_REVOKED");
   }
 
-  return success(c, {
-    token: newAccessToken,
-    refreshToken: newRefreshToken,
-  }, { message: "Token refreshed successfully" });
+  return success(
+    c,
+    {
+      token: newAccessToken,
+      refreshToken: newRefreshToken,
+    },
+    { message: "Token refreshed successfully" },
+  );
 });
 
 export const logout = catchAsync(async (c) => {
   const { refreshToken }: refreshTokenSchemaType = await c.req.parseBody();
 
   if (!refreshToken) {
-    throw new ApiError('REFRESH_TOKEN_REQUIRED');
+    throw new ApiError("REFRESH_TOKEN_REQUIRED");
   }
 
   const decoded = await verifyToken(refreshToken);
   if (!decoded) {
-    throw new ApiError('INVALID_REFRESH_TOKEN');
+    throw new ApiError("INVALID_REFRESH_TOKEN");
   }
 
   await revokeRefreshToken(refreshToken);

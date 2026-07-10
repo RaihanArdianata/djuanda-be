@@ -1,7 +1,11 @@
-import { z } from 'zod';
-import { catchAsync, success, ApiError } from '@repo/shared';
-import { createNotification, getNotificationsForUser, markNotificationAsRead } from '../service/notification.service';
-import { createNotificationSchema } from '../validator/notification.validator';
+import { ApiError, catchAsync, success } from "@repo/shared";
+import { z } from "zod";
+import {
+  createNotification,
+  getNotificationsForUser,
+  markNotificationAsRead,
+} from "../service/notification.service";
+import { createNotificationSchema } from "../validator/notification.validator";
 
 export const create = catchAsync(async (c) => {
   const body = await c.req.json();
@@ -9,16 +13,22 @@ export const create = catchAsync(async (c) => {
 
   if (!parsed.success) {
     const { fieldErrors } = z.flattenError(parsed.error);
-    throw new ApiError('VALIDATION_ERROR', { fields: fieldErrors });
+    throw new ApiError("VALIDATION_ERROR", { fields: fieldErrors });
   }
 
   const notification = await createNotification(parsed.data);
 
-  return success(c, notification, { code: 201, message: "Notification created successfully" });
+  return success(c, notification, {
+    code: 201,
+    message: "Notification created successfully",
+  });
 });
 
 export const list = catchAsync(async (c) => {
-  const userId = c.req.param('userId')!;
+  const userId = c.req.param("userId");
+
+  if (!userId)
+    throw new ApiError("NOT_FOUND", { message: "User tidak ditemukan" });
 
   const items = await getNotificationsForUser(userId);
 
@@ -26,17 +36,27 @@ export const list = catchAsync(async (c) => {
 });
 
 export const markAsRead = catchAsync(async (c) => {
-  const notificationId = c.req.param('notificationId')!;
+  const notificationId = c.req.param("notificationId");
   const { recipientId } = await c.req.json();
 
+  if (!notificationId) {
+    throw new ApiError("NOT_FOUND", {
+      message: "Notification not found for this recipient",
+    });
+  }
+
   if (!recipientId) {
-    throw new ApiError('VALIDATION_ERROR', { fields: { recipientId: ['recipientId is required'] } });
+    throw new ApiError("VALIDATION_ERROR", {
+      fields: { recipientId: ["recipientId is required"] },
+    });
   }
 
   const updated = await markNotificationAsRead(notificationId, recipientId);
 
   if (!updated) {
-    throw new ApiError('NOT_FOUND', { message: 'Notification not found for this recipient' });
+    throw new ApiError("NOT_FOUND", {
+      message: "Notification not found for this recipient",
+    });
   }
 
   return success(c, updated, { message: "Notification marked as read" });

@@ -1,13 +1,17 @@
-import { catchAsync, success, failureFromCode } from "@repo/shared";
-import { join } from "path";
-import { writeFile } from "fs/promises";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { catchAsync, failureFromCode, success } from "@repo/shared";
+import { fileUtils } from "@/utils/fileUtils";
 import { utapi } from "@/utils/uploadthing";
 import { toWebp } from "../service/image.service";
-import { fileUtils } from "@/utils/fileUtils";
+
+type UploadBody = {
+  file: File;
+};
 
 export const upload = catchAsync(async (c) => {
-  const { file }: any = await c.req.parseBody();
-  const publicPath = join(process.cwd(), 'public');
+  const { file }: UploadBody = await c.req.parseBody();
+  const publicPath = join(process.cwd(), "public");
 
   if (file instanceof File) {
     const buffer = await file?.arrayBuffer();
@@ -19,15 +23,18 @@ export const upload = catchAsync(async (c) => {
 
     await writeFile(filepath, Buffer.from(convertedBuffer));
 
-    return success(c, { filepath, file: originalName }, { message: "File uploaded successfully" });
+    return success(
+      c,
+      { filepath, file: originalName },
+      { message: "File uploaded successfully" },
+    );
   }
 
-  return failureFromCode(c, 'UNSUPPORTED_MEDIA_TYPE');
+  return failureFromCode(c, "UNSUPPORTED_MEDIA_TYPE");
 });
 
-
 export const uploadThing = catchAsync(async (c) => {
-  const { file }: any = await c.req.parseBody();
+  const { file }: UploadBody = await c.req.parseBody();
 
   if (file instanceof File) {
     const buffer = await file?.arrayBuffer();
@@ -45,5 +52,5 @@ export const uploadThing = catchAsync(async (c) => {
     return success(c, response, { message: "File uploaded successfully" });
   }
 
-  return failureFromCode(c, 'UNSUPPORTED_MEDIA_TYPE');
+  return failureFromCode(c, "UNSUPPORTED_MEDIA_TYPE");
 });

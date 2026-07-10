@@ -45,8 +45,21 @@
           "options": {
             "conventions": [
               {
-                "formats": ["camelCase", "snake_case"],
+                "formats": ["camelCase", "snake_case", "CONSTANT_CASE"],
                 "selector": { "kind": "objectLiteralProperty" }
+              },
+              {
+                "formats": ["camelCase", "snake_case", "PascalCase"],
+                "selector": { "kind": "typeAlias" }
+              },
+              {
+                "formats": [
+                  "camelCase",
+                  "snake_case",
+                  "CONSTANT_CASE",
+                  "PascalCase"
+                ],
+                "selector": { "kind": "typeProperty" }
               }
             ]
           }

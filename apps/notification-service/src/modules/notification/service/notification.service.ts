@@ -1,5 +1,8 @@
-import { db, notifications, notificationRecipients } from '@repo/database';
-import { and, desc, eq } from 'drizzle-orm';
+import { db, notificationRecipients, notifications } from "@repo/database";
+import { and, desc, eq } from "drizzle-orm";
+
+type NotificationRecipientsType = typeof notificationRecipients.$inferSelect;
+type NotificationsType = typeof notifications.$inferSelect;
 
 export async function createNotification({
   senderId,
@@ -11,7 +14,7 @@ export async function createNotification({
   title: string;
   message: string;
   recipientIds: string[];
-}) {
+}): Promise<NotificationsType> {
   return await db.transaction(async (tx) => {
     const [notification] = await tx
       .insert(notifications)
@@ -31,7 +34,9 @@ export async function createNotification({
   });
 }
 
-export async function getNotificationsForUser(recipientId: string) {
+export async function getNotificationsForUser(
+  recipientId: string,
+): Promise<NotificationsType[]> {
   return await db
     .select({
       id: notifications.id,
@@ -43,12 +48,18 @@ export async function getNotificationsForUser(recipientId: string) {
       readAt: notificationRecipients.readAt,
     })
     .from(notificationRecipients)
-    .innerJoin(notifications, eq(notificationRecipients.notificationId, notifications.id))
+    .innerJoin(
+      notifications,
+      eq(notificationRecipients.notificationId, notifications.id),
+    )
     .where(eq(notificationRecipients.recipientId, recipientId))
     .orderBy(desc(notifications.createdAt));
 }
 
-export async function markNotificationAsRead(notificationId: string, recipientId: string) {
+export async function markNotificationAsRead(
+  notificationId: string,
+  recipientId: string,
+): Promise<NotificationRecipientsType | null> {
   const [updated] = await db
     .update(notificationRecipients)
     .set({ isRead: true, readAt: new Date() })

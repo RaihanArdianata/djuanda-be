@@ -1,10 +1,14 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-const passwordSchema = z.string()
+const passwordSchema = z
+  .string()
   .min(1, "Password must be at least 1 character long.")
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter.")
   .regex(/\d/, "Password must contain at least one number.")
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, "Password must contain at least one symbol.");
+  .regex(
+    /[!@#$%^&*(),.?":{}|<>]/,
+    "Password must contain at least one symbol.",
+  );
 
 export const loginSchema = z.object({
   username: z.string().min(1),

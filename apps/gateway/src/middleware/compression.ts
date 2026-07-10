@@ -1,3 +1,3 @@
-import { compress } from 'hono/compress';
+import { compress } from "hono/compress";
 
 export const compression = compress();

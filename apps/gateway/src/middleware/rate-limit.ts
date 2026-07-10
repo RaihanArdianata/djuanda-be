@@ -1,7 +1,7 @@
-import { createMiddleware } from 'hono/factory';
-import { checkRateLimit, failureFromCode } from '@repo/shared';
-import { getClientIp } from '../utils/ip';
-import { env } from '../config/env';
+import { checkRateLimit, failureFromCode } from "@repo/shared";
+import { createMiddleware } from "hono/factory";
+import { env } from "../config/env";
+import { getClientIp } from "../utils/ip";
 
 export const rateLimit = createMiddleware(async (c, next) => {
   const ip = getClientIp(c);
@@ -13,7 +13,7 @@ export const rateLimit = createMiddleware(async (c, next) => {
   });
 
   if (!allowed) {
-    return failureFromCode(c, 'TOO_MANY_ATTEMPTS');
+    return failureFromCode(c, "TOO_MANY_ATTEMPTS");
   }
 
   await next();

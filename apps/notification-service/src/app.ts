@@ -1,13 +1,13 @@
-import { Hono } from 'hono';
-import { logger } from 'hono/logger';
-import { errorHandler, metricsMiddleware, metricsHandler } from '@repo/shared';
-import routes from './routes';
+import { errorHandler, metricsHandler, metricsMiddleware } from "@repo/shared";
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import routes from "./routes";
 
 const app = new Hono()
   .use(logger())
   .use(metricsMiddleware)
-  .get('/metrics', metricsHandler)
-  .route('/', routes)
+  .get("/metrics", metricsHandler)
+  .route("/", routes)
   .onError(errorHandler);
 
 export { app };

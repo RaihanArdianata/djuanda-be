@@ -1,29 +1,33 @@
-import * as nodemailer from 'nodemailer';
-import { emailConfig } from '@repo/config';
+import { emailConfig } from "@repo/config";
+import * as nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport(emailConfig);
 
-export const sendEmail = async (type: string, to: string, data: Record<string, any>) => {
-  let subject, text;
+export const sendEmail = async (
+  type: string,
+  to: string,
+  data: Record<string, unknown>,
+): Promise<void> => {
+  let subject: string, text: string;
 
   switch (type) {
-    case 'confirmation':
-      subject = 'Email Confirmation';
+    case "confirmation":
+      subject = "Email Confirmation";
       text = `Please confirm your email by clicking this link: ${data.confirmationLink}`;
       break;
 
-    case 'otp':
-      subject = 'Your OTP Code';
+    case "otp":
+      subject = "Your OTP Code";
       text = `Your OTP code is: ${data.otpCode}`;
       break;
 
-    case 'reset-password':
-      subject = 'Reset Your Password';
+    case "reset-password":
+      subject = "Reset Your Password";
       text = `Click this link to reset your password: ${data.resetLink}`;
       break;
 
     default:
-      throw new Error('Unknown email type');
+      throw new Error("Unknown email type");
   }
 
   await transporter.sendMail({

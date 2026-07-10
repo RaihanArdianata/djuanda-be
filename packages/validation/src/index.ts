@@ -39,17 +39,3 @@ export const validate = (schema: ZodType) => {
     }
   };
 };
-
-export const parseRequestBody = (c: Context): Promise<any> => {
-  const contentType = c.req.header('Content-Type') || '';
-
-  if (contentType.includes('application/json')) {
-    return c.req.json();
-  }
-
-  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
-    return c.req.parseBody();
-  }
-
-  return c.req.json();
-};

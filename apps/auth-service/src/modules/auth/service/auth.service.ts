@@ -135,10 +135,15 @@ export async function rotateRefreshToken({ oldToken, userId, newToken, expiresAt
 }
 
 export async function revokeRefreshToken(token: string, isPlain: boolean = true) {
-  return await db
+  await db
     .update(authTokens)
     .set({ isActive: false, usedAt: new Date() })
     .where(eq(authTokens.token, isPlain ? sha256Hash(token) : token));
+
+  await db
+    .update(userSessions)
+    .set({ revokedAt: new Date() })
+    .where(eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token));
 }
 
 export async function getUserSession(userId: string) {

@@ -1,13 +1,5 @@
-<<<<<<< HEAD
-import type { ServerWebSocket } from "bun";
-import { createBunWebSocket } from "hono/bun";
-import type { WSContext } from "hono/ws";
-
-const { upgradeWebSocket } = createBunWebSocket();
-=======
 import { ServerWebSocket } from 'bun';
 import { upgradeWebSocket } from 'hono/bun';
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
 const clients = new Map<ServerWebSocket, Set<string>>();
 

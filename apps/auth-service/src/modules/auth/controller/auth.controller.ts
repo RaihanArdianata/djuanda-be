@@ -1,28 +1,3 @@
-<<<<<<< HEAD
-import { loginRateLimitConfig } from "@repo/config";
-import {
-  ApiError,
-  catchAsync,
-  checkRateLimit,
-  resetRateLimit,
-  success,
-} from "@repo/shared";
-import * as HttpStatus from "http-status";
-import { bcryptHash, bcryptVerify } from "@/utils/hashing";
-import { generateRefreshToken, generateToken, verifyToken } from "@/utils/jwt";
-import {
-  createUser,
-  getUser,
-  revokeRefreshToken,
-  rotateRefreshToken,
-  saveRefreshToken,
-} from "../service/auth.service";
-import type {
-  loginSchemaType,
-  refreshTokenSchemaType,
-  registerSchemaType,
-} from "../validator/auth.validator";
-=======
 import { createUser, getUser, saveRefreshToken, rotateRefreshToken, revokeRefreshToken, createUserSession, getUserSession } from '../service/auth.service';
 import { catchAsync, success, ApiError } from '@repo/shared';
 import { loginSchemaType, registerSchemaType, refreshTokenSchemaType } from '../validator/auth.validator';
@@ -33,16 +8,11 @@ import { generateToken, generateRefreshToken, verifyToken } from '@/utils/jwt';
 import * as HttpStatus from 'http-status';
 import { logger } from '@repo/logger';
 import { getConnInfo } from 'hono/bun';
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
 const dummyPasswordHash = bcryptHash('dummy-password-for-timing-safety');
 
 export const register = catchAsync(async (c) => {
-<<<<<<< HEAD
-  const { email, firstName, lastName, password, phone, username } = c.get('parsedData') as registerSchemaType;
-=======
   const { email, name, password, phone, username }: registerSchemaType = await c.req.parseBody();
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
   const result = await createUser({
     email,
@@ -52,22 +22,11 @@ export const register = catchAsync(async (c) => {
     username,
   });
 
-<<<<<<< HEAD
-  return success(c, result, {
-    code: HttpStatus.default.CREATED,
-    message: "User registered successfully",
-  });
-});
-
-export const login = catchAsync(async (c) => {
-  const { password, username } = c.get('parsedData') as loginSchemaType;
-=======
   return success(c, result, { code: HttpStatus.default.CREATED, message: 'User registered successfully' });
 });
 
 export const login = catchAsync(async (c) => {
   const { password, identifier }: loginSchemaType = await c.req.parseBody();
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
   const rateLimitKey = `login:${identifier.toLowerCase()}`;
   const { allowed } = await checkRateLimit({
@@ -102,11 +61,7 @@ export const login = catchAsync(async (c) => {
   const payload = {
     id: findUser.id,
     email: findUser.email,
-<<<<<<< HEAD
-    roles: findUser.roles || "",
-=======
     role: findUser.role?.name || '',
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
   };
 
   const accessToken = await generateToken(payload);
@@ -114,21 +69,6 @@ export const login = catchAsync(async (c) => {
 
   await saveRefreshToken(findUser.id, token, new Date(tmpExp * 1000));
 
-<<<<<<< HEAD
-  return success(
-    c,
-    {
-      firstName: findUser.firstName,
-      lastName: findUser.lastName,
-      email: findUser.email,
-      roles: payload.roles,
-      authorization: {
-        token: accessToken,
-        refreshToken: token,
-      },
-    },
-    { message: "Login successful" },
-=======
   const existingSession = await getUserSession(findUser.id);
 
   if (existingSession.isLoggedIn) {
@@ -161,7 +101,6 @@ export const login = catchAsync(async (c) => {
       permissions: findUser.permissions || [],
     },
     { message: 'Login successful' }
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
   );
 });
 
@@ -204,11 +143,7 @@ export const refreshToken = catchAsync(async (c) => {
       token: newAccessToken,
       refreshToken: newRefreshToken,
     },
-<<<<<<< HEAD
-    { message: "Token refreshed successfully" },
-=======
     { message: 'Token refreshed successfully' }
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
   );
 });
 

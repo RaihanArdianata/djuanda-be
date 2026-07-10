@@ -1,36 +1,3 @@
-<<<<<<< HEAD
-import {
-  authTokens,
-  type CreateUserProfileInput,
-  credentials,
-  db,
-  userRoles,
-  users,
-} from "@repo/database";
-import { and, eq, or } from "drizzle-orm";
-import type { QueryResult } from "pg";
-import { transformPhoneNumber } from "@/utils/formater";
-import { bcryptHash, sha256Hash } from "@/utils/hashing";
-
-type UserType = typeof users.$inferSelect;
-type AuthTokenType = typeof authTokens.$inferSelect;
-type GetUserType = Omit<
-  UserType,
-  "deletedAt" | "roleId" | "isPlatformOwner"
-> & { roles: string | null; passwordHash: string };
-type GetUsersType = Omit<UserType, "deletedAt" | "roleId" | "isPlatformOwner">;
-
-export async function getUsers(): Promise<GetUsersType[]> {
-  return await db
-    .select({
-      id: users.id,
-      email: users.email,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      phone: users.phone,
-      username: users.username,
-      createdAt: users.createdAt,
-=======
 import { db, users, credentials, authTokens, userRoles, CreateUserProfileInput, rolePermissions, permissions, userSessions, CreateUserSessionInput } from '@repo/database';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { bcryptHash, sha256Hash } from '@/utils/hashing';
@@ -46,22 +13,15 @@ export async function getUsers() {
       name: users.name,
       phone: users.phone,
       username: users.username,
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
     })
     .from(users);
 }
 
 // Login bisa pakai email, nomor telepon, ATAU username -- cocokkan identifier yang sama
 // ke ketiga kolom itu sekaligus.
-<<<<<<< HEAD
-export async function getUser({
-  identifier,
-}: {
-  identifier: string;
-}): Promise<GetUserType | null> {
-  const phoneFormatted = await transformPhoneNumber(identifier);
-=======
-export async function getUser({ identifier }: { identifier: string }) {
+export type GetUserType = NonNullable<Awaited<ReturnType<typeof getUser>>>;
+
+export async function getUser({ identifier }: { identifier: string; }) {
   const user = await db.query.users.findFirst({
     where: (users, { eq, or }) => or(eq(users.email, identifier.toLowerCase()), eq(users.username, identifier)),
     with: {
@@ -75,7 +35,6 @@ export async function getUser({ identifier }: { identifier: string }) {
       credentials: true,
     },
   });
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
   if (!user) return null;
 
@@ -86,26 +45,13 @@ export async function getUser({ identifier }: { identifier: string }) {
   };
 }
 
-<<<<<<< HEAD
-export type RegisterUserInput = Omit<
-  CreateUserProfileInput,
-  "id" | "createdAt" | "deletedAt" | "roleId"
-> & { password: string };
-=======
-export type RegisterUserInput = Omit<CreateUserProfileInput, 'id' | 'createdAt' | 'deletedAt' | 'roleId'> & { password: string };
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
+export type RegisterUserInput = Omit<CreateUserProfileInput, 'id' | 'createdAt' | 'deletedAt' | 'roleId'> & { password: string; };
+
+type UserType = typeof users.$inferSelect;
 
 export async function createUser(data: RegisterUserInput): Promise<UserType> {
   return await db.transaction(async (tx) => {
-<<<<<<< HEAD
-    const [role] = await tx
-      .select()
-      .from(userRoles)
-      .where(eq(userRoles.name, "USER"))
-      .limit(1);
-=======
     const [role] = await tx.select().from(userRoles).where(eq(userRoles.name, 'USER')).limit(1);
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
 
     if (!role) throw new Error("Role 'USER' tidak ditemukan");
 
@@ -132,7 +78,16 @@ export async function createUser(data: RegisterUserInput): Promise<UserType> {
   });
 }
 
-type GetUserByIdType = Omit<GetUserType, "passwordHash">;
+type GetUserByIdType = {
+  id: string;
+  email: string;
+  name: string;
+  phone: string;
+  username: string;
+  createdAt: Date | null;
+  roles: string | null;
+};
+
 export async function getUserById(id: string): Promise<GetUserByIdType | null> {
   const user = await db
     .select({
@@ -152,25 +107,13 @@ export async function getUserById(id: string): Promise<GetUserByIdType | null> {
   return user.length ? user[0] : null;
 }
 
-<<<<<<< HEAD
-export async function saveRefreshToken(
-  userId: string,
-  token: string,
-  expiresAt: Date,
-): Promise<AuthTokenType> {
-=======
 export async function saveRefreshToken(userId: string, token: string, expiresAt: Date) {
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
   const [inserted] = await db
     .insert(authTokens)
     .values({
       userId: userId,
       token: sha256Hash(token),
-<<<<<<< HEAD
-      type: "refresh_token",
-=======
       type: 'refresh_token',
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
       createdAt: new Date(),
       expiresAt: expiresAt,
     })
@@ -181,21 +124,7 @@ export async function saveRefreshToken(userId: string, token: string, expiresAt:
 
 // Rotasi refresh token: nonaktifkan token lama (kalau masih aktif) dan simpan token baru dalam satu transaksi.
 // Return null kalau token lama sudah tidak aktif (sudah dipakai sebelumnya / direvoke) -> indikasi reuse/replay.
-<<<<<<< HEAD
-export async function rotateRefreshToken({
-  oldToken,
-  userId,
-  newToken,
-  expiresAt,
-}: {
-  oldToken: string;
-  userId: string;
-  newToken: string;
-  expiresAt: Date;
-}): Promise<AuthTokenType | null> {
-=======
-export async function rotateRefreshToken({ oldToken, userId, newToken, expiresAt }: { oldToken: string; userId: string; newToken: string; expiresAt: Date }) {
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
+export async function rotateRefreshToken({ oldToken, userId, newToken, expiresAt }: { oldToken: string; userId: string; newToken: string; expiresAt: Date; }) {
   return await db.transaction(async (tx) => {
     const [deactivated] = await tx
       .update(authTokens)
@@ -219,15 +148,8 @@ export async function rotateRefreshToken({ oldToken, userId, newToken, expiresAt
   });
 }
 
-<<<<<<< HEAD
-export async function revokeRefreshToken(
-  token: string,
-): Promise<QueryResult<never>> {
-  return await db
-=======
 export async function revokeRefreshToken(token: string, isPlain: boolean = true) {
   await db
->>>>>>> b73aa66c858b29b9f0e590d9ef03bbf7132effc0
     .update(authTokens)
     .set({ isActive: false, usedAt: new Date() })
     .where(eq(authTokens.token, isPlain ? sha256Hash(token) : token));

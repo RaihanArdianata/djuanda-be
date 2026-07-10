@@ -1,4 +1,4 @@
-import { fetchWithTimeout } from './fetch';
+import { fetchWithTimeout } from "./fetch";
 
 export const isServiceHealthy = async (baseUrl: string): Promise<boolean> => {
   try {

@@ -1,8 +1,8 @@
-import { app, websocket } from './app';
-import { pool } from '@repo/database';
-import { logger } from '@repo/logger';
+import { pool } from "@repo/database";
+import { logger } from "@repo/logger";
+import { app, websocket } from "./app";
 
-const port = process.env.AUTH_SERVICE_PORT || 3001;
+const port: string | number = process.env.AUTH_SERVICE_PORT || 3001;
 
 const server = Bun.serve({
   port,
@@ -12,12 +12,12 @@ const server = Bun.serve({
 
 logger.info(`auth-service listening on http://localhost:${port}`);
 
-const shutdown = async (signal: string) => {
+const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down auth-service gracefully`);
   server.stop();
   await pool.end();
   process.exit(0);
 };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

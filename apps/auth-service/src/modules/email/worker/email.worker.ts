@@ -1,16 +1,17 @@
-import { Worker } from 'bullmq';
-import { redisConfig } from '@repo/config';
-import { sendEmail } from '../service/email.service';
+import { redisConfig } from "@repo/config";
+import { Worker } from "bullmq";
+import { sendEmail } from "../service/email.service";
 
-export const emailWorker = new Worker('email-queue', async (job) => {
-  const { to, ...data } = job.data;
+export const emailWorker = new Worker(
+  "email-queue",
+  async (job) => {
+    const { to, ...data } = job.data;
 
-  try {
-    await sendEmail(job.name, to, data);
-    console.log(`Email ${job.name} successfully sent to ${to}`);
-  } catch (error) {
-    console.error(`Failed to send email ${job.name} to ${to}:`, error);
-  }
-}, {
-  connection: redisConfig,
-});
+    try {
+      await sendEmail(job.name, to, data);
+    } catch (_error) {}
+  },
+  {
+    connection: redisConfig,
+  },
+);

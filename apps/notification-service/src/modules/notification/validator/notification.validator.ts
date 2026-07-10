@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const createNotificationSchema = z.object({
   senderId: z.string().uuid().optional(),
@@ -7,4 +7,6 @@ export const createNotificationSchema = z.object({
   recipientIds: z.array(z.string().uuid()).min(1),
 });
 
-export type createNotificationSchemaType = z.infer<typeof createNotificationSchema>;
+export type createNotificationSchemaType = z.infer<
+  typeof createNotificationSchema
+>;

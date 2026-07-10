@@ -1,6 +1,6 @@
-import { Redis } from 'ioredis';
-import { redisConfig } from '@repo/config';
-import { logger } from '@repo/logger';
+import { redisConfig } from "@repo/config";
+import { logger } from "@repo/logger";
+import { Redis } from "ioredis";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
 
@@ -8,10 +8,14 @@ const redis = new Redis({
   ...redisConfig,
   maxRetriesPerRequest: 1,
   connectTimeout: 2000,
-  retryStrategy: (times) => (times > MAX_RECONNECT_ATTEMPTS ? null : 2000),
+  retryStrategy: (times: number): number | null =>
+    times > MAX_RECONNECT_ATTEMPTS ? null : 2000,
   lazyConnect: false,
 });
-redis.on('error', (err) => logger.warn({ err }, 'Redis connection error (rate limiter)'));
+
+redis.on("error", (err) =>
+  logger.warn({ err }, "Redis connection error (rate limiter)"),
+);
 
 interface RateLimitOptions {
   key: string;
@@ -20,7 +24,11 @@ interface RateLimitOptions {
 }
 
 // Fail-open: kalau Redis mati/unreachable, request tetap diizinkan (rate limit nonaktif sementara)
-export const checkRateLimit = async ({ key, limit, windowSeconds }: RateLimitOptions) => {
+export const checkRateLimit = async ({
+  key,
+  limit,
+  windowSeconds,
+}: RateLimitOptions): Promise<{ allowed: boolean; remaining: number }> => {
   const redisKey = `rate-limit:${key}`;
 
   try {
@@ -35,15 +43,18 @@ export const checkRateLimit = async ({ key, limit, windowSeconds }: RateLimitOpt
       remaining: Math.max(limit - attempts, 0),
     };
   } catch (err) {
-    logger.warn({ err, key }, 'Rate limiter unavailable, allowing request through');
+    logger.warn(
+      { err, key },
+      "Rate limiter unavailable, allowing request through",
+    );
     return { allowed: true, remaining: limit };
   }
 };
 
-export const resetRateLimit = async (key: string) => {
+export const resetRateLimit = async (key: string): Promise<void> => {
   try {
     await redis.del(`rate-limit:${key}`);
   } catch (err) {
-    logger.warn({ err, key }, 'Failed to reset rate limit counter');
+    logger.warn({ err, key }, "Failed to reset rate limit counter");
   }
 };

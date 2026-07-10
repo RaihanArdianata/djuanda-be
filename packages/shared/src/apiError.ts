@@ -1,5 +1,5 @@
-import { ContentfulStatusCode } from "hono/utils/http-status";
-import { ErrorCode, resolveError } from "./constants/errors";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { type ErrorCode, resolveError } from "./constants/errors";
 
 interface ApiErrorOverrides {
   message?: string;

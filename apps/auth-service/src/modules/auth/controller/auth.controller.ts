@@ -12,7 +12,7 @@ import { getConnInfo } from 'hono/bun';
 const dummyPasswordHash = bcryptHash('dummy-password-for-timing-safety');
 
 export const register = catchAsync(async (c) => {
-  const { email, name, password, phone, username }: registerSchemaType = await c.req.parseBody();
+  const { email, name, password, phone, username } = c.get('parsedData') as registerSchemaType;
 
   const result = await createUser({
     email,
@@ -26,7 +26,7 @@ export const register = catchAsync(async (c) => {
 });
 
 export const login = catchAsync(async (c) => {
-  const { password, identifier }: loginSchemaType = await c.req.parseBody();
+  const { password, identifier } = c.get('parsedData') as loginSchemaType;
 
   const rateLimitKey = `login:${identifier.toLowerCase()}`;
   const { allowed } = await checkRateLimit({

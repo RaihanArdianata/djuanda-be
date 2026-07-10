@@ -156,11 +156,11 @@ export async function getUserSession(userId: string) {
 
 export async function createUserSession(data: Omit<CreateUserSessionInput, 'id' | 'createdAt'>) {
   const existingSession = await getUserSession(data.userId);
-  logger.info(
+  logger.debug(
     `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? 'active' : 'none'} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session!.id}` : ''}`
   );
   if (existingSession.isLoggedIn) {
-    logger.info(`Revoking existing session for user ${data.userId}, token: ${existingSession.session!.refreshTokenHash}`);
+    logger.debug(`Revoking existing session for user ${data.userId}, token: ${existingSession.session!.refreshTokenHash}`);
     await revokeRefreshToken(existingSession.session!.refreshTokenHash, false);
   }
   return await db.insert(userSessions).values(data).returning();

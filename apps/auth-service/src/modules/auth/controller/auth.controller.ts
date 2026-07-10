@@ -84,7 +84,7 @@ export const login = catchAsync(async (c) => {
       c.req.header('X-Forwarded-For') || c.req.header('CF-Connecting-IP') || c.req.header('True-Client-IP') || c.req.header('X-Real-IP') || getConnInfo(c).remote.address || '',
   });
 
-  logger.info(`User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`);
+  logger.debug(`User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`);
 
   return success(
     c,

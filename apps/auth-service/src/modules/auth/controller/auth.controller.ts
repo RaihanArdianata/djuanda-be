@@ -71,7 +71,7 @@ export const login = catchAsync(async (c) => {
 
   const existingSession = await getUserSession(findUser.id);
 
-  if (existingSession) {
+  if (existingSession.isLoggedIn) {
     throw new ApiError('SESSION_TERMINATED', { message: 'You are already logged in from another device. Please logout from that device first.' });
   }
 

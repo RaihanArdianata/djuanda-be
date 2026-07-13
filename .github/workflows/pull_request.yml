@@ -1,4 +1,4 @@
-name: reviewdog
+name: Biome Lint Check
 on: [pull_request]
 jobs:
   biome:
@@ -8,9 +8,12 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: mongolyy/reviewdog-action-biome@v2
+      - name: Check out code
+        uses: actions/checkout@v5
+      - name: Run Biome with Reviewdog
+        uses: mongolyy/reviewdog-action-biome@v2
         with:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-review
+          fail_level: error
           biome_flags: "--write"

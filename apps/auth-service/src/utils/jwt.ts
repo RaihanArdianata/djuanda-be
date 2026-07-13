@@ -8,13 +8,17 @@ interface TokenParams {
   role: string;
 }
 
-export const generateToken = async ({ email, id, role }: TokenParams) => {
+export const generateToken = async ({
+  email,
+  id,
+  role,
+}: TokenParams): Promise<string> => {
   const exp = Math.floor(Date.now() / 1000) + 60 * 60 * 24; // 1 day expiration
 
   const payload = {
     id,
     email,
-    type: 'access',
+    type: "access",
     exp,
     iat: Math.floor(Date.now() / 1000),
     role,
@@ -25,13 +29,17 @@ export const generateToken = async ({ email, id, role }: TokenParams) => {
   return token;
 };
 
-export const generateRefreshToken = async ({ email, national_id, id }: TokenParams) => {
+export const generateRefreshToken = async ({
+  email,
+  national_id,
+  id,
+}: TokenParams): Promise<{ token: string; tmpExp: number }> => {
   const tmpExp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7; // 7 days expiration
   const payload = {
     id,
     email,
     national_id,
-    type: 'refresh',
+    type: "refresh",
     exp: tmpExp,
     iat: Math.floor(Date.now() / 1000),
   };

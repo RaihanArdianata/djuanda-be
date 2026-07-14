@@ -8,16 +8,17 @@ import {
   userRoles,
   userSessions,
   users,
-} from "@repo/database";
-import { logger } from "@repo/logger";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
-import { transformPhoneNumber } from "@/utils/formater";
-import { bcryptHash, sha256Hash } from "@/utils/hashing";
+  userPermissionsQueryConfig,
+} from '@repo/database';
+import { logger } from '@repo/logger';
+import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { transformPhoneNumber } from '@/utils/formater';
+import { bcryptHash, sha256Hash } from '@/utils/hashing';
 
 type UserType = typeof users.$inferSelect;
 type AuthTokensType = typeof authTokens.$inferSelect;
 type UserSessionType = typeof userSessions.$inferSelect;
-type GetUsersType = Omit<UserType, "deletedAt" | "roleId" | "status">;
+type GetUsersType = Omit<UserType, 'deletedAt' | 'roleId' | 'status'>;
 
 export async function getUsers(): Promise<GetUsersType[]> {
   return await db
@@ -37,53 +38,29 @@ export async function getUsers(): Promise<GetUsersType[]> {
 // export type GetUserType = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 type GetUserType = UserWithPermissionsType & {
   permissions: string[];
-  passwordHash: string;
+  passwordHash?: string;
 };
 
-export async function getUser({
-  identifier,
-}: {
-  identifier: string;
-}): Promise<GetUserType | null> {
+export async function getUser({ identifier }: { identifier: string }): Promise<GetUserType | null> {
   const user = await db.query.users.findFirst({
-    where: or(
-      eq(users.email, identifier.toLowerCase()),
-      eq(users.username, identifier),
-    ),
-    with: {
-      role: {
-        with: {
-          rolePermissions: {
-            with: { permission: true },
-          },
-        },
-      },
-      credentials: true,
-    },
+    where: or(eq(users.email, identifier.toLowerCase()), eq(users.username, identifier)),
+    ...userPermissionsQueryConfig,
   });
 
   if (!user) return null;
 
   return {
     ...user,
-    permissions:
-      user.role?.rolePermissions.map((rp) => rp.permission.name) || [],
-    passwordHash: user.credentials?.passwordHash || "",
+    permissions: user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
+    passwordHash: user.credentials?.passwordHash || '',
   };
 }
 
-export type RegisterUserInput = Omit<
-  CreateUserProfileInput,
-  "id" | "createdAt" | "deletedAt" | "roleId"
-> & { password: string };
+export type RegisterUserInput = Omit<CreateUserProfileInput, 'id' | 'createdAt' | 'deletedAt' | 'roleId'> & { password: string };
 
 export async function createUser(data: RegisterUserInput): Promise<UserType> {
   return await db.transaction(async (tx) => {
-    const [role] = await tx
-      .select()
-      .from(userRoles)
-      .where(eq(userRoles.name, "USER"))
-      .limit(1);
+    const [role] = await tx.select().from(userRoles).where(eq(userRoles.name, 'USER')).limit(1);
 
     if (!role) throw new Error("Role 'USER' tidak ditemukan");
 
@@ -110,46 +87,28 @@ export async function createUser(data: RegisterUserInput): Promise<UserType> {
   });
 }
 
-type GetUserByIdType = {
-  id: string;
-  email: string;
-  name: string;
-  phone: string;
-  username: string;
-  createdAt: Date | null;
-  roles: string | null;
-};
+export async function getUserById(id: string): Promise<GetUserType | null> {
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    ...userPermissionsQueryConfig,
+  });
 
-export async function getUserById(id: string): Promise<GetUserByIdType | null> {
-  const user = await db
-    .select({
-      id: users.id,
-      email: users.email,
-      name: users.name,
-      phone: users.phone,
-      username: users.username,
-      createdAt: users.createdAt,
-      roles: userRoles.name,
-    })
-    .from(users)
-    .leftJoin(userRoles, eq(users.roleId, userRoles.id))
-    .where(eq(users.id, id))
-    .limit(1);
+  if (!user) return null;
 
-  return user.length ? user[0] : null;
+  return {
+    ...user,
+    passwordHash: undefined,
+    permissions: user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
+  };
 }
 
-export async function saveRefreshToken(
-  userId: string,
-  token: string,
-  expiresAt: Date,
-): Promise<AuthTokensType> {
+export async function saveRefreshToken(userId: string, token: string, expiresAt: Date): Promise<AuthTokensType> {
   const [inserted] = await db
     .insert(authTokens)
     .values({
       userId: userId,
       token: sha256Hash(token),
-      type: "refresh_token",
+      type: 'refresh_token',
       createdAt: new Date(),
       expiresAt: expiresAt,
     })
@@ -175,12 +134,7 @@ export async function rotateRefreshToken({
     const [deactivated] = await tx
       .update(authTokens)
       .set({ isActive: false, usedAt: new Date() })
-      .where(
-        and(
-          eq(authTokens.token, sha256Hash(oldToken)),
-          eq(authTokens.isActive, true),
-        ),
-      )
+      .where(and(eq(authTokens.token, sha256Hash(oldToken)), eq(authTokens.isActive, true)))
       .returning();
 
     if (!deactivated) return null;
@@ -190,19 +144,26 @@ export async function rotateRefreshToken({
       .values({
         userId,
         token: sha256Hash(newToken),
-        type: "refresh_token",
+        type: 'refresh_token',
         expiresAt,
       })
       .returning();
+
+    if (!inserted) return null;
+
+    const [session] = await tx
+      .update(userSessions)
+      .set({ refreshTokenHash: sha256Hash(newToken), expiresAt })
+      .where(and(eq(userSessions.userId, userId), eq(userSessions.refreshTokenHash, sha256Hash(oldToken))))
+      .returning();
+
+    if (!session) return null;
 
     return inserted;
   });
 }
 
-export async function revokeRefreshToken(
-  token: string,
-  isPlain = true,
-): Promise<void> {
+export async function revokeRefreshToken(token: string, isPlain = true): Promise<void> {
   await db
     .update(authTokens)
     .set({ isActive: false, usedAt: new Date() })
@@ -211,24 +172,14 @@ export async function revokeRefreshToken(
   await db
     .update(userSessions)
     .set({ revokedAt: new Date() })
-    .where(
-      eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token),
-    );
+    .where(eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token));
 }
 
-export async function getUserSession(
-  userId: string,
-): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
+export async function getUserSession(userId: string): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
   const activeSession = await db
     .select()
     .from(userSessions)
-    .where(
-      and(
-        eq(userSessions.userId, userId),
-        isNull(userSessions.revokedAt),
-        gt(userSessions.expiresAt, new Date()),
-      ),
-    )
+    .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt), gt(userSessions.expiresAt, new Date())))
     .limit(1);
 
   return {
@@ -237,18 +188,16 @@ export async function getUserSession(
   };
 }
 
-export async function createUserSession(
-  data: Omit<CreateUserSessionInput, "id" | "createdAt">,
-): Promise<UserSessionType[]> {
+export async function createUserSession(data: Omit<CreateUserSessionInput, 'id' | 'createdAt'>): Promise<UserSessionType> {
   const existingSession = await getUserSession(data.userId);
   logger.debug(
-    `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? "active" : "none"} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session?.id}` : ""}`,
+    `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? 'active' : 'none'} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session?.id}` : ''}`
   );
   if (existingSession.isLoggedIn && existingSession.session) {
-    logger.debug(
-      `Revoking existing session for user ${data.userId}, token: ${existingSession.session?.refreshTokenHash}`,
-    );
+    logger.debug(`Revoking existing session for user ${data.userId}, token: ${existingSession.session?.refreshTokenHash}`);
     await revokeRefreshToken(existingSession.session?.refreshTokenHash, false);
   }
-  return await db.insert(userSessions).values(data).returning();
+
+  const [result] = await db.insert(userSessions).values(data).returning();
+  return result;
 }

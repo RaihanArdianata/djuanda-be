@@ -1,6 +1,6 @@
-import { pool } from '@repo/database';
-import { logger } from '@repo/logger';
-import app, { websocket } from './app';
+import { pool } from "@repo/database";
+import { logger } from "@repo/logger";
+import app, { websocket } from "./app";
 
 const port: string | number = process.env.WORKER_SERVICE_PORT || 3003;
 
@@ -19,5 +19,5 @@ const shutdown = async (signal: string): Promise<never> => {
   process.exit(0);
 };
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

@@ -56,8 +56,6 @@ export const verifyToken = async (token: string): Promise<JWTPayload> => {
   return result;
 };
 
-export const decodeToken = async (token: string): Promise<JWTPayload> => {
-  const result = await decode(token);
-
-  return result;
+export const decodeToken = (token: string): JWTPayload => {
+  return decode(token);
 };

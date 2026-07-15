@@ -41,7 +41,7 @@ export const usersRelations = relations(users, ({ one }) => ({
   }),
 }));
 
-const userPermissionsQueryConfig = {
+export const userPermissionsQueryConfig = {
   with: {
     role: {
       with: {

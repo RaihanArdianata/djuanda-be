@@ -1,8 +1,5 @@
 import { Hono } from "hono";
-import {
-  authentication,
-  authenticationAdministrator,
-} from "@/middleware/auth.middleware";
+import { authentication, rbacMiddleware } from "@/middleware/auth.middleware";
 import {
   getPermissions,
   getRolePermissionsHandler,
@@ -20,7 +17,7 @@ import {
 // Dua router terpisah, masing-masing di-mount di prefix aslinya sendiri (/roles, /permissions)
 export const rolesRoute = new Hono()
   .use("/*", authentication)
-  .use("/*", authenticationAdministrator)
+  .use("/*", rbacMiddleware)
   .get("/", getRoles)
   .post("/", postRole)
   .patch("/:id", patchRole)
@@ -32,7 +29,7 @@ export const rolesRoute = new Hono()
 
 export const permissionsRoute = new Hono()
   .use("/*", authentication)
-  .use("/*", authenticationAdministrator)
+  .use("/*", rbacMiddleware)
   .get("/", getPermissions)
   .post("/", postPermission)
   .delete("/:id", removePermission);

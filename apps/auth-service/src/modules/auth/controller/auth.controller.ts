@@ -16,6 +16,7 @@ import {
   createUserSession,
   getUser,
   getUserSession,
+  revokeAllUserSessions,
   revokeRefreshToken,
   rotateRefreshToken,
   saveRefreshToken,
@@ -68,7 +69,10 @@ export const login = catchAsync(async (c) => {
     throw new ApiError("INVALID_CREDENTIALS");
   }
 
-  const verifiedPassword = await bcryptVerify(password, findUser.passwordHash);
+  const verifiedPassword = await bcryptVerify(
+    password,
+    findUser.passwordHash as string,
+  );
   if (!verifiedPassword) {
     throw new ApiError("INVALID_CREDENTIALS");
   }
@@ -100,7 +104,7 @@ export const login = catchAsync(async (c) => {
     });
   }
 
-  const [newSession] = await createUserSession({
+  const newSession = await createUserSession({
     expiresAt: new Date(tmpExp * 1000),
     refreshTokenHash: sha256Hash(token),
     userId: findUser.id,
@@ -137,7 +141,9 @@ export const login = catchAsync(async (c) => {
 });
 
 export const refreshToken = catchAsync(async (c) => {
-  const { refreshToken }: refreshTokenSchemaType = await c.req.json();
+  const { refreshToken }: refreshTokenSchemaType = c.get(
+    "parsedData",
+  ) as refreshTokenSchemaType;
 
   if (!refreshToken) {
     throw new ApiError("REFRESH_TOKEN_REQUIRED");
@@ -162,7 +168,7 @@ export const refreshToken = catchAsync(async (c) => {
     oldToken: refreshToken,
     userId: payload.id,
     newToken: newRefreshToken,
-    expiresAt: new Date(tmpExp),
+    expiresAt: new Date(tmpExp * 1000),
   });
 
   if (!rotated) {
@@ -194,4 +200,10 @@ export const logout = catchAsync(async (c) => {
   await revokeRefreshToken(refreshToken);
 
   return success(c, null, { message: "Logout successful" });
+});
+
+export const logoutAllSessions = catchAsync(async (c) => {
+  await revokeAllUserSessions();
+
+  return success(c, null, { message: "All sessions logged out successfully" });
 });

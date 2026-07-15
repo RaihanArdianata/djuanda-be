@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import {
   login,
   logout,
+  logoutAllSessions,
   refreshToken,
   register,
 } from "../controller/auth.controller";
@@ -16,6 +17,7 @@ const app = new Hono()
   .post("/login", validate(loginSchema), login)
   .post("/register", validate(registerSchema), register)
   .post("/refresh", validate(refreshTokenSchema), refreshToken)
-  .post("/logout", logout);
+  .post("/logout", logout)
+  .post("/logout-all", logoutAllSessions);
 
 export default app;

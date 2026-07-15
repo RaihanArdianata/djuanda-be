@@ -248,3 +248,8 @@ export async function createUserSession(
   const [result] = await db.insert(userSessions).values(data).returning();
   return result;
 }
+
+export async function revokeAllUserSessions(): Promise<void> {
+  await db.update(userSessions).set({ revokedAt: new Date() });
+  await db.update(authTokens).set({ isActive: false, usedAt: new Date() });
+}

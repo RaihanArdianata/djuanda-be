@@ -16,6 +16,7 @@ import {
   createUserSession,
   getUser,
   getUserSession,
+  revokeAllUserSessions,
   revokeRefreshToken,
   rotateRefreshToken,
   saveRefreshToken,
@@ -199,4 +200,10 @@ export const logout = catchAsync(async (c) => {
   await revokeRefreshToken(refreshToken);
 
   return success(c, null, { message: "Logout successful" });
+});
+
+export const logoutAllSessions = catchAsync(async (c) => {
+  await revokeAllUserSessions();
+
+  return success(c, null, { message: "All sessions logged out successfully" });
 });

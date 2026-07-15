@@ -4,8 +4,6 @@ import { Hono } from "hono";
 import { serveStatic, websocket } from "hono/bun";
 import { logger } from "hono/logger";
 import routes from "./routes";
-import { sseHandler } from "./sse";
-import { wsHandler } from "./websocket";
 
 const app = new Hono()
   .use(logger())
@@ -23,8 +21,6 @@ const app = new Hono()
       rewriteRequestPath: (path: string) => path.replace("/file-data/", ""),
     }),
   )
-  .get("/ws/:topic", wsHandler)
-  .get("/sse/:topic", sseHandler)
   .route("/", routes)
   .onError(errorHandler);
 

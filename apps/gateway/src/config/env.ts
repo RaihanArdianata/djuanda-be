@@ -6,8 +6,10 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("localhost"),
   RATE_LIMIT_MAX_ATTEMPTS: z.coerce.number().default(100),
   RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().default(60),
-  AUTH_SERVICE_URL: z.string().url().default("http://localhost:3001"),
-  NOTIFICATION_SERVICE_URL: z.string().url().default("http://localhost:3004"),
+  AUTH_SERVICE_URL: z.url().default("http://localhost:3001"),
+  NOTIFICATION_SERVICE_URL: z.url().default("http://localhost:3004"),
+  WS_SERVICE_URL: z.url().default("http://localhost:3003/ws"),
+  SSE_SERVICE_URL: z.url().default("http://localhost:3003/sse"),
 });
 
 export const env = envSchema.parse(process.env);

@@ -5,4 +5,5 @@ export const services: Record<string, string> = {
   NOTIFICATION_SERVICE: env.NOTIFICATION_SERVICE_URL,
   WS_SERVICE: env.WS_SERVICE_URL,
   SSE_SERVICE: env.SSE_SERVICE_URL,
+  ALERT_SERVICE: env.ALERT_SERVICE_URL,
 };

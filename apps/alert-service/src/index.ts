@@ -1,6 +1,6 @@
-import { app } from "./app";
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
+import { app } from "./app";
 
 const port: string | number = process.env.ALERT_SERVICE_PORT || 3005;
 

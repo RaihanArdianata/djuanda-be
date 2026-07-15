@@ -1,3 +1,4 @@
+import type { InferSelectModel } from "drizzle-orm";
 import { index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 // Filled by AeroSwarm's analytics connector (process-service → PostgresSink),
@@ -47,3 +48,6 @@ export const aeroswarmAlerts = pgTable(
     typeIdx: index("aeroswarm_alerts_type_idx").on(t.type, t.triggeredAt),
   }),
 );
+
+export type AeroswarmTrack = InferSelectModel<typeof aeroswarmTracks>;
+export type AeroswarmAlert = InferSelectModel<typeof aeroswarmAlerts>;

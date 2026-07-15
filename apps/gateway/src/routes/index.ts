@@ -1,11 +1,11 @@
 import { Hono } from "hono";
+import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
 import notifications from "./notifications";
 import rbac from "./rbac";
 import sse from "./sse";
 import ws from "./ws";
-import alert from "./alert";
 
 const app = new Hono()
   .route("/auth", auth)

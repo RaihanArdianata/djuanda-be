@@ -6,8 +6,8 @@ export const getAlerts = catchAsync(async (c) => {
 
   const filteringParams: Parameters<typeof getAllAlerts>[0] = {
     airportId,
-    page: page ? parseInt(page) : 1,
-    size: size ? parseInt(size) : 10,
+    page: page ? parseInt(page, 10) : 1,
+    size: size ? parseInt(size, 10) : 10,
   };
 
   const result = await getAllAlerts(filteringParams);

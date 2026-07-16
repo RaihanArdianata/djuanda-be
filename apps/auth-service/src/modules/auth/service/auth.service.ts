@@ -11,9 +11,8 @@ import {
   users,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { bcryptHash, sha256Hash, transformPhoneNumber } from "@repo/shared";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
-import { transformPhoneNumber } from "@repo/shared";
-import { bcryptHash, sha256Hash } from "@repo/shared";
 import { verifyToken } from "@/utils/jwt";
 
 type UserType = typeof users.$inferSelect;
@@ -42,9 +41,16 @@ type GetUserType = UserWithPermissionsType & {
   passwordHash?: string;
 };
 
-export async function getUser({ identifier }: { identifier: string }): Promise<GetUserType | null> {
+export async function getUser({
+  identifier,
+}: {
+  identifier: string;
+}): Promise<GetUserType | null> {
   const user = await db.query.users.findFirst({
-    where: or(eq(users.email, identifier.toLowerCase()), eq(users.username, identifier)),
+    where: or(
+      eq(users.email, identifier.toLowerCase()),
+      eq(users.username, identifier),
+    ),
     ...userPermissionsQueryConfig,
   });
 
@@ -52,16 +58,24 @@ export async function getUser({ identifier }: { identifier: string }): Promise<G
 
   return {
     ...user,
-    permissions: user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
+    permissions:
+      user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
     passwordHash: user.credentials?.passwordHash || "",
   };
 }
 
-export type RegisterUserInput = Omit<CreateUserProfileInput, "id" | "createdAt" | "deletedAt" | "roleId"> & { password: string };
+export type RegisterUserInput = Omit<
+  CreateUserProfileInput,
+  "id" | "createdAt" | "deletedAt" | "roleId"
+> & { password: string };
 
 export async function createUser(data: RegisterUserInput): Promise<UserType> {
   return await db.transaction(async (tx) => {
-    const [role] = await tx.select().from(userRoles).where(eq(userRoles.name, "USER")).limit(1);
+    const [role] = await tx
+      .select()
+      .from(userRoles)
+      .where(eq(userRoles.name, "USER"))
+      .limit(1);
 
     if (!role) throw new Error("Role 'USER' tidak ditemukan");
 
@@ -99,11 +113,17 @@ export async function getUserById(id: string): Promise<GetUserType | null> {
   return {
     ...user,
     passwordHash: undefined,
-    permissions: user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
+    permissions:
+      user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
   };
 }
 
-export async function saveRefreshToken(userId: string, accessToken: string, refreshToken: string, expiresAt: Date): Promise<AuthTokensType> {
+export async function saveRefreshToken(
+  userId: string,
+  accessToken: string,
+  refreshToken: string,
+  expiresAt: Date,
+): Promise<AuthTokensType> {
   const tokenHash = `${sha256Hash(accessToken)}:${sha256Hash(refreshToken)}`;
 
   const [inserted] = await db
@@ -142,7 +162,14 @@ export async function rotateRefreshToken({
     const [deactivated] = await tx
       .update(authTokens)
       .set({ isActive: false, usedAt: new Date() })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.isActive, true), gt(authTokens.expiresAt, new Date()), sql`RIGHT(token, LENGTH(${oldTokenHash})) = ${oldTokenHash}`))
+      .where(
+        and(
+          eq(authTokens.userId, userId),
+          eq(authTokens.isActive, true),
+          gt(authTokens.expiresAt, new Date()),
+          sql`RIGHT(token, LENGTH(${oldTokenHash})) = ${oldTokenHash}`,
+        ),
+      )
       .returning();
 
     if (!deactivated) return null;
@@ -162,7 +189,12 @@ export async function rotateRefreshToken({
     const [session] = await tx
       .update(userSessions)
       .set({ refreshTokenHash: sha256Hash(newRefreshToken), expiresAt })
-      .where(and(eq(userSessions.userId, userId), eq(userSessions.refreshTokenHash, sha256Hash(oldRefreshToken))))
+      .where(
+        and(
+          eq(userSessions.userId, userId),
+          eq(userSessions.refreshTokenHash, sha256Hash(oldRefreshToken)),
+        ),
+      )
       .returning();
 
     if (!session) return null;
@@ -171,7 +203,10 @@ export async function rotateRefreshToken({
   });
 }
 
-export async function revokeRefreshToken(token: string, isPlain = true): Promise<void> {
+export async function revokeRefreshToken(
+  token: string,
+  isPlain = true,
+): Promise<void> {
   await db
     .update(authTokens)
     .set({ isActive: false, usedAt: new Date() })
@@ -180,14 +215,24 @@ export async function revokeRefreshToken(token: string, isPlain = true): Promise
   await db
     .update(userSessions)
     .set({ revokedAt: new Date() })
-    .where(eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token));
+    .where(
+      eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token),
+    );
 }
 
-export async function getUserSession(userId: string): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
+export async function getUserSession(
+  userId: string,
+): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
   const activeSession = await db
     .select()
     .from(userSessions)
-    .where(and(eq(userSessions.userId, userId), isNull(userSessions.revokedAt), gt(userSessions.expiresAt, new Date())))
+    .where(
+      and(
+        eq(userSessions.userId, userId),
+        isNull(userSessions.revokedAt),
+        gt(userSessions.expiresAt, new Date()),
+      ),
+    )
     .limit(1);
 
   return {
@@ -196,13 +241,17 @@ export async function getUserSession(userId: string): Promise<{ isLoggedIn: bool
   };
 }
 
-export async function createUserSession(data: Omit<CreateUserSessionInput, "id" | "createdAt">): Promise<UserSessionType> {
+export async function createUserSession(
+  data: Omit<CreateUserSessionInput, "id" | "createdAt">,
+): Promise<UserSessionType> {
   const existingSession = await getUserSession(data.userId);
   logger.debug(
-    `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? "active" : "none"} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session?.id}` : ""}`
+    `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? "active" : "none"} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session?.id}` : ""}`,
   );
   if (existingSession.isLoggedIn && existingSession.session) {
-    logger.debug(`Revoking existing session for user ${data.userId}, token: ${existingSession.session?.refreshTokenHash}`);
+    logger.debug(
+      `Revoking existing session for user ${data.userId}, token: ${existingSession.session?.refreshTokenHash}`,
+    );
     await revokeRefreshToken(existingSession.session?.refreshTokenHash, false);
   }
 
@@ -215,9 +264,17 @@ export async function revokeAllUserSessions(): Promise<void> {
   await db.update(authTokens).set({ isActive: false, usedAt: new Date() });
 }
 
-export async function isAccessTokenValid(userId: string, token: string): Promise<boolean> {
+export async function isAccessTokenValid(
+  userId: string,
+  token: string,
+): Promise<boolean> {
   const existingToken = await db.query.authTokens.findFirst({
-    where: and(eq(authTokens.userId, userId), eq(authTokens.isActive, true), isNull(authTokens.usedAt), gt(authTokens.expiresAt, new Date())),
+    where: and(
+      eq(authTokens.userId, userId),
+      eq(authTokens.isActive, true),
+      isNull(authTokens.usedAt),
+      gt(authTokens.expiresAt, new Date()),
+    ),
   });
 
   if (!existingToken) {
@@ -228,7 +285,9 @@ export async function isAccessTokenValid(userId: string, token: string): Promise
   const [accessTokenHash, refreshTokenHash] = existingToken.token.split(":");
 
   if (!accessTokenHash || !refreshTokenHash) {
-    logger.warn(`Invalid token format for user ${userId}. Token: ${existingToken.token}`);
+    logger.warn(
+      `Invalid token format for user ${userId}. Token: ${existingToken.token}`,
+    );
     return false;
   }
 
@@ -241,7 +300,9 @@ export async function isAccessTokenValid(userId: string, token: string): Promise
   const isValid = accessTokenHash === sha256Hash(token);
 
   if (!isValid) {
-    logger.debug(`Access token mismatch for user ${userId}. Provided: ${sha256Hash(token)}, Expected: ${accessTokenHash}`);
+    logger.debug(
+      `Access token mismatch for user ${userId}. Provided: ${sha256Hash(token)}, Expected: ${accessTokenHash}`,
+    );
   }
 
   return isValid;

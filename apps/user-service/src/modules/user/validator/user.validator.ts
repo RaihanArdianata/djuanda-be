@@ -26,10 +26,14 @@ export const createUserSchema = z.object({
 
 export type CreateUserParams = z.infer<typeof createUserSchema>;
 
-export const updateUserSchema = createUserSchema.omit({ password: true, username: true }).partial();
+export const updateUserSchema = createUserSchema
+  .omit({ password: true, username: true })
+  .partial();
 
 export type UpdateUserParams = z.infer<typeof updateUserSchema>;
 
-export const updateUserPasswordSchema = createUserSchema.pick({ password: true });
+export const updateUserPasswordSchema = createUserSchema.pick({
+  password: true,
+});
 
 export type UpdateUserPasswordParams = z.infer<typeof updateUserPasswordSchema>;

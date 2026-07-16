@@ -1,7 +1,10 @@
 import { logger } from "@repo/logger";
 import { ApiError, catchAsync } from "@repo/shared";
 import { jwt } from "hono/jwt";
-import { getUserById, isAccessTokenValid } from "@/modules/auth/service/auth.service";
+import {
+  getUserById,
+  isAccessTokenValid,
+} from "@/modules/auth/service/auth.service";
 
 export const authentication = catchAsync(async (c, next) => {
   const jwtMiddleware = jwt({
@@ -18,7 +21,10 @@ export const authentication = catchAsync(async (c, next) => {
       throw new ApiError("FORBIDDEN");
     }
 
-    const isTokenValid = await isAccessTokenValid(id, c.req.header("Authorization")?.replace("Bearer ", "") || "");
+    const isTokenValid = await isAccessTokenValid(
+      id,
+      c.req.header("Authorization")?.replace("Bearer ", "") || "",
+    );
 
     if (!isTokenValid) {
       throw new ApiError("FORBIDDEN", {
@@ -58,7 +64,8 @@ export const rbacMiddleware = catchAsync(async (c, next) => {
 
   const { path, method } = c.req;
 
-  const permissions = findUser.role?.rolePermissions.map((rp) => rp.permission.code) || [];
+  const permissions =
+    findUser.role?.rolePermissions.map((rp) => rp.permission.code) || [];
 
   const hasPermission = permissions.some((permission) => {
     const [permPath, permMethod] = permission.split(".");
@@ -71,10 +78,13 @@ export const rbacMiddleware = catchAsync(async (c, next) => {
     const isPathMatch = path.startsWith(`/${permPath.toLocaleLowerCase()}`);
 
     logger.debug(
-      `Checking permission: ${permission} against request path: ${path} and method: ${method}: path match: ${isPathMatch}, method match: ${translateMethodName(method) === permMethod.toLocaleLowerCase()}`
+      `Checking permission: ${permission} against request path: ${path} and method: ${method}: path match: ${isPathMatch}, method match: ${translateMethodName(method) === permMethod.toLocaleLowerCase()}`,
     );
 
-    return isPathMatch && translateMethodName(method) === permMethod.toLocaleLowerCase();
+    return (
+      isPathMatch &&
+      translateMethodName(method) === permMethod.toLocaleLowerCase()
+    );
   });
 
   if (!hasPermission) {

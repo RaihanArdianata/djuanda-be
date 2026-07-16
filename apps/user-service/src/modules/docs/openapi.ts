@@ -1,7 +1,16 @@
-import { OpenApiGeneratorV3, OpenAPIRegistry, type ResponseConfig } from "@asteasolutions/zod-to-openapi";
+import {
+  OpenAPIRegistry,
+  OpenApiGeneratorV3,
+  type ResponseConfig,
+} from "@asteasolutions/zod-to-openapi";
 import type { ReferenceObject } from "@asteasolutions/zod-to-openapi/dist/types";
 import z from "zod";
-import { createUserSchema, getAllUsersSchema, updateUserPasswordSchema, updateUserSchema } from "../user/validator/user.validator";
+import {
+  createUserSchema,
+  getAllUsersSchema,
+  updateUserPasswordSchema,
+  updateUserSchema,
+} from "../user/validator/user.validator";
 
 const registry = new OpenAPIRegistry();
 
@@ -11,7 +20,9 @@ const bearerAuth = registry.registerComponent("securitySchemes", "bearerAuth", {
   bearerFormat: "JWT",
 });
 
-const errorResponse = (description: string): ResponseConfig | ReferenceObject => ({
+const errorResponse = (
+  description: string,
+): ResponseConfig | ReferenceObject => ({
   description,
   content: {
     "application/json": {
@@ -152,7 +163,9 @@ registry.registerPath({
   },
 });
 
-export const openApiDocument = new OpenApiGeneratorV3(registry.definitions).generateDocument({
+export const openApiDocument = new OpenApiGeneratorV3(
+  registry.definitions,
+).generateDocument({
   openapi: "3.0.0",
   info: {
     title: "User Service API",

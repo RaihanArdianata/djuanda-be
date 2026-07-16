@@ -1,13 +1,22 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { type ErrorCode, resolveError } from "./constants/errors";
-import type { ApiErrorResponse, ApiSuccessResponse, ErrorContract } from "./types/api-response";
+import type {
+  ApiErrorResponse,
+  ApiSuccessResponse,
+  ErrorContract,
+} from "./types/api-response";
 
 export const success = <T>(
   c: Context,
   data: T,
   options?: { code?: ContentfulStatusCode; message?: string },
-  withPagination?: { page: number; size: number; total: number; totalPages: number }
+  withPagination?: {
+    page: number;
+    size: number;
+    total: number;
+    totalPages: number;
+  },
 ): Response => {
   const code = options?.code ?? 200;
   const body: ApiSuccessResponse<T> = {
@@ -31,7 +40,11 @@ export const success = <T>(
   return c.json(body, code);
 };
 
-export const failure = (c: Context, statusCode: ContentfulStatusCode, error: ErrorContract): Response => {
+export const failure = (
+  c: Context,
+  statusCode: ContentfulStatusCode,
+  error: ErrorContract,
+): Response => {
   const body: ApiErrorResponse = {
     data: null,
     error,
@@ -52,7 +65,7 @@ export const failureFromCode = (
     statusCode?: ContentfulStatusCode;
     fields?: Record<string, string[]>;
     details?: unknown;
-  }
+  },
 ): Response => {
   const resolved = resolveError(code, overrides);
 

@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { catchAsync, failureFromCode, success } from "@repo/shared";
-import { fileUtils } from "@repo/shared";
+import { catchAsync, failureFromCode, fileUtils, success } from "@repo/shared";
 import { utapi } from "@/utils/uploadthing";
 import { toWebp } from "../service/image.service";
 
@@ -23,7 +22,11 @@ export const upload = catchAsync(async (c) => {
 
     await writeFile(filepath, Buffer.from(convertedBuffer));
 
-    return success(c, { filepath, file: originalName }, { message: "File uploaded successfully" });
+    return success(
+      c,
+      { filepath, file: originalName },
+      { message: "File uploaded successfully" },
+    );
   }
 
   return failureFromCode(c, "UNSUPPORTED_MEDIA_TYPE");

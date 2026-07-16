@@ -1,6 +1,18 @@
 import { catchAsync, success } from "@repo/shared";
-import type { CreateUserParams, GetAllUsersParams, UpdateUserParams, UpdateUserPasswordParams } from "../validator/user.validator";
-import { createUser, deleteUser, getAllUsers, getCountUsers, updateUser, updateUserPassword } from "../service/user.service";
+import {
+  createUser,
+  deleteUser,
+  getAllUsers,
+  getCountUsers,
+  updateUser,
+  updateUserPassword,
+} from "../service/user.service";
+import type {
+  CreateUserParams,
+  GetAllUsersParams,
+  UpdateUserParams,
+  UpdateUserPasswordParams,
+} from "../validator/user.validator";
 
 export const getAll = catchAsync(async (c) => {
   const parsedData = c.get("parsedData") as GetAllUsersParams;
@@ -20,7 +32,7 @@ export const getAll = catchAsync(async (c) => {
       size: parseInt(parsedData.size, 10) || 10,
       total,
       totalPages,
-    }
+    },
   );
 });
 

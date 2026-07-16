@@ -6,6 +6,11 @@ export const bcryptHash = async (password: string): Promise<string> =>
     cost: 12,
   });
 
-export const bcryptVerify = async (password: string, hashedPassword: string): Promise<boolean> => await Bun.password.verify(password, hashedPassword, "bcrypt");
+export const bcryptVerify = async (
+  password: string,
+  hashedPassword: string,
+): Promise<boolean> =>
+  await Bun.password.verify(password, hashedPassword, "bcrypt");
 
-export const sha256Hash = (value: string): string => createHash("sha256").update(value).digest("hex");
+export const sha256Hash = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");

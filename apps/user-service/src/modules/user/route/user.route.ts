@@ -1,8 +1,22 @@
-import { Hono } from "hono";
+import {
+  authentication,
+  rbacMiddleware,
+} from "@repo/auth-service/src/middleware/auth.middleware";
 import { validate } from "@repo/validation";
-import { createUserSchema, getAllUsersSchema, updateUserPasswordSchema, updateUserSchema } from "../validator/user.validator";
-import { getAll, create, update, remove, updatePassword } from "../controller/user.controller";
-import { authentication, rbacMiddleware } from "@repo/auth-service/src/middleware/auth.middleware";
+import { Hono } from "hono";
+import {
+  create,
+  getAll,
+  remove,
+  update,
+  updatePassword,
+} from "../controller/user.controller";
+import {
+  createUserSchema,
+  getAllUsersSchema,
+  updateUserPasswordSchema,
+  updateUserSchema,
+} from "../validator/user.validator";
 
 const app = new Hono()
   .use("/*", authentication)
@@ -10,7 +24,11 @@ const app = new Hono()
   .get("/", validate(getAllUsersSchema), getAll)
   .post("/", validate(createUserSchema), create)
   .patch("/:id", validate(updateUserSchema), update)
-  .put("/:id/update-password", validate(updateUserPasswordSchema), updatePassword)
+  .put(
+    "/:id/update-password",
+    validate(updateUserPasswordSchema),
+    updatePassword,
+  )
   .delete("/:id", remove);
 
 export default app;

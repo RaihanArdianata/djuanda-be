@@ -14,7 +14,10 @@ const parseRequestBody = async (c: Context): Promise<unknown> => {
     return c.req.json();
   }
 
-  if (contentType.includes("multipart/form-data") || contentType.includes("application/x-www-form-urlencoded")) {
+  if (
+    contentType.includes("multipart/form-data") ||
+    contentType.includes("application/x-www-form-urlencoded")
+  ) {
     return c.req.parseBody();
   }
 

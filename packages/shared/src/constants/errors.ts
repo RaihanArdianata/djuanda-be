@@ -1,10 +1,8 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 
-export const ERROR_CATALOG: Record<
-  string,
-  { statusCode: ContentfulStatusCode; message: string }
-> = {
+export const ERROR_CATALOG: Record<string, { statusCode: ContentfulStatusCode; message: string }> = {
   VALIDATION_ERROR: { statusCode: 400, message: "Request validation failed" },
+  BAD_REQUEST: { statusCode: 400, message: "Bad request" },
   INVALID_JSON: { statusCode: 400, message: "Invalid JSON format" },
   INVALID_CREDENTIALS: {
     statusCode: 401,
@@ -37,10 +35,7 @@ export const ERROR_CATALOG: Record<
     statusCode: 401,
     message: "Session has been terminated. Please login again",
   },
-} as const satisfies Record<
-  string,
-  { statusCode: ContentfulStatusCode; message: string }
->;
+} as const satisfies Record<string, { statusCode: ContentfulStatusCode; message: string }>;
 
 export type ErrorCode = keyof typeof ERROR_CATALOG;
 
@@ -51,19 +46,13 @@ interface ResolveErrorOverrides {
   details?: unknown;
 }
 
-type ResolveErrorType = Omit<
-  ResolveErrorOverrides,
-  "statusCode" | "message"
-> & {
+type ResolveErrorType = Omit<ResolveErrorOverrides, "statusCode" | "message"> & {
   code: string;
   statusCode: ContentfulStatusCode;
   message: string;
 };
 
-export const resolveError = (
-  code: ErrorCode,
-  overrides?: ResolveErrorOverrides,
-): ResolveErrorType => {
+export const resolveError = (code: ErrorCode, overrides?: ResolveErrorOverrides): ResolveErrorType => {
   const base = ERROR_CATALOG[code];
 
   return {

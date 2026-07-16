@@ -1,0 +1,11 @@
+import { createHash } from "node:crypto";
+
+export const bcryptHash = async (password: string): Promise<string> =>
+  await Bun.password.hash(password, {
+    algorithm: "bcrypt",
+    cost: 12,
+  });
+
+export const bcryptVerify = async (password: string, hashedPassword: string): Promise<boolean> => await Bun.password.verify(password, hashedPassword, "bcrypt");
+
+export const sha256Hash = (value: string): string => createHash("sha256").update(value).digest("hex");

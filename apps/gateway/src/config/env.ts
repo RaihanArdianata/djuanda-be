@@ -11,6 +11,7 @@ const envSchema = z.object({
   WS_SERVICE_URL: z.url().default("http://localhost:3003/ws"),
   SSE_SERVICE_URL: z.url().default("http://localhost:3003/sse"),
   ALERT_SERVICE_URL: z.url().default("http://localhost:3005"),
+  USER_SERVICE_URL: z.url().default("http://localhost:3002"),
 });
 
 export const env = envSchema.parse(process.env);

@@ -93,7 +93,12 @@ export const login = catchAsync(async (c) => {
   const accessToken = await generateToken(payload);
   const { token, tmpExp } = await generateRefreshToken(payload);
 
-  await saveRefreshToken(findUser.id, token, new Date(tmpExp * 1000));
+  await saveRefreshToken(
+    findUser.id,
+    accessToken,
+    token,
+    new Date(tmpExp * 1000),
+  );
 
   const existingSession = await getUserSession(findUser.id);
 
@@ -165,9 +170,10 @@ export const refreshToken = catchAsync(async (c) => {
     await generateRefreshToken(payload);
 
   const rotated = await rotateRefreshToken({
-    oldToken: refreshToken,
+    oldRefreshToken: refreshToken,
+    newRefreshToken,
+    newAccessToken,
     userId: payload.id,
-    newToken: newRefreshToken,
     expiresAt: new Date(tmpExp * 1000),
   });
 

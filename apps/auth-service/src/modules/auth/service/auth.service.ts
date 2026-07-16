@@ -11,9 +11,10 @@ import {
   users,
 } from "@repo/database";
 import { logger } from "@repo/logger";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 import { transformPhoneNumber } from "@/utils/formater";
 import { bcryptHash, sha256Hash } from "@/utils/hashing";
+import { verifyToken } from "@/utils/jwt";
 
 type UserType = typeof users.$inferSelect;
 type AuthTokensType = typeof authTokens.$inferSelect;
@@ -120,14 +121,17 @@ export async function getUserById(id: string): Promise<GetUserType | null> {
 
 export async function saveRefreshToken(
   userId: string,
-  token: string,
+  accessToken: string,
+  refreshToken: string,
   expiresAt: Date,
 ): Promise<AuthTokensType> {
+  const tokenHash = `${sha256Hash(accessToken)}:${sha256Hash(refreshToken)}`;
+
   const [inserted] = await db
     .insert(authTokens)
     .values({
       userId: userId,
-      token: sha256Hash(token),
+      token: tokenHash,
       type: "refresh_token",
       createdAt: new Date(),
       expiresAt: expiresAt,
@@ -140,24 +144,31 @@ export async function saveRefreshToken(
 // Rotasi refresh token: nonaktifkan token lama (kalau masih aktif) dan simpan token baru dalam satu transaksi.
 // Return null kalau token lama sudah tidak aktif (sudah dipakai sebelumnya / direvoke) -> indikasi reuse/replay.
 export async function rotateRefreshToken({
-  oldToken,
+  oldRefreshToken,
   userId,
-  newToken,
+  newRefreshToken,
+  newAccessToken,
   expiresAt,
 }: {
-  oldToken: string;
+  oldRefreshToken: string;
+  newRefreshToken: string;
+  newAccessToken: string;
   userId: string;
-  newToken: string;
   expiresAt: Date;
 }): Promise<AuthTokensType | null> {
+  const oldTokenHash = sha256Hash(oldRefreshToken);
+  const newTokenHash = `${sha256Hash(newAccessToken)}:${sha256Hash(newRefreshToken)}`;
+
   return await db.transaction(async (tx) => {
     const [deactivated] = await tx
       .update(authTokens)
       .set({ isActive: false, usedAt: new Date() })
       .where(
         and(
-          eq(authTokens.token, sha256Hash(oldToken)),
+          eq(authTokens.userId, userId),
           eq(authTokens.isActive, true),
+          gt(authTokens.expiresAt, new Date()),
+          sql`RIGHT(token, LENGTH(${oldTokenHash})) = ${oldTokenHash}`,
         ),
       )
       .returning();
@@ -168,7 +179,7 @@ export async function rotateRefreshToken({
       .insert(authTokens)
       .values({
         userId,
-        token: sha256Hash(newToken),
+        token: newTokenHash,
         type: "refresh_token",
         expiresAt,
       })
@@ -178,11 +189,11 @@ export async function rotateRefreshToken({
 
     const [session] = await tx
       .update(userSessions)
-      .set({ refreshTokenHash: sha256Hash(newToken), expiresAt })
+      .set({ refreshTokenHash: sha256Hash(newRefreshToken), expiresAt })
       .where(
         and(
           eq(userSessions.userId, userId),
-          eq(userSessions.refreshTokenHash, sha256Hash(oldToken)),
+          eq(userSessions.refreshTokenHash, sha256Hash(oldRefreshToken)),
         ),
       )
       .returning();
@@ -252,4 +263,50 @@ export async function createUserSession(
 export async function revokeAllUserSessions(): Promise<void> {
   await db.update(userSessions).set({ revokedAt: new Date() });
   await db.update(authTokens).set({ isActive: false, usedAt: new Date() });
+}
+
+export async function isAccessTokenValid(
+  userId: string,
+  token: string,
+): Promise<boolean> {
+  const existingToken = await db.query.authTokens.findFirst({
+    where: and(
+      eq(authTokens.userId, userId),
+      eq(authTokens.isActive, true),
+      isNull(authTokens.usedAt),
+      gt(authTokens.expiresAt, new Date()),
+    ),
+  });
+
+  if (!existingToken) {
+    logger.debug(`No active token found for user ${userId}. Token: ${token}`);
+    return false;
+  }
+
+  const [accessTokenHash, refreshTokenHash] = existingToken.token.split(":");
+
+  if (!accessTokenHash || !refreshTokenHash) {
+    logger.warn(
+      `Invalid token format for user ${userId}. Token: ${existingToken.token}`,
+    );
+    return false;
+  }
+
+  const isJwtValid = await verifyToken(token);
+
+  if (!isJwtValid) {
+    logger.debug(`JWT verification failed for user ${userId}. Token: ${token}`);
+    return false;
+  }
+  const isValid = accessTokenHash === sha256Hash(token);
+
+  if (!isValid) {
+    logger.debug(
+      `Access token mismatch for user ${userId}. Provided: ${sha256Hash(
+        token,
+      )}, Expected: ${accessTokenHash}`,
+    );
+  }
+
+  return isValid;
 }

@@ -1,11 +1,41 @@
 import { logger } from "@repo/logger";
 import { ApiError, catchAsync } from "@repo/shared";
 import { jwt } from "hono/jwt";
-import { getUserById } from "@/modules/auth/service/auth.service";
+import {
+  getUserById,
+  isAccessTokenValid,
+} from "@/modules/auth/service/auth.service";
 
-export const authentication = jwt({
-  secret: process.env.JWT_SECRET || "default",
-  alg: "HS256",
+export const authentication = catchAsync(async (c, next) => {
+  const jwtMiddleware = jwt({
+    secret: process.env.JWT_SECRET as string,
+    alg: "HS256",
+    headerName: "Authorization",
+  });
+
+  await jwtMiddleware(c, async () => {
+    const { id } = c.get("jwtPayload") as { id: string };
+    const findUser = await getUserById(id);
+
+    if (!findUser) {
+      throw new ApiError("FORBIDDEN");
+    }
+
+    const isTokenValid = await isAccessTokenValid(
+      id,
+      c.req.header("Authorization")?.replace("Bearer ", "") || "",
+    );
+
+    if (!isTokenValid) {
+      throw new ApiError("FORBIDDEN", {
+        message: "Access token is invalid or has been revoked.",
+      });
+    }
+
+    c.set("user", findUser);
+
+    return await next();
+  });
 });
 
 export const authenticationStoreOwner = catchAsync(async (_c, next) => {

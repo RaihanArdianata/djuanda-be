@@ -12,6 +12,19 @@
         "typescript": "^6.0.3",
       },
     },
+    "apps/alert-service": {
+      "name": "@repo/alert-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "@repo/validation": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/auth-service": {
       "name": "@repo/auth-service",
       "version": "0.0.0",
@@ -293,6 +306,8 @@
     "@opentelemetry/semantic-conventions": ["@opentelemetry/semantic-conventions@1.41.1", "", {}, "sha512-/UhIkaZgPutTFmQ7RnIJGgDXZmtEJ7Dvi86xNTFWcnRxVRNk/aotsqDJYeEvDP+FSMB2SdW+pQzNMcWP0rwuNA=="],
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
+
+    "@repo/alert-service": ["@repo/alert-service@workspace:apps/alert-service"],
 
     "@repo/auth-service": ["@repo/auth-service@workspace:apps/auth-service"],
 

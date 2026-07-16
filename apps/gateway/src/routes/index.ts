@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
 import notifications from "./notifications";
@@ -13,6 +14,8 @@ const app = new Hono()
   .route("/permissions", rbac)
   .route("/health", health)
   .route("/ws", ws)
-  .route("/sse", sse);
+  .route("/sse", sse)
+  .route("/alert", alert)
+  .route("/health", health);
 
 export default app;

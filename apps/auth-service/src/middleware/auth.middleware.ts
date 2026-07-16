@@ -4,7 +4,7 @@ import { jwt } from "hono/jwt";
 import {
   getUserById,
   isAccessTokenValid,
-} from "@/modules/auth/service/auth.service";
+} from "../modules/auth/service/auth.service";
 
 export const authentication = catchAsync(async (c, next) => {
   const jwtMiddleware = jwt({

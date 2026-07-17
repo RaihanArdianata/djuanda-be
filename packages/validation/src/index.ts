@@ -4,6 +4,11 @@ import { ZodError, type ZodType, z } from "zod";
 
 const parseRequestBody = async (c: Context): Promise<unknown> => {
   const contentType = c.req.header("content-type") ?? "";
+  const { method } = c.req;
+
+  if (method === "GET" || method === "HEAD" || method === "DELETE") {
+    return c.req.query();
+  }
 
   if (contentType.includes("application/json")) {
     return c.req.json();

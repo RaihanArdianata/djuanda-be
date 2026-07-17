@@ -11,6 +11,12 @@
     "@repo/logger": "workspace:*",
     "@repo/database": "workspace:*",
     "@repo/shared": "workspace:*",
-    "hono": "^4.12.27"
+    "@repo/validation": "workspace:*",
+    "@repo/auth-service": "workspace:*",
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@hono/swagger-ui": "^0.6.1",
+    "hono": "^4.12.27",
+    "drizzle-orm": "^0.45.2",
+    "zod": "^4.4.3"
   }
 }

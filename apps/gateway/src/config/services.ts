@@ -6,4 +6,5 @@ export const services: Record<string, string> = {
   WS_SERVICE: env.WS_SERVICE_URL,
   SSE_SERVICE: env.SSE_SERVICE_URL,
   ALERT_SERVICE: env.ALERT_SERVICE_URL,
+  USER_SERVICE: env.USER_SERVICE_URL,
 };

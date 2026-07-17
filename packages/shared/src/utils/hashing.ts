@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 export const bcryptHash = async (password: string): Promise<string> =>
   await Bun.password.hash(password, {
     algorithm: "bcrypt",
-    cost: 4,
+    cost: 12,
   });
 
 export const bcryptVerify = async (

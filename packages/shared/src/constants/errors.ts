@@ -5,6 +5,7 @@ export const ERROR_CATALOG: Record<
   { statusCode: ContentfulStatusCode; message: string }
 > = {
   VALIDATION_ERROR: { statusCode: 400, message: "Request validation failed" },
+  BAD_REQUEST: { statusCode: 400, message: "Bad request" },
   INVALID_JSON: { statusCode: 400, message: "Invalid JSON format" },
   INVALID_CREDENTIALS: {
     statusCode: 401,

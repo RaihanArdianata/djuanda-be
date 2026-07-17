@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { catchAsync, failureFromCode, success } from "@repo/shared";
-import { fileUtils } from "@/utils/fileUtils";
+import { catchAsync, failureFromCode, fileUtils, success } from "@repo/shared";
 import { utapi } from "@/utils/uploadthing";
 import { toWebp } from "../service/image.service";
 

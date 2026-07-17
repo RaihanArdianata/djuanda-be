@@ -11,10 +11,9 @@ import {
   users,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { bcryptHash, sha256Hash, transformPhoneNumber } from "@repo/shared";
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
-import { transformPhoneNumber } from "@/utils/formater";
-import { bcryptHash, sha256Hash } from "@/utils/hashing";
-import { verifyToken } from "@/utils/jwt";
+import { verifyToken } from "../../../utils/jwt";
 
 type UserType = typeof users.$inferSelect;
 type AuthTokensType = typeof authTokens.$inferSelect;
@@ -81,7 +80,7 @@ export async function createUser(data: RegisterUserInput): Promise<UserType> {
     if (!role) throw new Error("Role 'USER' tidak ditemukan");
 
     const passwordHashed = await bcryptHash(data.password);
-    const phoneFormatted = await transformPhoneNumber(data.phone);
+    const phoneFormatted = transformPhoneNumber(data.phone);
 
     const [user] = await tx
       .insert(users)
@@ -302,9 +301,7 @@ export async function isAccessTokenValid(
 
   if (!isValid) {
     logger.debug(
-      `Access token mismatch for user ${userId}. Provided: ${sha256Hash(
-        token,
-      )}, Expected: ${accessTokenHash}`,
+      `Access token mismatch for user ${userId}. Provided: ${sha256Hash(token)}, Expected: ${accessTokenHash}`,
     );
   }
 

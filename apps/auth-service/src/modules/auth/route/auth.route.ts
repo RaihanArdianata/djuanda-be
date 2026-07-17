@@ -17,7 +17,7 @@ const app = new Hono()
   .post("/login", validate(loginSchema), login)
   .post("/register", validate(registerSchema), register)
   .post("/refresh", validate(refreshTokenSchema), refreshToken)
-  .post("/logout", logout)
+  .post("/logout", validate(refreshTokenSchema), logout)
   .post("/logout-all", logoutAllSessions);
 
 export default app;

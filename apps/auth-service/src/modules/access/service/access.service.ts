@@ -6,15 +6,28 @@ import {
   userRoles,
   users,
 } from "@repo/database";
-import { and, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 
 type UserRolesType = typeof userRoles.$inferSelect;
 type PermissionType = typeof permissions.$inferSelect;
 type RolePermissionType = typeof rolePermissions.$inferSelect;
 type UserType = typeof users.$inferSelect;
 
-export async function listRoles(): Promise<UserRolesType[]> {
-  return await db.select().from(userRoles);
+type ListRolesWithUserCountType = UserRolesType & { userCount: number };
+
+export async function listRoles(): Promise<ListRolesWithUserCountType[]> {
+  const results = await db
+    .select({
+      id: userRoles.id,
+      name: userRoles.name,
+      description: userRoles.description,
+      userCount: count(users.id),
+    })
+    .from(userRoles)
+    .leftJoin(users, eq(userRoles.id, users.roleId))
+    .groupBy(userRoles.id, userRoles.name, userRoles.description);
+
+  return results;
 }
 
 export async function createRole(data: {

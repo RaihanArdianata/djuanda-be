@@ -2,14 +2,16 @@ import { loginRateLimitConfig } from "@repo/config";
 import { logger } from "@repo/logger";
 import {
   ApiError,
+  bcryptHash,
+  bcryptVerify,
   catchAsync,
   checkRateLimit,
   resetRateLimit,
+  sha256Hash,
   success,
 } from "@repo/shared";
 import { getConnInfo } from "hono/bun";
 import * as HttpStatus from "http-status";
-import { bcryptHash, bcryptVerify, sha256Hash } from "@/utils/hashing";
 import { generateRefreshToken, generateToken, verifyToken } from "@/utils/jwt";
 import {
   createUser,
@@ -82,6 +84,15 @@ export const login = catchAsync(async (c) => {
     throw new ApiError("ACCOUNT_INACTIVE");
   }
 
+  const existingSession = await getUserSession(findUser.id);
+
+  if (existingSession.isLoggedIn) {
+    throw new ApiError("SESSION_TERMINATED", {
+      message:
+        "You are already logged in from another device. Please logout from that device first.",
+    });
+  }
+
   await resetRateLimit(rateLimitKey);
 
   const payload = {
@@ -99,15 +110,6 @@ export const login = catchAsync(async (c) => {
     token,
     new Date(tmpExp * 1000),
   );
-
-  const existingSession = await getUserSession(findUser.id);
-
-  if (existingSession.isLoggedIn) {
-    throw new ApiError("SESSION_TERMINATED", {
-      message:
-        "You are already logged in from another device. Please logout from that device first.",
-    });
-  }
 
   const newSession = await createUserSession({
     expiresAt: new Date(tmpExp * 1000),
@@ -192,7 +194,9 @@ export const refreshToken = catchAsync(async (c) => {
 });
 
 export const logout = catchAsync(async (c) => {
-  const { refreshToken }: refreshTokenSchemaType = await c.req.json();
+  const { refreshToken }: refreshTokenSchemaType = c.get(
+    "parsedData",
+  ) as refreshTokenSchemaType;
 
   if (!refreshToken) {
     throw new ApiError("REFRESH_TOKEN_REQUIRED");

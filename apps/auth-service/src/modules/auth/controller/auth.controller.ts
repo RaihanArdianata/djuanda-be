@@ -84,6 +84,15 @@ export const login = catchAsync(async (c) => {
     throw new ApiError("ACCOUNT_INACTIVE");
   }
 
+  const existingSession = await getUserSession(findUser.id);
+
+  if (existingSession.isLoggedIn) {
+    throw new ApiError("SESSION_TERMINATED", {
+      message:
+        "You are already logged in from another device. Please logout from that device first.",
+    });
+  }
+
   await resetRateLimit(rateLimitKey);
 
   const payload = {
@@ -101,15 +110,6 @@ export const login = catchAsync(async (c) => {
     token,
     new Date(tmpExp * 1000),
   );
-
-  const existingSession = await getUserSession(findUser.id);
-
-  if (existingSession.isLoggedIn) {
-    throw new ApiError("SESSION_TERMINATED", {
-      message:
-        "You are already logged in from another device. Please logout from that device first.",
-    });
-  }
 
   const newSession = await createUserSession({
     expiresAt: new Date(tmpExp * 1000),

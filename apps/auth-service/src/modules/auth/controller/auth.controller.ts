@@ -1,40 +1,16 @@
 import { loginRateLimitConfig } from "@repo/config";
 import { logger } from "@repo/logger";
-import {
-  ApiError,
-  bcryptHash,
-  bcryptVerify,
-  catchAsync,
-  checkRateLimit,
-  resetRateLimit,
-  sha256Hash,
-  success,
-} from "@repo/shared";
+import { ApiError, bcryptHash, bcryptVerify, catchAsync, checkRateLimit, resetRateLimit, sha256Hash, success } from "@repo/shared";
 import { getConnInfo } from "hono/bun";
 import * as HttpStatus from "http-status";
 import { generateRefreshToken, generateToken, verifyToken } from "@/utils/jwt";
-import {
-  createUser,
-  createUserSession,
-  getUser,
-  getUserSession,
-  revokeAllUserSessions,
-  revokeRefreshToken,
-  rotateRefreshToken,
-  saveRefreshToken,
-} from "../service/auth.service";
-import type {
-  loginSchemaType,
-  refreshTokenSchemaType,
-  registerSchemaType,
-} from "../validator/auth.validator";
+import { createUser, createUserSession, getUser, getUserSession, revokeAllUserSessions, revokeRefreshToken, rotateRefreshToken, saveRefreshToken } from "../service/auth.service";
+import type { loginSchemaType, refreshTokenSchemaType, registerSchemaType } from "../validator/auth.validator";
 
 const dummyPasswordHash = bcryptHash("dummy-password-for-timing-safety");
 
 export const register = catchAsync(async (c) => {
-  const { email, name, password, phone, username } = c.get(
-    "parsedData",
-  ) as registerSchemaType;
+  const { email, name, password, phone, username } = c.get("parsedData") as registerSchemaType;
 
   const result = await createUser({
     email,
@@ -71,10 +47,7 @@ export const login = catchAsync(async (c) => {
     throw new ApiError("INVALID_CREDENTIALS");
   }
 
-  const verifiedPassword = await bcryptVerify(
-    password,
-    findUser.passwordHash as string,
-  );
+  const verifiedPassword = await bcryptVerify(password, findUser.passwordHash as string);
   if (!verifiedPassword) {
     throw new ApiError("INVALID_CREDENTIALS");
   }
@@ -88,8 +61,7 @@ export const login = catchAsync(async (c) => {
 
   if (existingSession.isLoggedIn) {
     throw new ApiError("SESSION_TERMINATED", {
-      message:
-        "You are already logged in from another device. Please logout from that device first.",
+      message: "You are already logged in from another device. Please logout from that device first.",
     });
   }
 
@@ -104,12 +76,7 @@ export const login = catchAsync(async (c) => {
   const accessToken = await generateToken(payload);
   const { token, tmpExp } = await generateRefreshToken(payload);
 
-  await saveRefreshToken(
-    findUser.id,
-    accessToken,
-    token,
-    new Date(tmpExp * 1000),
-  );
+  await saveRefreshToken(findUser.id, accessToken, token, new Date(tmpExp * 1000));
 
   const newSession = await createUserSession({
     expiresAt: new Date(tmpExp * 1000),
@@ -117,17 +84,10 @@ export const login = catchAsync(async (c) => {
     userId: findUser.id,
     deviceInfo: c.req.header("User-Agent") || "",
     ipAddress:
-      c.req.header("X-Forwarded-For") ||
-      c.req.header("CF-Connecting-IP") ||
-      c.req.header("True-Client-IP") ||
-      c.req.header("X-Real-IP") ||
-      getConnInfo(c).remote.address ||
-      "",
+      c.req.header("X-Forwarded-For") || c.req.header("CF-Connecting-IP") || c.req.header("True-Client-IP") || c.req.header("X-Real-IP") || getConnInfo(c).remote.address || "",
   });
 
-  logger.debug(
-    `User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`,
-  );
+  logger.debug(`User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`);
 
   return success(
     c,
@@ -143,14 +103,12 @@ export const login = catchAsync(async (c) => {
       role: findUser.role?.name || "",
       permissions: findUser.permissions || [],
     },
-    { message: "Login successful" },
+    { message: "Login successful" }
   );
 });
 
 export const refreshToken = catchAsync(async (c) => {
-  const { refreshToken }: refreshTokenSchemaType = c.get(
-    "parsedData",
-  ) as refreshTokenSchemaType;
+  const { refreshToken }: refreshTokenSchemaType = c.get("parsedData") as refreshTokenSchemaType;
 
   if (!refreshToken) {
     throw new ApiError("REFRESH_TOKEN_REQUIRED");
@@ -168,8 +126,7 @@ export const refreshToken = catchAsync(async (c) => {
   };
 
   const newAccessToken = await generateToken(payload);
-  const { token: newRefreshToken, tmpExp } =
-    await generateRefreshToken(payload);
+  const { token: newRefreshToken, tmpExp } = await generateRefreshToken(payload);
 
   const rotated = await rotateRefreshToken({
     oldRefreshToken: refreshToken,
@@ -189,12 +146,12 @@ export const refreshToken = catchAsync(async (c) => {
       token: newAccessToken,
       refreshToken: newRefreshToken,
     },
-    { message: "Token refreshed successfully" },
+    { message: "Token refreshed successfully" }
   );
 });
 
 export const logout = catchAsync(async (c) => {
-  const { refreshToken }: refreshTokenSchemaType = await c.req.json();
+  const { refreshToken }: refreshTokenSchemaType = c.get("parsedData") as refreshTokenSchemaType;
 
   if (!refreshToken) {
     throw new ApiError("REFRESH_TOKEN_REQUIRED");

@@ -26,9 +26,13 @@ export const createUserSchema = z.object({
 
 export type CreateUserParams = z.infer<typeof createUserSchema>;
 
-export const updateUserSchema = createUserSchema
-  .omit({ password: true, username: true })
-  .partial();
+export const updateUserSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  email: z.email().min(1).max(255).optional(),
+  phone: z.string().min(1).max(20).optional(),
+  role: z.number().int().optional(),
+  status: z.union(statusEnum).optional(),
+});
 
 export type UpdateUserParams = z.infer<typeof updateUserSchema>;
 

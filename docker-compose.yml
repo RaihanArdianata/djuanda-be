@@ -97,6 +97,31 @@ services:
       retries: 5
       start_period: 10s
 
+  connection-service:
+    build:
+      context: .
+      args:
+        APP_DIR: connection-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CONNECTION_SERVICE_PORT: "3005"
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+    # Exposed directly (not via gateway): AeroSwarm's http connector POSTs
+    # ingest here, and the AeroSwarm dashboard connects here for this
+    # airport's replay/history (client-side federation).
+    ports:
+      - "3005:3005"
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   gateway:
     build:
       context: .

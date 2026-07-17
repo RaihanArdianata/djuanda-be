@@ -40,6 +40,19 @@
         "@types/pg": "^8.20.0",
       },
     },
+    "apps/connection-service": {
+      "name": "@repo/connection-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@aeroswarm/replay-server": "file:../../vendor/aeroswarm-replay-server-0.1.0.tgz",
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/gateway": {
       "name": "@repo/gateway",
       "version": "0.0.0",
@@ -122,6 +135,8 @@
     },
   },
   "packages": {
+    "@aeroswarm/replay-server": ["@aeroswarm/replay-server@../../vendor/aeroswarm-replay-server-0.1.0.tgz", { "dependencies": { "postgres": "^3.4.7", "ws": "^8.16.0" }, "peerDependencies": { "hono": ">=4.0.0" }, "optionalPeers": ["hono"] }, "sha512-20hdue8qp/zaVlAh7cuDReLak77XY/fqRVyMzk6fijcZPRY1RxNjqREfOmt4WMgrfevIo2SnYZvHyn/sbn4wbg=="],
+
     "@asteasolutions/zod-to-openapi": ["@asteasolutions/zod-to-openapi@8.5.0", "", { "dependencies": { "openapi3-ts": "^4.1.2" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-SABbKiObg5dLRiTFnqiW1WWwGcg1BJfmHtT2asIBnBHg6Smy/Ms2KHc650+JI4Hw7lSkdiNebEGXpwoxfben8Q=="],
 
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
@@ -267,6 +282,8 @@
     "@repo/auth-service": ["@repo/auth-service@workspace:apps/auth-service"],
 
     "@repo/config": ["@repo/config@workspace:packages/config"],
+
+    "@repo/connection-service": ["@repo/connection-service@workspace:apps/connection-service"],
 
     "@repo/database": ["@repo/database@workspace:packages/database"],
 
@@ -430,6 +447,8 @@
 
     "pino-std-serializers": ["pino-std-serializers@7.1.0", "", {}, "sha512-BndPH67/JxGExRgiX1dX0w1FvZck5Wa4aal9198SrRhZjH3GxKQUKIBnYJTdj2HDN3UQAS06HlfcSbQj2OHmaw=="],
 
+    "postgres": ["postgres@3.4.9", "", {}, "sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw=="],
+
     "postgres-array": ["postgres-array@2.0.0", "", {}, "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA=="],
 
     "postgres-bytea": ["postgres-bytea@1.0.1", "", {}, "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ=="],
@@ -501,6 +520,8 @@
     "uploadthing": ["uploadthing@7.7.4", "", { "dependencies": { "@effect/platform": "0.90.3", "@standard-schema/spec": "1.0.0-beta.4", "@uploadthing/mime-types": "0.3.6", "@uploadthing/shared": "7.1.10", "effect": "3.17.7" }, "peerDependencies": { "express": "*", "fastify": "*", "h3": "*", "next": "*", "tailwindcss": "^3.0.0 || ^4.0.0-beta.0" }, "optionalPeers": ["express", "fastify", "h3", "next", "tailwindcss"] }, "sha512-rlK/4JWHW5jP30syzWGBFDDXv3WJDdT8gn9OoxRJmXLoXi94hBmyyjxihGlNrKhBc81czyv8TkzMioe/OuKGfA=="],
 
     "wrappy": ["wrappy@1.0.2", "", {}, "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="],
+
+    "ws": ["ws@8.21.1", "", { "peerDependencies": { "bufferutil": "^4.0.1", "utf-8-validate": ">=5.0.2" }, "optionalPeers": ["bufferutil", "utf-8-validate"] }, "sha512-+0NTnW77fFN/DjQi6k/Sq/Yvk4Sgajw7urW8V+asjXnRgDs9gyGkdb7EzgfhA4goXsRIZKE28fzIXBHEzhuiWw=="],
 
     "xtend": ["xtend@4.0.2", "", {}, "sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ=="],
 

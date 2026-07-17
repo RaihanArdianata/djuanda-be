@@ -1,7 +1,17 @@
 import { validate } from "@repo/validation";
 import { Hono } from "hono";
-import { login, logout, logoutAllSessions, refreshToken, register } from "../controller/auth.controller";
-import { loginSchema, refreshTokenSchema, registerSchema } from "../validator/auth.validator";
+import {
+  login,
+  logout,
+  logoutAllSessions,
+  refreshToken,
+  register,
+} from "../controller/auth.controller";
+import {
+  loginSchema,
+  refreshTokenSchema,
+  registerSchema,
+} from "../validator/auth.validator";
 
 const app = new Hono()
   .post("/login", validate(loginSchema), login)

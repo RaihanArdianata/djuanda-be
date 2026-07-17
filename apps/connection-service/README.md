@@ -45,7 +45,5 @@ CORS ditangani di service ini sendiri.
 
 ## Catatan dependency
 
-`@aeroswarm/replay-server` di-vendor sebagai tarball di `vendor/` (file: dependency) supaya
-build Docker tidak butuh registry privat. Kalau package-nya diupdate di monorepo aeroswarm:
-`pnpm pack` di `aeroswarm-project/packages/server/replay-server`, salin `.tgz`-nya ke
-`vendor/`, sesuaikan versi di `package.json`, lalu `bun install`.
+`@aeroswarm/replay-server` diambil dari registry privat `https://registry.midigi.id/`.
+Pastikan `.npmrc` sudah dikonfigurasi dengan `@aeroswarm:registry=https://registry.midigi.id/`.

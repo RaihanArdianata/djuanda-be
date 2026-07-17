@@ -4,9 +4,7 @@ WORKDIR /repo
 COPY package.json bun.lock ./
 COPY apps ./apps
 COPY packages ./packages
-# Vendored external packages (e.g. @aeroswarm/replay-server tarball used by
-# connection-service) — file: dependencies resolve against this path.
-COPY vendor ./vendor
+COPY .npmrc ./
 
 RUN s=1; \
   for i in 1 2 3; do \

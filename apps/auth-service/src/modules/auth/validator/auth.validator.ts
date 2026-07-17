@@ -1,11 +1,5 @@
+import { passwordSchema } from "@repo/shared";
 import { z } from "zod";
-
-const passwordSchema = z
-  .string()
-  .min(1, 'Password must be at least 1 character long.')
-  .regex(/[A-Z]/, 'Password must contain at least one uppercase letter.')
-  .regex(/\d/, 'Password must contain at least one number.')
-  .regex(/[!@#$%^&*(),.?":{}|<>]/, 'Password must contain at least one symbol.');
 
 export const loginSchema = z.object({
   identifier: z.string().min(1),
@@ -25,7 +19,7 @@ export const registerSchema = z.object({
 export type registerSchemaType = z.infer<typeof registerSchema>;
 
 export const refreshTokenSchema = z.object({
-  refreshToken: z.string().min(1, 'Refresh token is required.'),
+  refreshToken: z.string().min(1, "Refresh token is required."),
 });
 
 export type refreshTokenSchemaType = z.infer<typeof refreshTokenSchema>;

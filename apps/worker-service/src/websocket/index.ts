@@ -1,5 +1,6 @@
-import { ServerWebSocket } from 'bun';
-import { upgradeWebSocket } from 'hono/bun';
+import type { ServerWebSocket } from "bun";
+import { upgradeWebSocket } from "hono/bun";
+import type { WSContext } from "hono/ws";
 
 const clients = new Map<ServerWebSocket, Set<string>>();
 

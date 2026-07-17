@@ -85,7 +85,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      USER_SERVICE_PORT: "3002"
+      USER_SERVICE_PORT: ${USER_SERVICE_PORT:-3002}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
     depends_on:
       pgbouncer:
@@ -112,6 +112,41 @@ services:
     # airport's replay/history (client-side federation).
     ports:
       - "3005:3005"
+  worker-service:
+    build:
+      context: .
+      args:
+        APP_DIR: worker-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WORKER_SERVICE_PORT: ${WORKER_SERVICE_PORT:-3003}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3003/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  alert-service:
+    build:
+      context: .
+      args:
+        APP_DIR: alert-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ALERT_SERVICE_PORT: ${ALERT_SERVICE_PORT:-3005}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
     depends_on:
       pgbouncer:
         condition: service_started

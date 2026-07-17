@@ -1,25 +1,25 @@
-import { Context } from 'hono';
-import { streamSSE } from 'hono/streaming';
-import { EventEmitter } from 'node:events';
+import { EventEmitter } from "node:events";
+import type { Context } from "hono";
+import { streamSSE } from "hono/streaming";
 
 class EventBus extends EventEmitter {
-  publish(topic: string, data: unknown) {
+  publish(topic: string, data: unknown): void {
     this.emit(topic, data);
   }
 
-  subscribe(topic: string, listener: (data: unknown) => void) {
+  subscribe(topic: string, listener: (data: unknown) => void): () => void {
     this.on(topic, listener);
-    return () => this.off(topic, listener);
+    return (): this => this.off(topic, listener);
   }
 }
 
 export const eventBus = new EventBus();
 eventBus.setMaxListeners(0); // Remove the limit on the number of listeners
 
-export const sseHandler = (c: Context) => {
-  const topic = c.req.param('topic');
+export const sseHandler = (c: Context): Response => {
+  const topic = c.req.param("topic");
   if (!topic) {
-    return Promise.reject(new Response('Missing topic', { status: 400 }));
+    return new Response("Missing topic", { status: 400 });
   }
 
   return streamSSE(c, async (stream) => {
@@ -43,9 +43,13 @@ export const sseHandler = (c: Context) => {
     while (!closed) {
       await stream.sleep(15000); // Keep the connection alive
       if (closed) break;
-      await stream.writeSSE({ event: 'ping', data: 'keep-alive' });
+      await stream.writeSSE({ event: "ping", data: "keep-alive" });
     }
   });
 };
 
-(() => setInterval(() => eventBus.publish('current-time', { time: Date.now() }), 1000))();
+((): ReturnType<typeof setInterval> =>
+  setInterval(
+    () => eventBus.publish("current-time", { time: Date.now() }),
+    1000,
+  ))();

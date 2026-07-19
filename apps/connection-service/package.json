@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aeroswarm/replay-server": "^0.1.0",
+    "@aeroswarm/replay-server": "^0.2.0",
     "@repo/database": "workspace:*",
     "@repo/logger": "workspace:*",
     "@repo/shared": "workspace:*",

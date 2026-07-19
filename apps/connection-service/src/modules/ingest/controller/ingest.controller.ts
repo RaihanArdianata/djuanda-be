@@ -5,16 +5,12 @@ import {
   enqueueTrackEvent,
   isAlertEvent,
   isTrackEvent,
+  isValidIngestSecret,
 } from "../service/ingest.service";
 import { ingestEnvelopeSchema } from "../validator/ingest.validator";
 
-const INGEST_SECRET = process.env.AEROSWARM_INGEST_SECRET || "";
-
 export const ingest = catchAsync(async (c) => {
-  // Shared secret carried as a custom header on AeroSwarm's http connector
-  // (config.headers) — without it anyone who can reach this port could
-  // inject fake surveillance data.
-  if (!INGEST_SECRET || c.req.header("x-aero-ingest-secret") !== INGEST_SECRET) {
+  if (!isValidIngestSecret(c.req.header("x-aero-ingest-secret"))) {
     throw new ApiError("INVALID_CREDENTIALS", {
       message: "Invalid or missing x-aero-ingest-secret header",
     });

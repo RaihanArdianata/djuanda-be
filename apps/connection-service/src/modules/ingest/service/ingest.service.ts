@@ -4,19 +4,18 @@ import { logger } from "@repo/logger";
 type TrackRow = typeof aeroswarmTracks.$inferInsert;
 type AlertRow = typeof aeroswarmAlerts.$inferInsert;
 
-// Micro-batching: the webhook connector POSTs one event per request, but at
-// radar rates that would mean one INSERT per fused update — buffer and flush
-// on an interval (or when the buffer fills) instead. Rows are at most
-// FLUSH_INTERVAL_MS stale in the DB, which is irrelevant for replay/history.
 const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
+const INGEST_SECRET = process.env.AEROSWARM_INGEST_SECRET || "";
+
+export function isValidIngestSecret(secret: string | null | undefined): boolean {
+  return Boolean(INGEST_SECRET) && secret === INGEST_SECRET;
+}
 
 const trackBuffer: TrackRow[] = [];
 const alertBuffer: AlertRow[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-// AeroSwarm event shapes (FusedTrackEvent / AlertEvent from
-// @aeroswarm/core) carry epoch-ms timestamps.
 interface FusedTrackEventLike {
   trackId: string;
   airportId?: string;

@@ -97,6 +97,21 @@ services:
       retries: 5
       start_period: 10s
 
+  connection-service:
+    build:
+      context: .
+      args:
+        APP_DIR: connection-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CONNECTION_SERVICE_PORT: "3005"
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+    # Exposed directly (not via gateway): AeroSwarm's http connector POSTs
+    # ingest here, and the AeroSwarm dashboard connects here for this
+    # airport's replay/history (client-side federation).
+    ports:
+      - "3005:3005"
   worker-service:
     build:
       context: .

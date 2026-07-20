@@ -1,0 +1,72 @@
+import { pool } from "@repo/database";
+import { logger } from "@repo/logger";
+import type { ServerWebSocket } from "bun";
+import { app } from "./app";
+import { isValidMonitorToken } from "./modules/history/service/history.service";
+import {
+  type ReplaySocketData,
+  replayWebsocketHandlers,
+} from "./modules/history/service/replay-socket";
+import { handleIngestSocketMessage } from "./modules/ingest/service/ingest-socket";
+import { flush, isValidIngestSecret } from "./modules/ingest/service/ingest.service";
+
+const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
+
+type SocketData =
+  | ({ kind: "replay"; } & ReplaySocketData)
+  | { kind: "ingest"; };
+
+const asReplaySocket = (ws: ServerWebSocket<SocketData>): ServerWebSocket<ReplaySocketData> =>
+  ws as unknown as ServerWebSocket<ReplaySocketData>;
+
+const server = Bun.serve<SocketData>({
+  port,
+  fetch(req, srv) {
+    const url = new URL(req.url);
+    if (url.pathname === "/aero/replay") {
+      const token = url.searchParams.get("token");
+      if (!isValidMonitorToken(token)) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const upgraded = srv.upgrade(req, {
+        data: { kind: "replay" as const, sessionId: url.searchParams.get("sessionId") ?? undefined },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+    if (url.pathname === "/aero/ingest/ws") {
+      if (!isValidIngestSecret(url.searchParams.get("secret"))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const upgraded = srv.upgrade(req, { data: { kind: "ingest" as const } });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+    return app.fetch(req);
+  },
+  websocket: {
+    open(ws) {
+      if (ws.data.kind === "replay") replayWebsocketHandlers.open(asReplaySocket(ws));
+    },
+    message(ws, raw) {
+      if (ws.data.kind === "replay") replayWebsocketHandlers.message(asReplaySocket(ws), raw);
+      else handleIngestSocketMessage(raw);
+    },
+    close(ws) {
+      if (ws.data.kind === "replay") replayWebsocketHandlers.close(asReplaySocket(ws));
+    },
+  },
+});
+
+logger.info(`connection-service listening on http://localhost:${port}`);
+
+const shutdown = async (signal: string): Promise<never> => {
+  logger.info(`${signal} received, shutting down connection-service gracefully`);
+  server.stop();
+  await flush();
+  await pool.end();
+  process.exit(0);
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

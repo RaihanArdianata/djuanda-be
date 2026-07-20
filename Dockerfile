@@ -4,12 +4,13 @@ WORKDIR /repo
 COPY package.json bun.lock ./
 COPY apps ./apps
 COPY packages ./packages
+COPY .npmrc ./
 
 RUN s=1; \
-  for i in 1 2 3; do \
-  bun install --frozen-lockfile && s=0 && break; \
+  for i in 1 2 3 4 5 6 7 8; do \
+  bun install --frozen-lockfile --network-concurrency 8 && s=0 && break; \
   echo "bun install attempt $i failed, retrying..."; \
-  sleep 5; \
+  sleep $((i * 5)); \
   done; \
   exit $s
 

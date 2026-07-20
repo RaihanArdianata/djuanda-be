@@ -207,10 +207,18 @@ export async function revokeRefreshToken(
   token: string,
   isPlain = true,
 ): Promise<void> {
+  const refreshTokenHash = isPlain ? sha256Hash(token) : token;
+
   await db
     .update(authTokens)
     .set({ isActive: false, usedAt: new Date() })
-    .where(eq(authTokens.token, isPlain ? sha256Hash(token) : token));
+    .where(
+      and(
+        eq(authTokens.isActive, true),
+        gt(authTokens.expiresAt, new Date()),
+        sql`RIGHT(token, LENGTH(${refreshTokenHash})) = ${refreshTokenHash}`,
+      ),
+    );
 
   await db
     .update(userSessions)

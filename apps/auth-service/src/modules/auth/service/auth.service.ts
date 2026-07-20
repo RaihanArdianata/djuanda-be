@@ -12,7 +12,7 @@ import {
 } from "@repo/database";
 import { logger } from "@repo/logger";
 import { bcryptHash, sha256Hash, transformPhoneNumber } from "@repo/shared";
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { verifyToken } from "../../../utils/jwt";
 
 type UserType = typeof users.$inferSelect;

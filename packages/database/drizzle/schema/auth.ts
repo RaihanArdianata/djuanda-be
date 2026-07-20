@@ -51,15 +51,26 @@ export const userSessions = pgTable(
 
 export type CreateUserSessionInput = InferInsertModel<typeof userSessions>;
 
-export const authTokens = pgTable("auth_tokens", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id")
-    .notNull()
-    .references(() => users.id),
-  token: varchar("token", { length: 255 }).notNull().unique(),
-  type: authTokenTypeEnum("type").notNull(),
-  isActive: boolean("is_active").default(true).notNull(),
-  expiresAt: timestamp("expires_at").notNull(),
-  usedAt: timestamp("used_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const authTokens = pgTable(
+  "auth_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    token: varchar("token", { length: 255 }).notNull().unique(),
+    refreshToken: varchar("refresh_token", { length: 255 }).unique(),
+    type: authTokenTypeEnum("type").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("auth_tokens_user_id_idx").on(
+      table.userId,
+      table.isActive,
+      table.expiresAt,
+    ),
+  ],
+);

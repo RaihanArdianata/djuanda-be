@@ -124,13 +124,12 @@ export async function saveRefreshToken(
   refreshToken: string,
   expiresAt: Date,
 ): Promise<AuthTokensType> {
-  const tokenHash = `${sha256Hash(accessToken)}:${sha256Hash(refreshToken)}`;
-
   const [inserted] = await db
     .insert(authTokens)
     .values({
       userId: userId,
-      token: tokenHash,
+      token: sha256Hash(accessToken),
+      refreshToken: sha256Hash(refreshToken),
       type: "refresh_token",
       createdAt: new Date(),
       expiresAt: expiresAt,
@@ -156,7 +155,8 @@ export async function rotateRefreshToken({
   expiresAt: Date;
 }): Promise<AuthTokensType | null> {
   const oldTokenHash = sha256Hash(oldRefreshToken);
-  const newTokenHash = `${sha256Hash(newAccessToken)}:${sha256Hash(newRefreshToken)}`;
+  const newTokenHash = sha256Hash(newAccessToken);
+  const newRefreshTokenHash = sha256Hash(newRefreshToken);
 
   return await db.transaction(async (tx) => {
     const [deactivated] = await tx
@@ -167,7 +167,7 @@ export async function rotateRefreshToken({
           eq(authTokens.userId, userId),
           eq(authTokens.isActive, true),
           gt(authTokens.expiresAt, new Date()),
-          sql`RIGHT(token, LENGTH(${oldTokenHash})) = ${oldTokenHash}`,
+          eq(authTokens.refreshToken, oldTokenHash),
         ),
       )
       .returning();
@@ -179,6 +179,7 @@ export async function rotateRefreshToken({
       .values({
         userId,
         token: newTokenHash,
+        refreshToken: newRefreshTokenHash,
         type: "refresh_token",
         expiresAt,
       })
@@ -188,11 +189,11 @@ export async function rotateRefreshToken({
 
     const [session] = await tx
       .update(userSessions)
-      .set({ refreshTokenHash: sha256Hash(newRefreshToken), expiresAt })
+      .set({ refreshTokenHash: newRefreshTokenHash, expiresAt })
       .where(
         and(
           eq(userSessions.userId, userId),
-          eq(userSessions.refreshTokenHash, sha256Hash(oldRefreshToken)),
+          eq(userSessions.refreshTokenHash, oldTokenHash),
         ),
       )
       .returning();
@@ -216,16 +217,14 @@ export async function revokeRefreshToken(
       and(
         eq(authTokens.isActive, true),
         gt(authTokens.expiresAt, new Date()),
-        sql`RIGHT(token, LENGTH(${refreshTokenHash})) = ${refreshTokenHash}`,
+        eq(authTokens.refreshToken, refreshTokenHash),
       ),
     );
 
   await db
     .update(userSessions)
     .set({ revokedAt: new Date() })
-    .where(
-      eq(userSessions.refreshTokenHash, isPlain ? sha256Hash(token) : token),
-    );
+    .where(eq(userSessions.refreshTokenHash, refreshTokenHash));
 }
 
 export async function getUserSession(
@@ -276,12 +275,22 @@ export async function isAccessTokenValid(
   userId: string,
   token: string,
 ): Promise<boolean> {
+  const isJwtValid = await verifyToken(token);
+
+  if (!isJwtValid) {
+    logger.debug(`JWT verification failed for user ${userId}. Token: ${token}`);
+    return false;
+  }
+
+  const accessTokenHash = sha256Hash(token);
+
   const existingToken = await db.query.authTokens.findFirst({
     where: and(
       eq(authTokens.userId, userId),
       eq(authTokens.isActive, true),
       isNull(authTokens.usedAt),
       gt(authTokens.expiresAt, new Date()),
+      eq(authTokens.token, accessTokenHash),
     ),
   });
 
@@ -290,28 +299,5 @@ export async function isAccessTokenValid(
     return false;
   }
 
-  const [accessTokenHash, refreshTokenHash] = existingToken.token.split(":");
-
-  if (!accessTokenHash || !refreshTokenHash) {
-    logger.warn(
-      `Invalid token format for user ${userId}. Token: ${existingToken.token}`,
-    );
-    return false;
-  }
-
-  const isJwtValid = await verifyToken(token);
-
-  if (!isJwtValid) {
-    logger.debug(`JWT verification failed for user ${userId}. Token: ${token}`);
-    return false;
-  }
-  const isValid = accessTokenHash === sha256Hash(token);
-
-  if (!isValid) {
-    logger.debug(
-      `Access token mismatch for user ${userId}. Provided: ${sha256Hash(token)}, Expected: ${accessTokenHash}`,
-    );
-  }
-
-  return isValid;
+  return true;
 }

@@ -16,3 +16,10 @@ jobs:
           github_token: ${{ secrets.github_token }}
           reporter: github-pr-review
           fail_level: error
+      - name: Run tsc with Reviewdog
+        uses: lowlydba/tsc-check@v1.3.1
+        with:
+          typescript-version: 6.0.3
+          reporter: github-pr-review
+          level: error
+          tsc-flags: "--noEmit --skipLibCheck"

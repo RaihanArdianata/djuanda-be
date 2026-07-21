@@ -58,7 +58,12 @@ jobs:
           # Tidak ada container postgres lokal -- DB-nya di VPS terpisah. pgbouncer
           # yang jadi perantara, jadi cukup tunggu itu jalan lalu coba migrate
           # (retry beberapa kali kalau jaringan ke VPS DB belum siap).
-          docker compose up -d pgbouncer
+          # --force-recreate: `up -d` alone doesn't reliably recreate a
+          # container just because an interpolated env value (from .env)
+          # changed -- Compose's config-diff can miss that, leaving pgbouncer
+          # running with a stale baked-in DATABASE_URL (symptom: its logs
+          # show a fallback host/db/user instead of the real DB_HOST/POSTGRES_*).
+          docker compose up -d --force-recreate pgbouncer
 
           echo "--- pgbouncer status ---"
           docker compose ps pgbouncer
@@ -79,7 +84,13 @@ jobs:
           fi
 
           for i in $(seq 1 10); do
-            if docker compose run --rm --no-deps -e DATABASE_URL="$DIRECT_DATABASE_URL" auth-service sh -c "cd ../../packages/database && bun run db:migrate"; then
+            # drizzle-kit's spinner redraws the same line with \r -- GitHub
+            # Actions' live log view collapses that and hides whatever error
+            # text follows it. Capture to a file and `cat` it afterward
+            # instead of watching the command run live, so nothing gets
+            # overwritten.
+            if docker compose run --rm --no-deps -e DATABASE_URL="$DIRECT_DATABASE_URL" auth-service \
+              sh -c "cd ../../packages/database && bun run db:migrate > /tmp/migrate.log 2>&1; ec=\$?; tr '\r' '\n' < /tmp/migrate.log; exit \$ec"; then
               echo "Migrations done"
               break
             fi

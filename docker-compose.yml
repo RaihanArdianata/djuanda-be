@@ -32,6 +32,78 @@ services:
     ports:
       - "9090:9090"
 
+  # Ingest broker for AeroSwarm's kafka connector — low-latency, buffered
+  # delivery of fused tracks/alerts (an alternative to the http webhook /
+  # low-latency websocket connectors, see docs/asmgcs/004-*.md). Producer =
+  # AeroSwarm's process-service (may run on a different host); consumer =
+  # connection-service (below).
+  #
+  # ADVERTISED_KAFKA_HOST must be an address the PRODUCER can actually reach
+  # (this VPS's LAN/public IP or DNS name) — "localhost" only works for
+  # same-machine clients. Set it in .env; the dual-listener setup below
+  # (PLAINTEXT for containers on this compose network, OUTSIDE for everyone
+  # else) mirrors aeroswarm-project's own redpanda service.
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: backend-djuanda-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092
+    ports:
+      - "19092:19092"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster info --brokers localhost:9092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 768M
+        reservations:
+          memory: 512M
+
+  # Creates the ingest topic with retention bounded from day one — a bare
+  # `rpk topic create` without --config leaves Redpanda's default (7 days,
+  # unbounded bytes), which is exactly what silently filled AeroSwarm's own
+  # VPS disk before its retention was fixed. Don't repeat that here.
+  redpanda-init:
+    image: redpandadata/redpanda:latest
+    container_name: backend-djuanda-redpanda-init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} \
+          --brokers redpanda:9092 \
+          --partitions 3 \
+          --replicas 1 \
+          --config retention.ms=3600000 \
+          --config retention.bytes=536870912 \
+          --config compression.type=lz4 \
+          || true
+        rpk topic alter-config ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} \
+          --brokers redpanda:9092 \
+          --set retention.ms=3600000 \
+          --set retention.bytes=536870912 \
+          || true
+        echo "Topic ready."
+    restart: "no"
+
   auth-service:
     build:
       context: .
@@ -105,13 +177,27 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      CONNECTION_SERVICE_PORT: "3005"
+      CONNECTION_SERVICE_PORT: ${CONNECTION_SERVICE_PORT:-3005}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      # Kafka ingest consumer (alternative to http/websocket — see
+      # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run
+      # without it; the http/websocket ingest paths are unaffected either way.
+      AEROSWARM_INGEST_KAFKA_BROKERS: redpanda:9092
+      AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
+      AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+        # Soft: the http/websocket ingest paths don't need Kafka — a
+        # Redpanda hiccup shouldn't take connection-service down with it.
+        required: false
     # Exposed directly (not via gateway): AeroSwarm's http connector POSTs
     # ingest here, and the AeroSwarm dashboard connects here for this
-    # airport's replay/history (client-side federation).
+    # airport's replay/history (client-side federation). Host port follows
+    # CONNECTION_SERVICE_PORT — kalau kamu ganti port di .env, connector
+    # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
     ports:
-      - "3005:3005"
+      - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
   worker-service:
     build:
       context: .
@@ -187,3 +273,5 @@ services:
 
 volumes:
   prometheus-data:
+  redpanda-data:
+    name: backend-djuanda-redpanda-data

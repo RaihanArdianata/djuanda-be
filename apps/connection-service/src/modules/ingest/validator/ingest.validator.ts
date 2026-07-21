@@ -9,5 +9,3 @@ export const ingestEnvelopeSchema = z.object({
   event: z.record(z.string(), z.unknown()),
   timestamp: z.number().optional(),
 });
-
-export type IngestEnvelopeType = z.infer<typeof ingestEnvelopeSchema>;

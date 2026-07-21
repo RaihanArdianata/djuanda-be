@@ -7,6 +7,7 @@ import {
   type ReplaySocketData,
   replayWebsocketHandlers,
 } from "./modules/history/service/replay-socket";
+import { startIngestKafkaConsumer, stopIngestKafkaConsumer } from "./modules/ingest/service/ingest-kafka-consumer";
 import { handleIngestSocketMessage } from "./modules/ingest/service/ingest-socket";
 import { flush, isValidIngestSecret } from "./modules/ingest/service/ingest.service";
 
@@ -60,9 +61,14 @@ const server = Bun.serve<SocketData>({
 
 logger.info(`connection-service listening on http://localhost:${port}`);
 
+startIngestKafkaConsumer().catch((err) => {
+  logger.error({ err }, "kafka ingest consumer failed to start — http/websocket ingest are unaffected");
+});
+
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down connection-service gracefully`);
   server.stop();
+  await stopIngestKafkaConsumer();
   await flush();
   await pool.end();
   process.exit(0);

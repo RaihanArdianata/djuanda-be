@@ -63,8 +63,23 @@ jobs:
           echo "--- pgbouncer status ---"
           docker compose ps pgbouncer
 
+          # Migrasi HARUS lewat koneksi langsung ke Postgres, bukan pgbouncer
+          # (POOL_MODE: transaction) -- drizzle-kit mengambil advisory lock
+          # sesi sebelum apply migrations, dan transaction pooling bisa
+          # menukar koneksi fisik antar statement sehingga lock/prepared
+          # statement tidak konsisten (gejalanya: hang lama lalu gagal, bukan
+          # connection-refused instan). .env sudah punya DATABASE_URL yang
+          # benar (langsung ke VPS DB) -- override eksplisit di sini supaya
+          # tidak diam-diam ketiban DATABASE_URL milik container auth-service
+          # (docker-compose.yml mengarahkannya ke pgbouncer:6432).
+          DIRECT_DATABASE_URL=$(grep '^DATABASE_URL=' .env | cut -d'=' -f2-)
+          if [ -z "$DIRECT_DATABASE_URL" ]; then
+            echo "FATAL: DATABASE_URL tidak ditemukan di .env"
+            exit 1
+          fi
+
           for i in $(seq 1 10); do
-            if docker compose run --rm --no-deps auth-service sh -c "cd ../../packages/database && bun run db:migrate"; then
+            if docker compose run --rm --no-deps -e DATABASE_URL="$DIRECT_DATABASE_URL" auth-service sh -c "cd ../../packages/database && bun run db:migrate"; then
               echo "Migrations done"
               break
             fi

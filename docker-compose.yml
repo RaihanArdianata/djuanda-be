@@ -31,7 +31,13 @@ services:
       - ./infra/alerts.rules.yml:/etc/prometheus/alerts.rules.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      # Host 9090 is already held by a native (non-Docker) Prometheus
+      # process on the VPS (pid 943 as of 2026-07-24) — unrelated to either
+      # app, left alone rather than touched. Remapped to 9091 on the host
+      # side only; the container still listens on 9090 internally, so
+      # nothing inside the compose network (e.g. Grafana, if ever pointed
+      # at this instance) needs to change.
+      - "9091:9090"
 
   # Ingest broker for AeroSwarm's kafka connector — low-latency, buffered
   # delivery of fused tracks/alerts (an alternative to the http webhook /

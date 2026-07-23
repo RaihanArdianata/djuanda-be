@@ -1,6 +1,8 @@
 import { Kafka, type Consumer } from "kafkajs";
 import { logger } from "@repo/logger";
 import {
+  AirportMismatchError,
+  assertExpectedAirport,
   enqueueAlertEvent,
   enqueueTrackEvent,
   isAlertEvent,
@@ -30,6 +32,28 @@ function parseMessageValue(raw: Buffer | null): void {
     event = JSON.parse(raw.toString());
   } catch {
     return; // malformed message — skip, don't crash the consumer loop
+  }
+
+  if (isTrackEvent(event) || isAlertEvent(event)) {
+    try {
+      assertExpectedAirport(event);
+    } catch (err) {
+      if (err instanceof AirportMismatchError) {
+        // No per-message secret on this transport (auth is broker
+        // reachability only, see the module comment above) — this check is
+        // the only thing standing between a misrouted topic/broker and a
+        // silent cross-airport write. Log loudly and skip (commit the
+        // offset, same as a malformed message) rather than crash the
+        // consumer loop — a permanent config mismatch will never resolve
+        // itself by retrying the same message.
+        logger.error(
+          { err, trackId: (event as { trackId?: string }).trackId, alertId: (event as { alertId?: string }).alertId },
+          "kafka ingest: airport mismatch — event dropped",
+        );
+        return;
+      }
+      throw err;
+    }
   }
 
   if (isTrackEvent(event)) {

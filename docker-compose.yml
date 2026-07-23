@@ -28,6 +28,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/alerts.rules.yml:/etc/prometheus/alerts.rules.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"

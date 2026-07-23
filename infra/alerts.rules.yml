@@ -1,0 +1,17 @@
+groups:
+  - name: backend-djuanda-infra-basics
+    rules:
+      # Baseline "did anything stop responding" alert — see
+      # aeroswarm-project/docs/audit/tasks/009-*.md for why this is the only
+      # rule shipped for now. No Alertmanager/notification channel is wired
+      # up here — no credentials for one (Slack/email/PagerDuty) exist in
+      # .env.example, and inventing one would mean guessing a config that
+      # might be wrong or insecure.
+      - alert: BackendDjuandaTargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} ({{ $labels.instance }}) is down"
+          description: "{{ $labels.job }} has been unreachable for 5+ minutes — no metrics are being scraped from it at all."

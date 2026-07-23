@@ -51,7 +51,7 @@ const server = Bun.serve<SocketData>({
     },
     message(ws, raw) {
       if (ws.data.kind === "replay") replayWebsocketHandlers.message(asReplaySocket(ws), raw);
-      else handleIngestSocketMessage(raw);
+      else handleIngestSocketMessage(raw, ws);
     },
     close(ws) {
       if (ws.data.kind === "replay") replayWebsocketHandlers.close(asReplaySocket(ws));

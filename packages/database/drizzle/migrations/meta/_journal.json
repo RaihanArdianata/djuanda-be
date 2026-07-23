@@ -36,6 +36,13 @@
       "when": 1784538980760,
       "tag": "0004_luxuriant_ben_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1784833951300,
+      "tag": "0005_numerous_white_tiger",
+      "breakpoints": true
     }
   ]
 }

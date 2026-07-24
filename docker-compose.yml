@@ -264,6 +264,10 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       AUTH_SERVICE_URL: http://auth-service:3001
       NOTIFICATION_SERVICE_URL: http://notification-service:3004
+      USER_SERVICE_URL: http://user-service:${USER_SERVICE_PORT:-3002}
+      ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3005}
+      WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
+      SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
     ports:
       - "8080:8080"
     depends_on:

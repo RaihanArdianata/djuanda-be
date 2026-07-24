@@ -12,7 +12,7 @@ import {
 } from "@repo/database";
 import { logger } from "@repo/logger";
 import { bcryptHash, sha256Hash, transformPhoneNumber } from "@repo/shared";
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, ilike, isNull, or } from "drizzle-orm";
 import { verifyToken } from "../../../utils/jwt";
 
 type UserType = typeof users.$inferSelect;
@@ -67,14 +67,14 @@ export async function getUser({
 export type RegisterUserInput = Omit<
   CreateUserProfileInput,
   "id" | "createdAt" | "deletedAt" | "roleId"
-> & { password: string };
+> & { password: string; };
 
 export async function createUser(data: RegisterUserInput): Promise<UserType> {
   return await db.transaction(async (tx) => {
     const [role] = await tx
       .select()
       .from(userRoles)
-      .where(eq(userRoles.name, "USER"))
+      .where(ilike(userRoles.name, "USER"))
       .limit(1);
 
     if (!role) throw new Error("Role 'USER' tidak ditemukan");
@@ -229,7 +229,7 @@ export async function revokeRefreshToken(
 
 export async function getUserSession(
   userId: string,
-): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
+): Promise<{ isLoggedIn: boolean; session: UserSessionType | null; }> {
   const activeSession = await db
     .select()
     .from(userSessions)

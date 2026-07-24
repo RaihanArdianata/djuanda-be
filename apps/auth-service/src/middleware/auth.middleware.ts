@@ -14,11 +14,17 @@ export const authentication = catchAsync(async (c, next) => {
   });
 
   await jwtMiddleware(c, async () => {
-    const { id } = c.get("jwtPayload") as { id: string };
+    const { id } = c.get("jwtPayload") as { id: string; };
     const findUser = await getUserById(id);
 
     if (!findUser) {
       throw new ApiError("FORBIDDEN");
+    }
+
+    if (findUser.status !== "ACTIVE") {
+      throw new ApiError("FORBIDDEN", {
+        message: "Account is inactive or has been deleted.",
+      });
     }
 
     const isTokenValid = await isAccessTokenValid(
@@ -44,7 +50,7 @@ export const authenticationStoreOwner = catchAsync(async (_c, next) => {
 });
 
 export const authenticationUser = catchAsync(async (c, next) => {
-  const { id } = c.get("jwtPayload") as { id: string };
+  const { id } = c.get("jwtPayload") as { id: string; };
   const findUser = await getUserById(id);
 
   if (findUser && findUser.role?.name === "Admin") {
@@ -55,7 +61,7 @@ export const authenticationUser = catchAsync(async (c, next) => {
 });
 
 export const rbacMiddleware = catchAsync(async (c, next) => {
-  const { id } = c.get("jwtPayload") as { id: string };
+  const { id } = c.get("jwtPayload") as { id: string; };
   const findUser = await getUserById(id);
 
   if (!findUser) {

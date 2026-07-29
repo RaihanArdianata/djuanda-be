@@ -18,11 +18,11 @@ export const authentication = catchAsync(async (c, next) => {
     const findUser = await getUserById(id);
 
     if (!findUser) {
-      throw new ApiError("FORBIDDEN");
+      throw new ApiError("UNAUTHORIZED");
     }
 
     if (findUser.status !== "ACTIVE") {
-      throw new ApiError("FORBIDDEN", {
+      throw new ApiError("UNAUTHORIZED", {
         message: "Account is inactive or has been deleted.",
       });
     }

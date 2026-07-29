@@ -1,9 +1,9 @@
-import { logger } from "@repo/logger";
 import {
   createInMemoryCheckpointStore,
   createPostgresStore,
   createReplayServer,
 } from "@aeroswarm/replay-server";
+import { logger } from "@repo/logger";
 
 // This deployment's own airport identity. One backend-djuanda instance
 // serves exactly one airport by design (docs/development/federation/004-*.md

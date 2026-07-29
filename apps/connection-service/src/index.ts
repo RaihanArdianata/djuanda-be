@@ -7,17 +7,23 @@ import {
   type ReplaySocketData,
   replayWebsocketHandlers,
 } from "./modules/history/service/replay-socket";
-import { startIngestKafkaConsumer, stopIngestKafkaConsumer } from "./modules/ingest/service/ingest-kafka-consumer";
+import {
+  flush,
+  isValidIngestSecret,
+} from "./modules/ingest/service/ingest.service";
+import {
+  startIngestKafkaConsumer,
+  stopIngestKafkaConsumer,
+} from "./modules/ingest/service/ingest-kafka-consumer";
 import { handleIngestSocketMessage } from "./modules/ingest/service/ingest-socket";
-import { flush, isValidIngestSecret } from "./modules/ingest/service/ingest.service";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
-type SocketData =
-  | ({ kind: "replay"; } & ReplaySocketData)
-  | { kind: "ingest"; };
+type SocketData = ({ kind: "replay" } & ReplaySocketData) | { kind: "ingest" };
 
-const asReplaySocket = (ws: ServerWebSocket<SocketData>): ServerWebSocket<ReplaySocketData> =>
+const asReplaySocket = (
+  ws: ServerWebSocket<SocketData>,
+): ServerWebSocket<ReplaySocketData> =>
   ws as unknown as ServerWebSocket<ReplaySocketData>;
 
 const server = Bun.serve<SocketData>({
@@ -30,7 +36,10 @@ const server = Bun.serve<SocketData>({
         return new Response("Unauthorized", { status: 401 });
       }
       const upgraded = srv.upgrade(req, {
-        data: { kind: "replay" as const, sessionId: url.searchParams.get("sessionId") ?? undefined },
+        data: {
+          kind: "replay" as const,
+          sessionId: url.searchParams.get("sessionId") ?? undefined,
+        },
       });
       if (upgraded) return undefined;
       return new Response("WebSocket upgrade failed", { status: 400 });
@@ -47,14 +56,17 @@ const server = Bun.serve<SocketData>({
   },
   websocket: {
     open(ws) {
-      if (ws.data.kind === "replay") replayWebsocketHandlers.open(asReplaySocket(ws));
+      if (ws.data.kind === "replay")
+        replayWebsocketHandlers.open(asReplaySocket(ws));
     },
     message(ws, raw) {
-      if (ws.data.kind === "replay") replayWebsocketHandlers.message(asReplaySocket(ws), raw);
+      if (ws.data.kind === "replay")
+        replayWebsocketHandlers.message(asReplaySocket(ws), raw);
       else handleIngestSocketMessage(raw, ws);
     },
     close(ws) {
-      if (ws.data.kind === "replay") replayWebsocketHandlers.close(asReplaySocket(ws));
+      if (ws.data.kind === "replay")
+        replayWebsocketHandlers.close(asReplaySocket(ws));
     },
   },
 });
@@ -62,11 +74,16 @@ const server = Bun.serve<SocketData>({
 logger.info(`connection-service listening on http://localhost:${port}`);
 
 startIngestKafkaConsumer().catch((err) => {
-  logger.error({ err }, "kafka ingest consumer failed to start — http/websocket ingest are unaffected");
+  logger.error(
+    { err },
+    "kafka ingest consumer failed to start — http/websocket ingest are unaffected",
+  );
 });
 
 const shutdown = async (signal: string): Promise<never> => {
-  logger.info(`${signal} received, shutting down connection-service gracefully`);
+  logger.info(
+    `${signal} received, shutting down connection-service gracefully`,
+  );
   server.stop();
   await stopIngestKafkaConsumer();
   await flush();

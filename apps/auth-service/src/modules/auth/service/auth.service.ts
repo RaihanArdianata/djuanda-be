@@ -67,7 +67,7 @@ export async function getUser({
 export type RegisterUserInput = Omit<
   CreateUserProfileInput,
   "id" | "createdAt" | "deletedAt" | "roleId"
-> & { password: string; };
+> & { password: string };
 
 export async function createUser(data: RegisterUserInput): Promise<UserType> {
   return await db.transaction(async (tx) => {
@@ -229,7 +229,7 @@ export async function revokeRefreshToken(
 
 export async function getUserSession(
   userId: string,
-): Promise<{ isLoggedIn: boolean; session: UserSessionType | null; }> {
+): Promise<{ isLoggedIn: boolean; session: UserSessionType | null }> {
   const activeSession = await db
     .select()
     .from(userSessions)
@@ -271,15 +271,21 @@ export async function revokeAllUserSessions(): Promise<void> {
   await db.update(authTokens).set({ isActive: false, usedAt: new Date() });
 }
 
-export async function isAccessTokenValid(
+export async function validateAccessToken(
   userId: string,
   token: string,
-): Promise<boolean> {
+): Promise<{
+  isValid: boolean;
+  isExpired: boolean;
+}> {
   const isJwtValid = await verifyToken(token);
 
   if (!isJwtValid) {
     logger.debug(`JWT verification failed for user ${userId}. Token: ${token}`);
-    return false;
+    return {
+      isValid: false,
+      isExpired: true,
+    };
   }
 
   const accessTokenHash = sha256Hash(token);
@@ -296,8 +302,14 @@ export async function isAccessTokenValid(
 
   if (!existingToken) {
     logger.debug(`No active token found for user ${userId}. Token: ${token}`);
-    return false;
+    return {
+      isValid: false,
+      isExpired: false,
+    };
   }
 
-  return true;
+  return {
+    isValid: true,
+    isExpired: false,
+  };
 }

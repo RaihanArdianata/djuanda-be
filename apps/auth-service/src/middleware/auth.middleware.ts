@@ -3,7 +3,7 @@ import { ApiError, catchAsync } from "@repo/shared";
 import { jwt } from "hono/jwt";
 import {
   getUserById,
-  isAccessTokenValid,
+  validateAccessToken,
 } from "../modules/auth/service/auth.service";
 
 export const authentication = catchAsync(async (c, next) => {
@@ -14,7 +14,7 @@ export const authentication = catchAsync(async (c, next) => {
   });
 
   await jwtMiddleware(c, async () => {
-    const { id } = c.get("jwtPayload") as { id: string; };
+    const { id } = c.get("jwtPayload") as { id: string };
     const findUser = await getUserById(id);
 
     if (!findUser) {
@@ -27,15 +27,15 @@ export const authentication = catchAsync(async (c, next) => {
       });
     }
 
-    const isTokenValid = await isAccessTokenValid(
+    const { isExpired, isValid } = await validateAccessToken(
       id,
       c.req.header("Authorization")?.replace("Bearer ", "") || "",
     );
 
-    if (!isTokenValid) {
-      throw new ApiError("FORBIDDEN", {
-        message: "Access token is invalid or has been revoked.",
-      });
+    if (isExpired) {
+      throw new ApiError("INVALID_ACCESS_TOKEN");
+    } else if (!isValid) {
+      throw new ApiError("SESSION_TERMINATED");
     }
 
     c.set("user", findUser);
@@ -50,7 +50,7 @@ export const authenticationStoreOwner = catchAsync(async (_c, next) => {
 });
 
 export const authenticationUser = catchAsync(async (c, next) => {
-  const { id } = c.get("jwtPayload") as { id: string; };
+  const { id } = c.get("jwtPayload") as { id: string };
   const findUser = await getUserById(id);
 
   if (findUser && findUser.role?.name === "Admin") {
@@ -61,7 +61,7 @@ export const authenticationUser = catchAsync(async (c, next) => {
 });
 
 export const rbacMiddleware = catchAsync(async (c, next) => {
-  const { id } = c.get("jwtPayload") as { id: string; };
+  const { id } = c.get("jwtPayload") as { id: string };
   const findUser = await getUserById(id);
 
   if (!findUser) {

@@ -8,7 +8,9 @@ const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
 const INGEST_SECRET = process.env.AEROSWARM_INGEST_SECRET || "";
 
-export function isValidIngestSecret(secret: string | null | undefined): boolean {
+export function isValidIngestSecret(
+  secret: string | null | undefined,
+): boolean {
   return Boolean(INGEST_SECRET) && secret === INGEST_SECRET;
 }
 

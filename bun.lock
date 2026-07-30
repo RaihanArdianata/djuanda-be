@@ -85,6 +85,7 @@
       "name": "@repo/notam-service",
       "version": "0.0.0",
       "dependencies": {
+        "@hono/swagger-ui": "^0.6.1",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
         "hono": "^4.12.27",

@@ -41,7 +41,7 @@ const intervalMsToCronExpression = (intervalMs: number): string => {
 let metarTask: ScheduledTask | null = null;
 let tafTask: ScheduledTask | null = null;
 
-const pollMetar = async (): Promise<void> => {
+export const pollMetar = async (): Promise<void> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "metar polling started");
@@ -87,7 +87,7 @@ const pollMetar = async (): Promise<void> => {
   }
 };
 
-const pollTaf = async (): Promise<void> => {
+export const pollTaf = async (): Promise<void> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "taf polling started");

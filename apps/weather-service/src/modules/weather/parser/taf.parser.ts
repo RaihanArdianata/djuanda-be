@@ -8,6 +8,7 @@ const WIND_RE = /\b(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT\b/;
 const VARIABLE_WIND_RE = /\b\d{3}V\d{3}\b/;
 const CLOUD_RE = /\b(FEW|SCT|BKN|OVC|VV)(\d{3})\b/g;
 const VISIBILITY_RE = /\b(\d{4})\b/;
+const VALIDITY_RANGE_RE = /\b\d{4}\/\d{4}\b/;
 const CHANGE_MARKER_RE = /\b(?:FM\d{6}|BECMG|TEMPO|PROB30|PROB40)\b/g;
 const WEATHER_PHENOMENA_PATTERN =
   /\b[+-]?(?:VC)?(?:MI|PR|BC|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|FG|BR|SA|DU|HZ|FU|VA|PY|SQ|PO|DS|SS|FC)\b/g;
@@ -20,7 +21,7 @@ interface RawTafSegment {
 
 const markerToChangeType = (
   marker: string,
-): { changeType: string; probability: number | null } => {
+): { changeType: string; probability: number | null; } => {
   if (marker === "BECMG" || marker === "TEMPO") {
     return { changeType: marker, probability: null };
   }
@@ -70,7 +71,10 @@ const parseSegment = (
   const gustKt = wind?.[3] ? Number.parseInt(wind[3], 10) : null;
 
   const cavok = segment.body.includes("CAVOK");
-  const visibilityMatch = !cavok ? VISIBILITY_RE.exec(segment.body) : null;
+  const bodyWithoutValidityRange = segment.body.replace(VALIDITY_RANGE_RE, "");
+  const visibilityMatch = !cavok
+    ? VISIBILITY_RE.exec(bodyWithoutValidityRange)
+    : null;
   const visibilityM = cavok
     ? 9999
     : visibilityMatch
@@ -106,7 +110,7 @@ const toIsoString = (epochSeconds: number): string =>
 
 export const parseTaf = (
   rawTaf: string,
-  fcsts: { timeFrom: number; timeTo: number }[],
+  fcsts: { timeFrom: number; timeTo: number; }[],
 ): TafParsedData => {
   const segments = splitTafSegments(rawTaf);
 
@@ -115,16 +119,16 @@ export const parseTaf = (
     const parsed = segment
       ? parseSegment(segment)
       : {
-          changeType: null,
-          probability: null,
-          windDirection: null,
-          windDirectionVariable: false,
-          windSpeedKt: null,
-          gustKt: null,
-          visibilityM: null,
-          weather: [],
-          clouds: [],
-        };
+        changeType: null,
+        probability: null,
+        windDirection: null,
+        windDirectionVariable: false,
+        windSpeedKt: null,
+        gustKt: null,
+        visibilityM: null,
+        weather: [],
+        clouds: [],
+      };
 
     return {
       ...parsed,

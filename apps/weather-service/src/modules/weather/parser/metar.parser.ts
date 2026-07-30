@@ -6,7 +6,7 @@ const TEMP_DEWPOINT_RE = /\b(M?\d{2})\/(M?\d{2})\b/;
 const QNH_RE = /\bQ(\d{4})\b/;
 const ALTIM_RE = /\bA(\d{4})\b/;
 const VISIBILITY_RE = /\b(\d{4})\b/;
-const RVR_RE = /\bR\d{2}[LRC]?\/[MP]?\d{3,4}(?:V[MP]?\d{3,4})?FT?\b/;
+const RVR_RE = /\bR\d{2}[LRC]?\/[MP]?\d{3,4}(?:V[MP]?\d{3,4})?(?:FT)?\b/;
 const WEATHER_PHENOMENA_PATTERN =
   /\b[+-]?(?:VC)?(?:MI|PR|BC|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|FG|BR|SA|DU|HZ|FU|VA|PY|SQ|PO|DS|SS|FC)\b/g;
 

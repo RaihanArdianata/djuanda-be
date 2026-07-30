@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
+import notam from "./notam";
 import notifications from "./notifications";
 import rbac from "./rbac";
 import sse from "./sse";
@@ -17,6 +18,7 @@ const app = new Hono()
   .route("/ws", ws)
   .route("/sse", sse)
   .route("/alert", alert)
-  .route("/users", users);
+  .route("/users", users)
+  .route("/notam", notam);
 
 export default app;

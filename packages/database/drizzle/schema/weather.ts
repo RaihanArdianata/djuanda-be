@@ -76,10 +76,12 @@ export const weatherObservations = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (t) =>[index("weather_observations_station_observed_idx").on(
+  (t) => [
+    index("weather_observations_station_observed_idx").on(
       t.station,
       t.observedAt,
-    ),],
+    ),
+  ],
 );
 
 // Filled by the same poller, one row per successful TAF poll.
@@ -102,10 +104,7 @@ export const weatherForecasts = pgTable(
       .notNull(),
   },
   (t) => [
-    index("weather_forecasts_station_valid_to_idx").on(
-      t.station,
-      t.validTo,
-    ),
+    index("weather_forecasts_station_valid_to_idx").on(t.station, t.validTo),
   ],
 );
 

@@ -29,6 +29,7 @@ export interface TafProviderItem {
   issueTime: string;
   validTimeFrom: number;
   validTimeTo: number;
+  // biome-ignore lint/style/useNamingConvention: The property name is based on the provider's API response.
   rawTAF: string;
   fcsts: TafProviderForecastPeriod[];
 }

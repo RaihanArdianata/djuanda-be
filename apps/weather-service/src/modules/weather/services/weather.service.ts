@@ -57,9 +57,7 @@ export async function saveObservation(
   await db.insert(weatherObservations).values(params);
 }
 
-export async function saveForecast(
-  params: SaveForecastParams,
-): Promise<void> {
+export async function saveForecast(params: SaveForecastParams): Promise<void> {
   await db.insert(weatherForecasts).values(params);
 }
 

@@ -1,5 +1,5 @@
-import cron, { type ScheduledTask } from "node-cron";
 import { logger } from "@repo/logger";
+import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
 import { parseMetar } from "../parser/metar.parser";
 import { parseTaf } from "../parser/taf.parser";
@@ -172,22 +172,3 @@ export const stopWeatherPolling = (): void => {
     tafTask = null;
   }
 };
-
-// Exposed for a health/debug endpoint so you can see poll status without
-// grepping logs, e.g. GET /weather/poll-status.
-export const getWeatherPollingStatus = () => ({
-  metar: metarTask
-    ? {
-        status: metarTask.getStatus(),
-        nextRun: metarTask.getNextRun(),
-        lastRun: metarTask.lastRun(),
-      }
-    : null,
-  taf: tafTask
-    ? {
-        status: tafTask.getStatus(),
-        nextRun: tafTask.getNextRun(),
-        lastRun: tafTask.lastRun(),
-      }
-    : null,
-});

@@ -36,8 +36,8 @@ const markerToChangeType = (
 // Splits rawTAF into the base forecast plus one segment per FM/TEMPO/BECMG/
 // PROB30/PROB40 change group, so each segment can be regex-parsed the same
 // way as a standalone METAR body.
-const splitTafSegments = (rawTAF: string): RawTafSegment[] => {
-  const body = rawTAF.split(" RMK")[0];
+const splitTafSegments = (rawTaf: string): RawTafSegment[] => {
+  const body = rawTaf.split(" RMK")[0];
   const markers = Array.from(body.matchAll(CHANGE_MARKER_RE));
   const segments: RawTafSegment[] = [];
 
@@ -64,7 +64,8 @@ const parseSegment = (
   const wind = WIND_RE.exec(segment.body);
   const windDirectionVariable =
     wind?.[1] === "VRB" || VARIABLE_WIND_RE.test(segment.body);
-  const windDirection = wind && wind[1] !== "VRB" ? Number.parseInt(wind[1], 10) : null;
+  const windDirection =
+    wind && wind[1] !== "VRB" ? Number.parseInt(wind[1], 10) : null;
   const windSpeedKt = wind ? Number.parseInt(wind[2], 10) : null;
   const gustKt = wind?.[3] ? Number.parseInt(wind[3], 10) : null;
 
@@ -76,12 +77,12 @@ const parseSegment = (
       ? Number.parseInt(visibilityMatch[1], 10)
       : null;
 
-  const clouds: WeatherParsedCloud[] = Array.from(segment.body.matchAll(CLOUD_RE)).map(
-    (m) => ({
-      cover: m[1],
-      baseFt: Number.parseInt(m[2], 10) * 100,
-    }),
-  );
+  const clouds: WeatherParsedCloud[] = Array.from(
+    segment.body.matchAll(CLOUD_RE),
+  ).map((m) => ({
+    cover: m[1],
+    baseFt: Number.parseInt(m[2], 10) * 100,
+  }));
 
   const weather = Array.from(
     new Set(segment.body.match(WEATHER_PHENOMENA_PATTERN) ?? []),
@@ -104,10 +105,10 @@ const toIsoString = (epochSeconds: number): string =>
   new Date(epochSeconds * 1000).toISOString();
 
 export const parseTaf = (
-  rawTAF: string,
+  rawTaf: string,
   fcsts: { timeFrom: number; timeTo: number }[],
 ): TafParsedData => {
-  const segments = splitTafSegments(rawTAF);
+  const segments = splitTafSegments(rawTaf);
 
   const periods: TafParsedPeriod[] = fcsts.map((fcst, index) => {
     const segment = segments[index];

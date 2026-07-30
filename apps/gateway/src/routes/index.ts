@@ -6,8 +6,8 @@ import notifications from "./notifications";
 import rbac from "./rbac";
 import sse from "./sse";
 import users from "./users";
-import ws from "./ws";
 import weather from "./weather";
+import ws from "./ws";
 
 const app = new Hono()
   .route("/auth", auth)

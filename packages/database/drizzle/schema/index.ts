@@ -5,3 +5,4 @@ export * from "./notifications";
 export * from "./rbac";
 export * from "./relations";
 export * from "./users";
+export * from "./weather";

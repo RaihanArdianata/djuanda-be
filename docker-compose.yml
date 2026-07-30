@@ -249,6 +249,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+  # METAR/TAF polling for WARR (or whichever station is set via
+  # WEATHER_STATION_ICAO) — see src/modules/weather/scheduler for the
+  # node-cron polling logic. Only accessed via the gateway, same as
+  # user-service/alert-service; not exposed on the host.
+  weather-service:
+    build:
+      context: .
+      args:
+        APP_DIR: weather-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WEATHER_SERVICE_PORT: ${WEATHER_SERVICE_PORT:-3008}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3008/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   gateway:
     build:
@@ -266,6 +289,7 @@ services:
       NOTIFICATION_SERVICE_URL: http://notification-service:3004
       USER_SERVICE_URL: http://user-service:${USER_SERVICE_PORT:-3002}
       ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3005}
+      WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
     ports:

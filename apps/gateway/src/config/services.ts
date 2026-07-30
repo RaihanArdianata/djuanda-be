@@ -8,4 +8,5 @@ export const services: Record<string, string> = {
   ALERT_SERVICE: env.ALERT_SERVICE_URL,
   USER_SERVICE: env.USER_SERVICE_URL,
   NOTAM_SERVICE: env.NOTAM_SERVICE_URL,
+  WEATHER_SERVICE: env.WEATHER_SERVICE_URL,
 };

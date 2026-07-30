@@ -1,10 +1,6 @@
 import { ReplaySession } from "@aeroswarm/replay-server";
 import type { ServerWebSocket } from "bun";
-import {
-  nextSeq,
-  replayCheckpoints,
-  replayStore,
-} from "./history.service";
+import { nextSeq, replayCheckpoints, replayStore } from "./history.service";
 
 // @aeroswarm/replay-server's own attachWebSocket() targets a Node
 // http.Server ("upgrade" events + the ws package) — Bun.serve has native
@@ -43,7 +39,11 @@ export const replayWebsocketHandlers = {
       if (type === "replay.start") {
         const speed = typeof msg.speed === "number" ? msg.speed : 1;
         session
-          .start(new Date(msg.from as string), new Date(msg.to as string), speed)
+          .start(
+            new Date(msg.from as string),
+            new Date(msg.to as string),
+            speed,
+          )
           .catch(() => null);
       } else if (type === "replay.pause") session.pause();
       else if (type === "replay.resume") session.resume();

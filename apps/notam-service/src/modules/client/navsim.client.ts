@@ -26,6 +26,7 @@ export async function fetchNotamHistories(size = 2000): Promise<unknown> {
   try {
     response = await fetch(url, {
       method: "GET",
+      // biome-ignore lint/style/useNamingConvention: The property name is based on the provider's API response.
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });

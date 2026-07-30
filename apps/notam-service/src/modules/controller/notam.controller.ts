@@ -1,8 +1,8 @@
 import { logger } from "@repo/logger";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { getNotamHistories } from "../service/notam.service";
 import { NavsimUpstreamError } from "../client/navsim.client";
+import { getNotamHistories } from "../service/notam.service";
 
 function toContentfulStatus(status: number): ContentfulStatusCode {
   const isContentBearing =

@@ -84,15 +84,6 @@ export const login = catchAsync(async (c) => {
     throw new ApiError("ACCOUNT_INACTIVE");
   }
 
-  const existingSession = await getUserSession(findUser.id);
-
-  if (existingSession.isLoggedIn) {
-    throw new ApiError("SESSION_TERMINATED", {
-      message:
-        "You are already logged in from another device. Please logout from that device first.",
-    });
-  }
-
   await resetRateLimit(rateLimitKey);
 
   const payload = {
@@ -186,7 +177,7 @@ export const refreshToken = catchAsync(async (c) => {
   return success(
     c,
     {
-      token: newAccessToken,
+      accessToken: newAccessToken,
       refreshToken: newRefreshToken,
     },
     { message: "Token refreshed successfully" },

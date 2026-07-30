@@ -12,7 +12,11 @@ interface SendableSocket {
   send(data: string): void;
 }
 
-export function handleIngestSocketMessage(raw: string | Buffer, socket: SendableSocket): void {
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed for the various event types and error handling
+export function handleIngestSocketMessage(
+  raw: string | Buffer,
+  socket: SendableSocket,
+): void {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw.toString());
@@ -22,7 +26,7 @@ export function handleIngestSocketMessage(raw: string | Buffer, socket: Sendable
 
   const event =
     parsed !== null && typeof parsed === "object" && "event" in parsed
-      ? (parsed as { event: unknown; }).event
+      ? (parsed as { event: unknown }).event
       : parsed;
 
   if (isTrackEvent(event) || isAlertEvent(event)) {
@@ -31,12 +35,18 @@ export function handleIngestSocketMessage(raw: string | Buffer, socket: Sendable
     } catch (err) {
       if (err instanceof AirportMismatchError) {
         logger.error(
-          { err, trackId: (event as { trackId?: string; }).trackId, alertId: (event as { alertId?: string; }).alertId },
+          {
+            err,
+            trackId: (event as { trackId?: string }).trackId,
+            alertId: (event as { alertId?: string }).alertId,
+          },
           "ws ingest: airport mismatch — event dropped",
         );
         try {
           socket.send(JSON.stringify({ type: "error", message: err.message }));
-        } catch { /* socket already closing — nothing to notify */ }
+        } catch {
+          /* socket already closing — nothing to notify */
+        }
         return;
       }
       throw err;
@@ -51,5 +61,11 @@ export function handleIngestSocketMessage(raw: string | Buffer, socket: Sendable
     enqueueAlertEvent(event);
     return;
   }
-  logger.warn({ keys: event && typeof event === "object" ? Object.keys(event) : typeof event }, "ws ingest: unrecognized event shape — dropped");
+  logger.warn(
+    {
+      keys:
+        event && typeof event === "object" ? Object.keys(event) : typeof event,
+    },
+    "ws ingest: unrecognized event shape — dropped",
+  );
 }

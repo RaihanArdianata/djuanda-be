@@ -9,7 +9,7 @@ import routes from "./routes";
 // this airport's replay/history without going through the gateway), so CORS
 // is handled here rather than at the gateway.
 const corsMiddleware = cors({
-  origin: (origin) => origin,
+  origin: (origin: string) => origin,
   allowHeaders: ["Content-Type", "Authorization", "X-Aero-Ingest-Secret"],
   allowMethods: ["GET", "POST", "OPTIONS"],
   maxAge: 600,

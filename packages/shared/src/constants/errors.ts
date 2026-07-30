@@ -20,6 +20,7 @@ export const ERROR_CATALOG: Record<
     message: "Refresh token required",
   },
   INVALID_REFRESH_TOKEN: { statusCode: 401, message: "Invalid refresh token" },
+  INVALID_ACCESS_TOKEN: { statusCode: 401, message: "Invalid access token" },
   REFRESH_TOKEN_REVOKED: { statusCode: 401, message: "Refresh token revoked" },
   FORBIDDEN: {
     statusCode: 403,

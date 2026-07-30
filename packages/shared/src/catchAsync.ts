@@ -1,5 +1,6 @@
 import { logger } from "@repo/logger";
 import type { Context, Next } from "hono";
+import { HTTPException } from "hono/http-exception";
 import ApiError from "./apiError";
 import { failure, failureFromCode } from "./apiResponse";
 
@@ -19,6 +20,18 @@ export const catchAsync =
           message: error.message,
           fields: error.fields,
           details: error.details,
+        }) as T extends Promise<infer U> ? U : T;
+      } else if (error instanceof HTTPException) {
+        if (error.status === 401) {
+          return failureFromCode(c, "UNAUTHORIZED", {
+            message: error.message,
+            statusCode: 401,
+          }) as T extends Promise<infer U> ? U : T;
+        }
+
+        return failureFromCode(c, "HTTP_EXCEPTION", {
+          message: error.message,
+          statusCode: error.status,
         }) as T extends Promise<infer U> ? U : T;
       }
 

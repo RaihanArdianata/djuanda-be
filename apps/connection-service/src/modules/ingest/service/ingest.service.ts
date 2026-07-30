@@ -6,9 +6,11 @@ type AlertRow = typeof aeroswarmAlerts.$inferInsert;
 
 const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
-const INGEST_SECRET = process.env.AEROSWARM_INGEST_SECRET || "";
+const INGEST_SECRET: string = process.env.AEROSWARM_INGEST_SECRET || "";
 
-export function isValidIngestSecret(secret: string | null | undefined): boolean {
+export function isValidIngestSecret(
+  secret: string | null | undefined,
+): boolean {
   return Boolean(INGEST_SECRET) && secret === INGEST_SECRET;
 }
 
@@ -20,7 +22,7 @@ export function isValidIngestSecret(secret: string | null | undefined): boolean 
 // misconfigured second-airport connector, or a broker/topic pointed at the
 // wrong place, would otherwise be silently ingested with no rejection. See
 // docs/audit/tasks/007-*.md.
-const EXPECTED_AIRPORT_ID = process.env.AEROSWARM_AIRPORT_ID || "";
+const EXPECTED_AIRPORT_ID: string = process.env.AEROSWARM_AIRPORT_ID || "";
 if (!EXPECTED_AIRPORT_ID) {
   logger.warn(
     "AEROSWARM_AIRPORT_ID is not set — ingest will accept events for ANY airportId with no validation. Set it to this deployment's ICAO code (e.g. WARR).",
@@ -28,7 +30,7 @@ if (!EXPECTED_AIRPORT_ID) {
 }
 
 export class AirportMismatchError extends Error {
-  constructor(public readonly gotAirportId: string | undefined) {
+  constructor(gotAirportId: string | undefined) {
     super(
       `event airportId "${gotAirportId ?? ""}" does not match this deployment's AEROSWARM_AIRPORT_ID "${EXPECTED_AIRPORT_ID}"`,
     );

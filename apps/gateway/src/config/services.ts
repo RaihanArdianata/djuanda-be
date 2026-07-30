@@ -7,4 +7,5 @@ export const services: Record<string, string> = {
   SSE_SERVICE: env.SSE_SERVICE_URL,
   ALERT_SERVICE: env.ALERT_SERVICE_URL,
   USER_SERVICE: env.USER_SERVICE_URL,
+  WEATHER_SERVICE: env.WEATHER_SERVICE_URL,
 };

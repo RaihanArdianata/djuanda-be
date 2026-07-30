@@ -6,6 +6,7 @@ import notifications from "./notifications";
 import rbac from "./rbac";
 import sse from "./sse";
 import users from "./users";
+import weather from "./weather";
 import ws from "./ws";
 
 const app = new Hono()
@@ -17,6 +18,7 @@ const app = new Hono()
   .route("/ws", ws)
   .route("/sse", sse)
   .route("/alert", alert)
-  .route("/users", users);
+  .route("/users", users)
+  .route("/weather", weather);
 
 export default app;

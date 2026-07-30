@@ -110,6 +110,23 @@
         "zod": "^4.4.3",
       },
     },
+    "apps/weather-service": {
+      "name": "@repo/weather-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@asteasolutions/zod-to-openapi": "^8.5.0",
+        "@hono/swagger-ui": "^0.6.1",
+        "@repo/auth-service": "workspace:*",
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "@repo/validation": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
+        "node-cron": "^4.6.0",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/worker-service": {
       "name": "@repo/worker-service",
       "version": "0.0.0",
@@ -353,6 +370,8 @@
 
     "@repo/validation": ["@repo/validation@workspace:packages/validation"],
 
+    "@repo/weather-service": ["@repo/weather-service@workspace:apps/weather-service"],
+
     "@repo/worker-service": ["@repo/worker-service@workspace:apps/worker-service"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.0.0-beta.4", "", {}, "sha512-d3IxtzLo7P1oZ8s8YNvxzBUXRXojSut8pbPrTYtzsc5sn4+53jVqbk66pQerSZbZSJZQux6LkclB/+8IDordHg=="],
@@ -470,6 +489,8 @@
     "multipasta": ["multipasta@0.2.8", "", {}, "sha512-ZPWuMKyv0cSO29f7hozp+k6+crZbQijV8ipMvxNxRf2SwtYGTX1ZX89Kd20VV4H9Znonx+EQn+iy1wGQsJ+b+Q=="],
 
     "node-abort-controller": ["node-abort-controller@3.1.1", "", {}, "sha512-AGK2yQKIjRuqnc6VkX2Xj5d+QW8xZ87pa1UK6yA6ouUyuxfHuMP6umE5QK7UmTeOAymo+Zx1Fxiuw9rVx8taHQ=="],
+
+    "node-cron": ["node-cron@4.6.0", "", {}, "sha512-Si/bzYiKRHOB8/a99T2+SDGN582ONDMSTlJr5oCkT6GtnqPjZ2s10eoQRYkW9ZHwjVxONL+W8Fb+qR0AHMQsdg=="],
 
     "node-gyp-build-optional-packages": ["node-gyp-build-optional-packages@5.2.2", "", { "dependencies": { "detect-libc": "^2.0.1" }, "bin": { "node-gyp-build-optional-packages": "bin.js", "node-gyp-build-optional-packages-optional": "optional.js", "node-gyp-build-optional-packages-test": "build-test.js" } }, "sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw=="],
 

@@ -17,7 +17,6 @@ import {
   createUser,
   createUserSession,
   getUser,
-  getUserSession,
   revokeAllUserSessions,
   revokeRefreshToken,
   rotateRefreshToken,

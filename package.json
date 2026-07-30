@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "turbo run dev",
     "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
     "db:generate": "bun --env-file=../../.env run --cwd packages/database db:generate",
     "db:migrate": "bun --env-file=../../.env run --cwd packages/database db:migrate",
     "seed": "bun --env-file=../../.env run --cwd packages/database seed"

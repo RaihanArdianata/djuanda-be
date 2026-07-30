@@ -1,0 +1,23 @@
+{
+  "name": "@repo/weather-service",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun --env-file=../../.env run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@hono/swagger-ui": "^0.6.1",
+    "@repo/auth-service": "workspace:*",
+    "@repo/database": "workspace:*",
+    "@repo/logger": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "@repo/validation": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.27",
+    "node-cron": "^4.6.0",
+    "zod": "^4.4.3"
+  }
+}

@@ -28,7 +28,10 @@ const asReplaySocket = (
 
 const server = Bun.serve<SocketData>({
   port,
-  fetch(req, srv) {
+  fetch(
+    req: Request,
+    srv: Bun.Server<SocketData>,
+  ): Response | Promise<Response> | undefined {
     const url = new URL(req.url);
     if (url.pathname === "/aero/replay") {
       const token = url.searchParams.get("token");
@@ -55,16 +58,19 @@ const server = Bun.serve<SocketData>({
     return app.fetch(req);
   },
   websocket: {
-    open(ws) {
+    open(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.open(asReplaySocket(ws));
     },
-    message(ws, raw) {
+    message(
+      ws: ServerWebSocket<SocketData>,
+      raw: string | Buffer<ArrayBuffer>,
+    ): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.message(asReplaySocket(ws), raw);
       else handleIngestSocketMessage(raw, ws);
     },
-    close(ws) {
+    close(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.close(asReplaySocket(ws));
     },

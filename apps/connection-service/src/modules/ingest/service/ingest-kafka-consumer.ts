@@ -1,5 +1,5 @@
 import { logger } from "@repo/logger";
-import { type Consumer, Kafka } from "kafkajs";
+import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import {
   AirportMismatchError,
   assertExpectedAirport,
@@ -110,7 +110,7 @@ export async function startIngestKafkaConsumer(): Promise<void> {
   await consumer.connect();
   await consumer.subscribe({ topic, fromBeginning: false });
   await consumer.run({
-    eachMessage: async ({ message }) => {
+    eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
       parseMessageValue(message.value);
     },
   });

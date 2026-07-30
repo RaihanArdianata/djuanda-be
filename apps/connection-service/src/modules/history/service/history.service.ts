@@ -15,7 +15,7 @@ import { logger } from "@repo/logger";
 // every token to AIRPORT_ID and filtering every query by it (below) closes
 // that gap as defense-in-depth even though today's topology is single-
 // tenant — see aeroswarm-project/docs/audit/tasks/006-*.md.
-const AIRPORT_ID = process.env.AEROSWARM_AIRPORT_ID || "";
+const AIRPORT_ID: string = process.env.AEROSWARM_AIRPORT_ID || "";
 if (!AIRPORT_ID) {
   logger.warn(
     "AEROSWARM_AIRPORT_ID is not set — monitor tokens will validate but /aero/* history/replay queries will be UNSCOPED (any valid token sees every row in this DB). Set it to this deployment's ICAO code (e.g. WARR).",
@@ -55,7 +55,7 @@ export const replayCheckpoints = createInMemoryCheckpointStore();
 export const replayServer = createReplayServer({
   store: replayStore,
   checkpoints: replayCheckpoints,
-  validateToken: async (token) =>
+  validateToken: async (token: string) =>
     isValidMonitorToken(token) ? { airportId: AIRPORT_ID || undefined } : null,
 });
 

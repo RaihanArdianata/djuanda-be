@@ -12,6 +12,7 @@ interface SendableSocket {
   send(data: string): void;
 }
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: needed for the various event types and error handling
 export function handleIngestSocketMessage(
   raw: string | Buffer,
   socket: SendableSocket,

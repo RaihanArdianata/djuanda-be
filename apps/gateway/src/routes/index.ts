@@ -7,6 +7,7 @@ import rbac from "./rbac";
 import sse from "./sse";
 import users from "./users";
 import ws from "./ws";
+import weather from "./weather";
 
 const app = new Hono()
   .route("/auth", auth)
@@ -17,6 +18,7 @@ const app = new Hono()
   .route("/ws", ws)
   .route("/sse", sse)
   .route("/alert", alert)
-  .route("/users", users);
+  .route("/users", users)
+  .route("/weather", weather);
 
 export default app;

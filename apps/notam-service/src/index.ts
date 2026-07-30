@@ -6,7 +6,6 @@ const port: string | number = process.env.NOTAM_ASHTAM_SERVICE_PORT || 3007;
 const server = Bun.serve({
   port,
   fetch: app.fetch,
-  hostname: "0.0.0.0",
 });
 
 logger.info(`notam-service listening on http://localhost:${port}`);

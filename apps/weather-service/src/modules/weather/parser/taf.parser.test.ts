@@ -109,10 +109,9 @@ describe("parseTaf", () => {
   });
 
   it("extracts the real visibility group instead of the segment's own ddHH/ddHH validity range (regression)", () => {
-    const result = parseTaf(
-      "TAF WARR 070500Z 0706/0812 09008KT 9000 SCT018",
-      [{ timeFrom: 1, timeTo: 2 }],
-    );
+    const result = parseTaf("TAF WARR 070500Z 0706/0812 09008KT 9000 SCT018", [
+      { timeFrom: 1, timeTo: 2 },
+    ]);
 
     // Before the fix, VISIBILITY_RE matched "0706" out of the leading
     // "0706/0812" validity range instead of the real "9000" visibility group.

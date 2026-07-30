@@ -25,7 +25,9 @@ describe("parseMetar", () => {
   });
 
   it("parses variable wind direction (VRB)", () => {
-    const result = parseMetar("METAR WARR 070500Z VRB03KT 9000 NCD 29/23 Q1008=");
+    const result = parseMetar(
+      "METAR WARR 070500Z VRB03KT 9000 NCD 29/23 Q1008=",
+    );
 
     expect(result.windDirectionVariable).toBe(true);
     expect(result.windDirection).toBeNull();

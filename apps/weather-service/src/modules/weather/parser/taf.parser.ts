@@ -21,7 +21,7 @@ interface RawTafSegment {
 
 const markerToChangeType = (
   marker: string,
-): { changeType: string; probability: number | null; } => {
+): { changeType: string; probability: number | null } => {
   if (marker === "BECMG" || marker === "TEMPO") {
     return { changeType: marker, probability: null };
   }
@@ -110,7 +110,7 @@ const toIsoString = (epochSeconds: number): string =>
 
 export const parseTaf = (
   rawTaf: string,
-  fcsts: { timeFrom: number; timeTo: number; }[],
+  fcsts: { timeFrom: number; timeTo: number }[],
 ): TafParsedData => {
   const segments = splitTafSegments(rawTaf);
 
@@ -119,16 +119,16 @@ export const parseTaf = (
     const parsed = segment
       ? parseSegment(segment)
       : {
-        changeType: null,
-        probability: null,
-        windDirection: null,
-        windDirectionVariable: false,
-        windSpeedKt: null,
-        gustKt: null,
-        visibilityM: null,
-        weather: [],
-        clouds: [],
-      };
+          changeType: null,
+          probability: null,
+          windDirection: null,
+          windDirectionVariable: false,
+          windSpeedKt: null,
+          gustKt: null,
+          visibilityM: null,
+          weather: [],
+          clouds: [],
+        };
 
     return {
       ...parsed,

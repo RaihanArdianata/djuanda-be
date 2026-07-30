@@ -12,6 +12,7 @@ mock.module("./weather.service", () => ({ saveObservation, saveForecast }));
 // Imported dynamically, after the mocks above are registered, so the poller
 // picks up the mocked provider + persistence layer instead of the real ones
 // (no network call, no DB required to exercise the polling logic itself).
+// biome-ignore lint/nursery/useExplicitType: destructured from a dynamic import, already fully typed by ./weather-poller
 const { pollMetar, pollTaf } = await import("./weather-poller");
 
 const metarItem = {
@@ -37,6 +38,7 @@ const tafItem = {
   issueTime: "2026-07-08T05:00:00Z",
   validTimeFrom: 1_800_000_000,
   validTimeTo: 1_800_010_000,
+  // biome-ignore lint/style/useNamingConvention: mirrors TafProviderItem's rawTAF field, named after the provider's API response
   rawTAF: "TAF WARR 080500Z 0806/0818 09008KT 9000 SCT018",
   fcsts: [{ timeFrom: 1_800_000_000, timeTo: 1_800_010_000 }],
 };
@@ -55,16 +57,12 @@ describe("pollMetar", () => {
     await pollMetar();
 
     expect(saveObservation).toHaveBeenCalledTimes(1);
-    const [saved] = saveObservation.mock.calls[0] as [
-      Record<string, unknown>,
-    ];
+    const [saved] = saveObservation.mock.calls[0] as [Record<string, unknown>];
     expect(saved.station).toBe("WARR");
     expect(saved.kind).toBe("METAR");
     expect(saved.raw).toBe(metarItem.rawOb);
     expect(saved.source).toBe("aviationweather");
-    expect((saved.parsed as { windDirection: number }).windDirection).toBe(
-      90,
-    );
+    expect((saved.parsed as { windDirection: number }).windDirection).toBe(90);
   });
 
   it("does not save anything when the provider fails gracefully (returns null)", async () => {

@@ -12,6 +12,7 @@ const envSchema = z.object({
   SSE_SERVICE_URL: z.url().default("http://localhost:3003/sse"),
   ALERT_SERVICE_URL: z.url().default("http://localhost:3005"),
   USER_SERVICE_URL: z.url().default("http://localhost:3002"),
+  NOTAM_SERVICE_URL: z.url().default("http://localhost:3007"),
 });
 
 export const env = envSchema.parse(process.env);

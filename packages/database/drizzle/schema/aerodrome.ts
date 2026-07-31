@@ -1,14 +1,14 @@
 import { relations } from "drizzle-orm";
 import {
-  pgTable,
-  pgEnum,
-  uuid,
-  varchar,
-  jsonb,
-  timestamp,
-  integer,
   boolean,
   index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  timestamp,
+  uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { createSelectSchema } from "drizzle-zod";
 import type z from "zod";

@@ -1,9 +1,3 @@
-import { eq, sql, type SQL } from "drizzle-orm";
-import type {
-  CreateFeatureInput,
-  ListFeatureQueryInput,
-  UpdateFeatureInput,
-} from "../validator/feature.validator";
 import {
   type AerodromeFeature,
   aerodromeFeatures,
@@ -11,7 +5,13 @@ import {
   db,
 } from "@repo/database";
 import { ApiError } from "@repo/shared";
+import { eq, type SQL, sql } from "drizzle-orm";
 import z from "zod";
+import type {
+  CreateFeatureInput,
+  ListFeatureQueryInput,
+  UpdateFeatureInput,
+} from "../validator/feature.validator";
 
 export const listFeatureResultSchema = z.object({
   items: z.array(aerodromeFeaturesSelectSchema),

@@ -1,5 +1,5 @@
 import kinks from "@turf/kinks";
-import type { Feature, Geometry, Polygon, MultiPolygon } from "geojson";
+import type { Feature, Geometry, MultiPolygon, Polygon } from "geojson";
 
 export interface ValidationResult {
   valid: boolean;

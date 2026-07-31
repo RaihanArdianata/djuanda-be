@@ -1,16 +1,16 @@
 import { catchAsync, success } from "@repo/shared";
+import {
+  createFeature,
+  deleteFeature,
+  getFeatureById,
+  listFeatures,
+  updateFeature,
+} from "../service/feature.service";
 import type {
   CreateFeatureInput,
   ListFeatureQueryInput,
   UpdateFeatureInput,
 } from "../validator/feature.validator";
-import {
-  listFeatures,
-  getFeatureById,
-  createFeature,
-  updateFeature,
-  deleteFeature,
-} from "../service/feature.service";
 
 export const getFeatures = catchAsync(async (c) => {
   const parsedData = (await c.get("parsedData")) as ListFeatureQueryInput;

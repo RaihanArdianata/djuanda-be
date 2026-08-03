@@ -2,7 +2,7 @@ import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import { app } from "./app";
 
-const port: string | number = process.env.AERODROME_SERVICE || 3009;
+const port: string | number = process.env.AERODROME_SERVICE_PORT || 3009;
 
 const server = Bun.serve({
   port,

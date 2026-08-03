@@ -273,6 +273,27 @@ services:
       retries: 5
       start_period: 10s
 
+  # Aerodrome mapping data (layers/features/import/export, GeoJSON) — only
+  aerodrome-service:
+    build:
+      context: .
+      args:
+        APP_DIR: aerodrome-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      AERODROME_SERVICE_PORT: ${AERODROME_SERVICE_PORT:-3009}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3009/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   gateway:
     build:
       context: .
@@ -292,12 +313,15 @@ services:
       WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
+      AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
     ports:
       - "8080:8080"
     depends_on:
       auth-service:
         condition: service_healthy
       notification-service:
+        condition: service_healthy
+      aerodrome-service:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]

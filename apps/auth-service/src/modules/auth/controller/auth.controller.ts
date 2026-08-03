@@ -130,7 +130,10 @@ export const login = catchAsync(async (c) => {
         email: findUser.email,
         name: findUser.name,
       },
-      role: findUser.role?.name || "",
+      role: {
+        id: findUser.role?.id || null,
+        name: findUser.role?.name || "",
+      },
       permissions: findUser.permissions || [],
     },
     { message: "Login successful" },

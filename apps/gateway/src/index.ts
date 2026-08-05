@@ -5,6 +5,7 @@ import { env } from "./config/env";
 const server = Bun.serve({
   port: env.PORT,
   fetch: app.fetch,
+  idleTimeout: 0,
 });
 
 logger.info(`gateway listening on http://localhost:${env.PORT}`);

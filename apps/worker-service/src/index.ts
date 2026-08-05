@@ -8,6 +8,7 @@ const server = Bun.serve({
   port,
   fetch: app.fetch,
   websocket,
+  idleTimeout: 0,
 });
 
 logger.info(`worker-service listening on http://localhost:${port}`);

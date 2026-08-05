@@ -5,14 +5,16 @@ import { logger } from "hono/logger";
 import health from "./routes/health";
 import { sseHandler } from "./sse";
 import { wsHandler } from "./websocket";
+import { corsMiddleware } from "@repo/gateway/src/middleware/cors";
 
 const app = new Hono()
   .use(logger())
   .use(metricsMiddleware)
+  .use(corsMiddleware)
   .get("/metrics", metricsHandler)
   .route("/health", health)
   .get("/ws/:topic", wsHandler)
-  .get("/sse/:topic", sseHandler);
+  .get("/events/:topic", sseHandler);
 
 export { app, websocket };
 export default app;

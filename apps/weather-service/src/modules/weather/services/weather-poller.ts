@@ -6,6 +6,8 @@ import { parseTaf } from "../parser/taf.parser";
 import { fetchLatestMetar } from "../provider/metar.provider";
 import { fetchLatestTaf } from "../provider/taf.provider";
 import { saveForecast, saveObservation } from "./weather.service";
+import { publishToTopic } from "@repo/worker-service/src/sse/service";
+import { isForecastStale, isObservationStale } from "../lib/staleness";
 
 // Converts an interval in ms into a wall-clock cron expression, e.g.
 // 1_800_000 (30 min) -> "*/30 * * * *", 3_600_000 (60 min) -> "0 * * * *".
@@ -76,6 +78,13 @@ export const pollMetar = async (): Promise<void> => {
       },
       "metar polling finished",
     );
+
+    await publishToTopic("weather.updated", {
+      station: item.icaoId,
+      kind: item.metarType,
+      observedAt: new Date(item.obsTime * 1000).toISOString(),
+      stale: isObservationStale(new Date(item.obsTime * 1000)),
+    });
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },
@@ -123,6 +132,13 @@ export const pollTaf = async (): Promise<void> => {
       },
       "taf polling finished",
     );
+
+    await publishToTopic("weather.forecast.updated", {
+      station: item.icaoId,
+      validFrom: new Date(item.validTimeFrom * 1000).toISOString(),
+      validTo: new Date(item.validTimeTo * 1000).toISOString(),
+      stale: isForecastStale(new Date(item.validTimeTo * 1000)),
+    });
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import aerodrome from "./aerodrome";
 import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
@@ -21,6 +22,7 @@ const app = new Hono()
   .route("/alert", alert)
   .route("/users", users)
   .route("/notam", notam)
-  .route("/weather", weather);
+  .route("/weather", weather)
+  .route("/aerodrome", aerodrome);
 
 export default app;

@@ -14,6 +14,7 @@ const envSchema = z.object({
   USER_SERVICE_URL: z.url().default("http://localhost:3002"),
   NOTAM_SERVICE_URL: z.url().default("http://localhost:3007"),
   WEATHER_SERVICE_URL: z.url().default("http://localhost:3008"),
+  AERODROME_SERVICE_URL: z.url().default("http://localhost:3009"),
 });
 
 export const env = envSchema.parse(process.env);

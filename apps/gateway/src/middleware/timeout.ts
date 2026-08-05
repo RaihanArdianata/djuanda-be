@@ -1,7 +1,7 @@
+import { logger } from "@repo/logger";
+import type { Context, Next } from "hono";
 import { timeout } from "hono/timeout";
 import { DEFAULT_TIMEOUT_MS } from "../config/constants";
-import type { Context, Next } from "hono";
-import { logger } from "@repo/logger";
 
 export const requestTimeout = async (
   c: Context,

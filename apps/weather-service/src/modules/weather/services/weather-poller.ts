@@ -1,13 +1,13 @@
 import { logger } from "@repo/logger";
+import { publishToTopic } from "@repo/worker-service/src/sse/service";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
+import { isForecastStale, isObservationStale } from "../lib/staleness";
 import { parseMetar } from "../parser/metar.parser";
 import { parseTaf } from "../parser/taf.parser";
 import { fetchLatestMetar } from "../provider/metar.provider";
 import { fetchLatestTaf } from "../provider/taf.provider";
 import { saveForecast, saveObservation } from "./weather.service";
-import { publishToTopic } from "@repo/worker-service/src/sse/service";
-import { isForecastStale, isObservationStale } from "../lib/staleness";
 
 // Converts an interval in ms into a wall-clock cron expression, e.g.
 // 1_800_000 (30 min) -> "*/30 * * * *", 3_600_000 (60 min) -> "0 * * * *".

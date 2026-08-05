@@ -1,5 +1,5 @@
-import { logger } from "@repo/logger";
 import { redisConfig } from "@repo/config";
+import { logger } from "@repo/logger";
 import Redis from "ioredis";
 
 export const publisher = new Redis({

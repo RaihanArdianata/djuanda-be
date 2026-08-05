@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@repo/database": "workspace:*",
+    "@repo/gateway": "workspace:*",
     "@repo/shared": "workspace:*",
     "@repo/config": "workspace:*",
     "@repo/logger": "workspace:*",

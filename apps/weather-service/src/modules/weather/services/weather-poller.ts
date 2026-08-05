@@ -1,6 +1,8 @@
 import { logger } from "@repo/logger";
+import { publishToTopic } from "@repo/worker-service/src/sse/service";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
+import { isForecastStale, isObservationStale } from "../lib/staleness";
 import { parseMetar } from "../parser/metar.parser";
 import { parseTaf } from "../parser/taf.parser";
 import { fetchLatestMetar } from "../provider/metar.provider";
@@ -76,6 +78,13 @@ export const pollMetar = async (): Promise<void> => {
       },
       "metar polling finished",
     );
+
+    await publishToTopic("weather.updated", {
+      station: item.icaoId,
+      kind: item.metarType,
+      observedAt: new Date(item.obsTime * 1000).toISOString(),
+      stale: isObservationStale(new Date(item.obsTime * 1000)),
+    });
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },
@@ -123,6 +132,13 @@ export const pollTaf = async (): Promise<void> => {
       },
       "taf polling finished",
     );
+
+    await publishToTopic("weather.forecast.updated", {
+      station: item.icaoId,
+      validFrom: new Date(item.validTimeFrom * 1000).toISOString(),
+      validTo: new Date(item.validTimeTo * 1000).toISOString(),
+      stale: isForecastStale(new Date(item.validTimeTo * 1000)),
+    });
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },

@@ -1,20 +1,8 @@
-import { EventEmitter } from "node:events";
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
+import { subscribeToTopic } from "./service";
 
-class EventBus extends EventEmitter {
-  publish(topic: string, data: unknown): void {
-    this.emit(topic, data);
-  }
-
-  subscribe(topic: string, listener: (data: unknown) => void): () => void {
-    this.on(topic, listener);
-    return (): this => this.off(topic, listener);
-  }
-}
-
-export const eventBus = new EventBus();
-eventBus.setMaxListeners(0); // Remove the limit on the number of listeners
+const HEARTBEAT_INTERVAL_MS = 15_000;
 
 export const sseHandler = (c: Context): Response => {
   const topic = c.req.param("topic");
@@ -23,33 +11,38 @@ export const sseHandler = (c: Context): Response => {
   }
 
   return streamSSE(c, async (stream) => {
+    let eventId = 0;
     let closed = false;
 
-    const unsubscribe = eventBus.subscribe(topic, async (data) => {
+    const unsubscribe = subscribeToTopic(topic, async (message) => {
       if (closed) return;
-
+      eventId += 1;
       await stream.writeSSE({
-        data: JSON.stringify(data),
-        event: topic,
-        id: String(Date.now()),
+        id: String(eventId),
+        event: "message",
+        data: message,
       });
     });
 
-    stream.onAbort(() => {
-      closed = true;
-      unsubscribe();
+    const heartbeat = setInterval(() => {
+      if (closed) return;
+      stream.writeSSE({ event: "heartbeat", data: "ping" }).catch(() => {});
+    }, HEARTBEAT_INTERVAL_MS);
+
+    const aborted = new Promise<void>((resolve) => {
+      stream.onAbort(async () => {
+        closed = true;
+        clearInterval(heartbeat);
+        await unsubscribe();
+        resolve();
+      });
     });
 
-    while (!closed) {
-      await stream.sleep(15000); // Keep the connection alive
-      if (closed) break;
-      await stream.writeSSE({ event: "ping", data: "keep-alive" });
-    }
+    await stream.writeSSE({
+      event: "connected",
+      data: JSON.stringify({ topic }),
+    });
+
+    await aborted;
   });
 };
-
-((): ReturnType<typeof setInterval> =>
-  setInterval(
-    () => eventBus.publish("current-time", { time: Date.now() }),
-    1000,
-  ))();

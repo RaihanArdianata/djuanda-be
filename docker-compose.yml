@@ -146,9 +146,14 @@ services:
     environment:
       NOTIFICATION_SERVICE_PORT: "3004"
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       pgbouncer:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3004/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -166,9 +171,14 @@ services:
     environment:
       USER_SERVICE_PORT: ${USER_SERVICE_PORT:-3002}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       pgbouncer:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -192,12 +202,17 @@ services:
       AEROSWARM_INGEST_KAFKA_BROKERS: redpanda:9092
       AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
       AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       redpanda-init:
         condition: service_completed_successfully
         # Soft: the http/websocket ingest paths don't need Kafka — a
         # Redpanda hiccup shouldn't take connection-service down with it.
         required: false
+      redis:
+        condition: service_healthy
     # Exposed directly (not via gateway): AeroSwarm's http connector POSTs
     # ingest here, and the AeroSwarm dashboard connects here for this
     # airport's replay/history (client-side federation). Host port follows
@@ -240,9 +255,14 @@ services:
     environment:
       ALERT_SERVICE_PORT: ${ALERT_SERVICE_PORT:-3005}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       pgbouncer:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -263,9 +283,14 @@ services:
     environment:
       WEATHER_SERVICE_PORT: ${WEATHER_SERVICE_PORT:-3008}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       pgbouncer:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3008/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -284,9 +309,14 @@ services:
     environment:
       AERODROME_SERVICE_PORT: ${AERODROME_SERVICE_PORT:-3009}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       pgbouncer:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bun", "-e", "fetch('http://localhost:3009/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s

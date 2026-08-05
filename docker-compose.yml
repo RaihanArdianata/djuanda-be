@@ -340,6 +340,15 @@ services:
       retries: 5
       start_period: 10s
 
+  notam-service:
+    build:
+      context: .
+      args:
+        APP_DIR: notam-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NOTAM_SERVICE_PORT: ${NOTAM_SERVICE_PORT:-3007}
   # Aerodrome mapping data (layers/features/import/export, GeoJSON) — only
   aerodrome-service:
     build:
@@ -389,6 +398,7 @@ services:
       USER_SERVICE_URL: http://user-service:${USER_SERVICE_PORT:-3002}
       ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3005}
       WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
+      NOTAM_SERVICE_URL: http://notam-service:${NOTAM_SERVICE_PORT:-3007}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}

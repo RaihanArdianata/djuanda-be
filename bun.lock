@@ -105,6 +105,16 @@
         "zod": "^4.4.3",
       },
     },
+    "apps/notam-service": {
+      "name": "@repo/notam-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@hono/swagger-ui": "^0.6.1",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "hono": "^4.12.27",
+      },
+    },
     "apps/notification-service": {
       "name": "@repo/notification-service",
       "version": "0.0.0",
@@ -391,6 +401,8 @@
     "@repo/gateway": ["@repo/gateway@workspace:apps/gateway"],
 
     "@repo/logger": ["@repo/logger@workspace:packages/logger"],
+
+    "@repo/notam-service": ["@repo/notam-service@workspace:apps/notam-service"],
 
     "@repo/notification-service": ["@repo/notification-service@workspace:apps/notification-service"],
 

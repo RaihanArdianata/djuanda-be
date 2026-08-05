@@ -3,6 +3,7 @@ import aerodrome from "./aerodrome";
 import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
+import notam from "./notam";
 import notifications from "./notifications";
 import rbac from "./rbac";
 import sse from "./sse";
@@ -20,6 +21,7 @@ const app = new Hono()
   .route("/events", sse)
   .route("/alert", alert)
   .route("/users", users)
+  .route("/notam", notam)
   .route("/weather", weather)
   .route("/aerodrome", aerodrome);
 

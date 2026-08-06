@@ -59,7 +59,7 @@ const upstreamErrorResponse = (
 
 registry.registerPath({
   method: "get",
-  path: "/notam",
+  path: "/advisory/notam",
   tags: ["NOTAM"],
   summary: "Ambil data NOTAM (proxy ke NAVSIM notam-histories, size=2000)",
   description:
@@ -85,7 +85,7 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
-  path: "/ashtam",
+  path: "/advisory/ashtam",
   tags: ["ASHTAM"],
   summary:
     "Ambil data ASHTAM (proxy ke NAVSIM ashtam-histories, size default 2000)",

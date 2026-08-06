@@ -12,6 +12,7 @@
     "@repo/logger": "workspace:*",
     "@repo/shared": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "hono": "^4.12.27"
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
   }
 }

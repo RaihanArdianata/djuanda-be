@@ -1,4 +1,4 @@
-import { fetchNotamHistories } from "../client/navsim.client";
+import { fetchNotamHistories } from "../../client/navsim.client";
 
 const NOTAM_HISTORY_SIZE = 2000;
 

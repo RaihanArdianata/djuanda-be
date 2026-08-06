@@ -1,10 +1,7 @@
-import { logger } from "@repo/logger";
-import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
-import { NavsimUpstreamError } from "../../client/navsim.client";
 import { getAshtamHistories } from "../service/ashtam.service";
-
+import { success, ApiError, catchAsync } from "@repo/shared";
 function toContentfulStatus(status: number): ContentfulStatusCode {
   const isContentBearing =
     Number.isInteger(status) &&
@@ -27,47 +24,23 @@ const querySchema = z.object({
   size: z.coerce.number().int().positive().max(5000).optional(),
 });
 
-export const list = async (c: Context): Promise<Response> => {
-  const parsedQuery = querySchema.safeParse(c.req.query());
+export const list = catchAsync(async (c) => {
+  const parsed = querySchema.safeParse(c.req.query());
 
-  if (!parsedQuery.success) {
-    return c.json(
-      {
-        error: "Invalid query parameters",
-        message: parsedQuery.error.issues.map((i) => i.message).join(", "),
-      },
-      400,
-    );
+  if (!parsed.success) {
+    throw new ApiError("BAD_REQUEST", {
+      message: parsed.error.issues.map((i) => i.message).join(", "),
+    });
   }
 
-  const { size, "startDateTime.lessThan": startDateTimeLessThan } =
-    parsedQuery.data;
+  const { size, "startDateTime.lessThan": startDateTimeLessThan } = parsed.data;
 
-  try {
-    const data = await getAshtamHistories({ size, startDateTimeLessThan });
-    return c.json(data as object, 200);
-  } catch (err) {
-    if (err instanceof NavsimUpstreamError) {
-      logger.error(
-        { err, status: err.status, upstreamBody: err.upstreamBody },
-        "ashtam-service: NAVSIM request failed",
-      );
-      return c.json(
-        {
-          error: "Failed to fetch ASHTAM data from NAVSIM",
-          message: err.message,
-        },
-        toContentfulStatus(err.status),
-      );
-    }
+  const data = await getAshtamHistories({
+    size,
+    startDateTimeLessThan,
+  });
 
-    logger.error(
-      { err },
-      "ashtam-service: unexpected error fetching ASHTAM data",
-    );
-    return c.json(
-      { error: "Unexpected error while fetching ASHTAM data" },
-      500,
-    );
-  }
-};
+  return success(c, data, {
+    message: "Successfully retrieved ASHTAM histories",
+  });
+});

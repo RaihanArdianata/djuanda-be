@@ -12,7 +12,7 @@ const envSchema = z.object({
   SSE_SERVICE_URL: z.url().default("http://localhost:3003/events"),
   ALERT_SERVICE_URL: z.url().default("http://localhost:3005"),
   USER_SERVICE_URL: z.url().default("http://localhost:3002"),
-  ADVISORY__SERVICE_URL: z.url().default("http://localhost:3007"),
+  ADVISORY_SERVICE_URL: z.url().default("http://localhost:3007"),
   WEATHER_SERVICE_URL: z.url().default("http://localhost:3008"),
   AERODROME_SERVICE_URL: z.url().default("http://localhost:3009"),
 });

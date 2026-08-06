@@ -348,7 +348,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      ADVISORY__SERVICE_PORT: ${ADVISORY__SERVICE_PORT:-3007}
+      ADVISORY_SERVICE_PORT: ${ADVISORY_SERVICE_PORT:-3007}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       REDIS_PORT: "6379"
     healthcheck:
@@ -413,7 +413,7 @@ services:
       USER_SERVICE_URL: http://user-service:${USER_SERVICE_PORT:-3002}
       ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3005}
       WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
-      ADVISORY_SERVICE_URL: http://notam-service:${ADVISORY__SERVICE_PORT:-3007}
+      ADVISORY_SERVICE_URL: http://advisory-service:${ADVISORY_SERVICE_PORT:-3007}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import advisory from "./advisory";
 import aerodrome from "./aerodrome";
 import alert from "./alert";
 import auth from "./auth";
@@ -9,7 +10,6 @@ import sse from "./sse";
 import users from "./users";
 import weather from "./weather";
 import ws from "./ws";
-import advisory from "./advisory";
 
 const app = new Hono()
   .route("/auth", auth)

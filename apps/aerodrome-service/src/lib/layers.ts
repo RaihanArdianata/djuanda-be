@@ -43,6 +43,10 @@ const LAYER_RULES: LayerRule[] = [
     match: (p: Record<string, unknown>) => p.tourism !== undefined,
     layer: "POINT_OF_INTEREST",
   },
+  {
+    match: (p: Record<string, unknown>) => p.aeroway === "aerodrome",
+    layer: "AERODROME",
+  },
 ];
 
 /**

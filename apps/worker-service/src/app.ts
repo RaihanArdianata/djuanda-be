@@ -1,3 +1,4 @@
+import { corsMiddleware } from "@repo/gateway/src/middleware/cors";
 import { metricsHandler, metricsMiddleware } from "@repo/shared";
 import { Hono } from "hono";
 import { websocket } from "hono/bun";
@@ -9,10 +10,11 @@ import { wsHandler } from "./websocket";
 const app = new Hono()
   .use(logger())
   .use(metricsMiddleware)
+  .use(corsMiddleware)
   .get("/metrics", metricsHandler)
   .route("/health", health)
   .get("/ws/:topic", wsHandler)
-  .get("/sse/:topic", sseHandler);
+  .get("/events/:topic", sseHandler);
 
 export { app, websocket };
 export default app;

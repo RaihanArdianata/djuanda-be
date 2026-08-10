@@ -12,6 +12,18 @@
         "typescript": "^6.0.3",
       },
     },
+    "apps/advisory-service": {
+      "name": "@repo/notam-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@asteasolutions/zod-to-openapi": "^8.5.0",
+        "@hono/swagger-ui": "^0.6.1",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "hono": "^4.12.27",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/aerodrome-service": {
       "name": "@repo/aerodrome-service",
       "version": "0.0.0",
@@ -145,6 +157,7 @@
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
         "@repo/validation": "workspace:*",
+        "@repo/worker-service": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.12.27",
         "node-cron": "^4.6.0",
@@ -157,9 +170,11 @@
       "dependencies": {
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
+        "@repo/gateway": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
         "hono": "^4.12.27",
+        "ioredis": "^5.11.1",
       },
     },
     "packages/config": {
@@ -389,6 +404,8 @@
     "@repo/gateway": ["@repo/gateway@workspace:apps/gateway"],
 
     "@repo/logger": ["@repo/logger@workspace:packages/logger"],
+
+    "@repo/notam-service": ["@repo/notam-service@workspace:apps/advisory-service"],
 
     "@repo/notification-service": ["@repo/notification-service@workspace:apps/notification-service"],
 

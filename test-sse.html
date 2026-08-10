@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>test sse (server sent event)</title>
+  </head>
+  <body>
+    <div id="sse"></div>
+
+    <script>
+      const sse = new EventSource(
+        "https://asmgcs.midigi.id/api/worker/events/weather.updated",
+      );
+      const sseDiv = document.getElementById("sse");
+
+      sse.onopen = function () {
+        console.log("SSE connection opened");
+      };
+
+      sse.onclose = function () {
+        console.log("SSE connection closed");
+      };
+
+      sse.onmessage = function (event) {
+        console.log("SSE message:", event.data);
+        const p = document.createElement("p");
+        p.textContent = event.data;
+        sseDiv.appendChild(p);
+      };
+
+      sse.addEventListener("weather.updated", function (event) {
+        console.log("SSE weather.updated event:", event.data);
+        const p = document.createElement("p");
+        p.textContent = `Weather updated: ${event.data}`;
+        sseDiv.appendChild(p);
+      });
+
+      sse.onerror = function (error) {
+        console.error("SSE error:", error);
+        sse.close();
+      };
+    </script>
+  </body>
+</html>

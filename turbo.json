@@ -13,5 +13,6 @@
       "dependsOn": ["^typecheck"],
       "cache": false
     }
-  }
+  },
+  "concurrency": "11"
 }

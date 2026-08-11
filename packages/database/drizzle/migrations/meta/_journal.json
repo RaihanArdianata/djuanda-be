@@ -64,6 +64,20 @@
       "when": 1785905087722,
       "tag": "0008_nosy_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1786439081038,
+      "tag": "0009_classy_stryfe",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1786439100698,
+      "tag": "0010_nasty_captain_stacy",
+      "breakpoints": true
     }
   ]
 }

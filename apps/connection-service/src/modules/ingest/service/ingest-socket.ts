@@ -3,8 +3,10 @@ import {
   AirportMismatchError,
   assertExpectedAirport,
   enqueueAlertEvent,
+  enqueueMovementEvent,
   enqueueTrackEvent,
   isAlertEvent,
+  isMovementEvent,
   isTrackEvent,
 } from "./ingest.service";
 
@@ -21,7 +23,7 @@ export function handleIngestSocketMessage(
   try {
     parsed = JSON.parse(raw.toString());
   } catch {
-    return; // malformed frame — ignore, same policy as the replay socket
+    return;
   }
 
   const event =
@@ -29,7 +31,7 @@ export function handleIngestSocketMessage(
       ? (parsed as { event: unknown }).event
       : parsed;
 
-  if (isTrackEvent(event) || isAlertEvent(event)) {
+  if (isTrackEvent(event) || isAlertEvent(event) || isMovementEvent(event)) {
     try {
       assertExpectedAirport(event);
     } catch (err) {
@@ -59,6 +61,10 @@ export function handleIngestSocketMessage(
   }
   if (isAlertEvent(event)) {
     enqueueAlertEvent(event);
+    return;
+  }
+  if (isMovementEvent(event)) {
+    enqueueMovementEvent(event);
     return;
   }
   logger.warn(

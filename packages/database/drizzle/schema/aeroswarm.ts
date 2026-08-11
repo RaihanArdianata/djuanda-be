@@ -1,6 +1,9 @@
 import type { InferSelectModel } from "drizzle-orm";
 import {
+  boolean,
+  doublePrecision,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -8,17 +11,6 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
-// Filled by AeroSwarm's analytics connector (process-service → PostgresSink),
-// one row per fused track / alert event. AeroSwarm itself no longer stores
-// this data locally — see aeroswarm-project's storage-service (management
-// only) and services/process-service/src/modules/publishing/analytics-connector.ts.
-//
-// Converted to TimescaleDB hypertables + extra indexes in a follow-up
-// migration (drizzle-kit can't express create_hypertable()) — see
-// drizzle/migrations after running `db:generate`.
-//
-// icao24/callsign live under data->'identity' (nested, not a column) —
-// query them out via data->'identity'->>'icao24'.
 export const aeroswarmTracks = pgTable(
   "aeroswarm_tracks",
   {
@@ -26,6 +18,11 @@ export const aeroswarmTracks = pgTable(
     trackId: text("track_id").notNull(),
     airportId: text("airport_id"),
     lifecycle: text("lifecycle"),
+    targetType: text("target_type"),
+    vehicleFleet: integer("vehicle_fleet"),
+    altitudeFt: doublePrecision("altitude_ft"),
+    groundSpeedKt: doublePrecision("ground_speed_kt"),
+    onGround: boolean("on_ground"),
     data: jsonb("data").notNull(),
   },
   (t) => ({
@@ -33,11 +30,6 @@ export const aeroswarmTracks = pgTable(
       t.airportId,
       t.fusedAt,
     ),
-    // Must include the hypertable's partitioning column (fused_at) —
-    // TimescaleDB requires unique constraints on a hypertable to cover the
-    // time dimension. Backs .onConflictDoNothing() in ingest.service.ts so
-    // AeroSwarm's retry-on-lost-ack (see docs/audit task 004) can't produce
-    // duplicate rows for the same fused-track event.
     trackUnique: unique("aeroswarm_tracks_track_fused_unique").on(
       t.trackId,
       t.fusedAt,
@@ -62,11 +54,6 @@ export const aeroswarmAlerts = pgTable(
       t.triggeredAt,
     ),
     typeIdx: index("aeroswarm_alerts_type_idx").on(t.type, t.triggeredAt),
-    // (alert_id, triggered_at) rather than alert_id alone: TimescaleDB
-    // requires a hypertable's unique constraints to cover the partitioning
-    // column (triggered_at). Re-delivery of the same alert re-triggered at
-    // a later time is treated as a distinct row by design — only exact
-    // retries (same id + same triggeredAt) are deduped.
     alertUnique: unique("aeroswarm_alerts_alert_triggered_unique").on(
       t.alertId,
       t.triggeredAt,
@@ -74,5 +61,33 @@ export const aeroswarmAlerts = pgTable(
   }),
 );
 
+export const aeroswarmMovements = pgTable(
+  "aeroswarm_movements",
+  {
+    id: text("id"),
+    airportId: text("airport_id"),
+    trackId: text("track_id").notNull(),
+    icao24: text("icao24"),
+    callsign: text("callsign"),
+    type: text("type").notNull(),
+    lat: doublePrecision("lat"),
+    lon: doublePrecision("lon"),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    data: jsonb("data").notNull(),
+  },
+  (t) => ({
+    airportIdx: index("aeroswarm_movements_airport_idx").on(
+      t.airportId,
+      t.at,
+    ),
+    movementUnique: unique("aeroswarm_movements_track_type_at_unique").on(
+      t.trackId,
+      t.type,
+      t.at,
+    ),
+  }),
+);
+
 export type AeroswarmTrack = InferSelectModel<typeof aeroswarmTracks>;
 export type AeroswarmAlert = InferSelectModel<typeof aeroswarmAlerts>;
+export type AeroswarmMovement = InferSelectModel<typeof aeroswarmMovements>;

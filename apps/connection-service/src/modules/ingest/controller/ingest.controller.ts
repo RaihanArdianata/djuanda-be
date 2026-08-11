@@ -4,8 +4,10 @@ import {
   AirportMismatchError,
   assertExpectedAirport,
   enqueueAlertEvent,
+  enqueueMovementEvent,
   enqueueTrackEvent,
   isAlertEvent,
+  isMovementEvent,
   isTrackEvent,
   isValidIngestSecret,
 } from "../service/ingest.service";
@@ -28,17 +30,11 @@ export const ingest = catchAsync(async (c) => {
 
   const { event } = parsed.data;
 
-  if (isTrackEvent(event) || isAlertEvent(event)) {
+  if (isTrackEvent(event) || isAlertEvent(event) || isMovementEvent(event)) {
     try {
       assertExpectedAirport(event);
     } catch (err) {
       if (err instanceof AirportMismatchError) {
-        // 4xx, not 5xx: this is a permanent config mismatch (wrong
-        // connector, wrong topic), not a transient failure — the sender's
-        // WebhookSink only retries 5xx (see aeroswarm-project's
-        // packages/server/connectors/src/outputs/webhook), so a 4xx skips
-        // straight to its DLQ instead of wasting retries on something that
-        // will never succeed. Still non-2xx, so it's not silently accepted.
         throw new ApiError("VALIDATION_ERROR", { message: err.message });
       }
       throw err;
@@ -46,10 +42,6 @@ export const ingest = catchAsync(async (c) => {
   }
 
   if (isTrackEvent(event)) {
-    // Waits for this event's batch to actually land in Postgres before
-    // acking — a flush failure rejects here and propagates as a 5xx (see
-    // catchAsync), so the sender's retry/DLQ machinery sees it instead of
-    // believing a dropped row was delivered.
     await enqueueTrackEvent(event);
     return success(c, { kind: "track" }, { message: "Track event accepted" });
   }
@@ -59,8 +51,17 @@ export const ingest = catchAsync(async (c) => {
     return success(c, { kind: "alert" }, { message: "Alert event accepted" });
   }
 
+  if (isMovementEvent(event)) {
+    await enqueueMovementEvent(event);
+    return success(
+      c,
+      { kind: "movement" },
+      { message: "Movement event accepted" },
+    );
+  }
+
   throw new ApiError("VALIDATION_ERROR", {
     message:
-      "Unrecognized event shape — expected a FusedTrackEvent (trackId + fusedAt) or AlertEvent (alertId + triggeredAt)",
+      "Unrecognized event shape — expected a FusedTrackEvent (trackId + fusedAt), AlertEvent (alertId + triggeredAt), or MovementEvent (trackId + type + at)",
   });
 });

@@ -1,8 +1,14 @@
-import { aeroswarmAlerts, aeroswarmTracks, db } from "@repo/database";
+import {
+  aeroswarmAlerts,
+  aeroswarmMovements,
+  aeroswarmTracks,
+  db,
+} from "@repo/database";
 import { logger } from "@repo/logger";
 
 type TrackRow = typeof aeroswarmTracks.$inferInsert;
 type AlertRow = typeof aeroswarmAlerts.$inferInsert;
+type MovementRow = typeof aeroswarmMovements.$inferInsert;
 
 const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
@@ -14,14 +20,6 @@ export function isValidIngestSecret(
   return Boolean(INGEST_SECRET) && secret === INGEST_SECRET;
 }
 
-// Same deployment identity used to scope outbound history/replay queries
-// (see history.service.ts / docs/audit/tasks/006-*.md) — reused here so an
-// inbound event actually belongs to this airport before it's persisted.
-// The ingest secret/monitor tokens only prove "this sender is a legitimate
-// AeroSwarm instance", never "this specific event is ours" — a
-// misconfigured second-airport connector, or a broker/topic pointed at the
-// wrong place, would otherwise be silently ingested with no rejection. See
-// docs/audit/tasks/007-*.md.
 const EXPECTED_AIRPORT_ID: string = process.env.AEROSWARM_AIRPORT_ID || "";
 if (!EXPECTED_AIRPORT_ID) {
   logger.warn(
@@ -52,14 +50,9 @@ export function assertExpectedAirport(event: { airportId?: string }): void {
 
 const trackBuffer: TrackRow[] = [];
 const alertBuffer: AlertRow[] = [];
+const movementBuffer: MovementRow[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-// The batch currently accumulating in trackBuffer/alertBuffer shares one
-// promise, settled by flush() right before/after the DB write. Callers
-// (enqueueTrackEvent/enqueueAlertEvent) await it so the HTTP response isn't
-// sent until the event is actually durable — a flush failure rejects it,
-// which the controller turns into a 5xx so AeroSwarm's sender retries
-// instead of believing delivery already succeeded.
 interface Batch {
   promise: Promise<void>;
   resolve: () => void;
@@ -86,6 +79,20 @@ interface FusedTrackEventLike {
   airportId?: string;
   lifecycle?: string;
   fusedAt: number;
+  identity?: {
+    targetType?: string;
+    vehicleFleet?: number;
+    [key: string]: unknown;
+  };
+  position?: {
+    alt?: number;
+    onGround?: boolean;
+    [key: string]: unknown;
+  };
+  velocity?: {
+    groundSpeed?: number;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
@@ -99,6 +106,18 @@ interface AlertEventLike {
   [key: string]: unknown;
 }
 
+interface MovementEventLike {
+  trackId: string;
+  type: "takeoff" | "landing";
+  at: number;
+  airportId?: string;
+  icao24?: string;
+  callsign?: string;
+  lat: number;
+  lon: number;
+  [key: string]: unknown;
+}
+
 export function isTrackEvent(event: unknown): event is FusedTrackEventLike {
   const e = event as Record<string, unknown> | null;
   return typeof e?.trackId === "string" && typeof e?.fusedAt === "number";
@@ -109,12 +128,26 @@ export function isAlertEvent(event: unknown): event is AlertEventLike {
   return typeof e?.alertId === "string" && typeof e?.triggeredAt === "number";
 }
 
+export function isMovementEvent(event: unknown): event is MovementEventLike {
+  const e = event as Record<string, unknown> | null;
+  return (
+    typeof e?.trackId === "string" &&
+    (e?.type === "takeoff" || e?.type === "landing") &&
+    typeof e?.at === "number"
+  );
+}
+
 export function enqueueTrackEvent(event: FusedTrackEventLike): Promise<void> {
   trackBuffer.push({
     fusedAt: new Date(event.fusedAt),
     trackId: event.trackId,
     airportId: event.airportId ?? null,
     lifecycle: event.lifecycle ?? null,
+    targetType: event.identity?.targetType ?? null,
+    vehicleFleet: event.identity?.vehicleFleet ?? null,
+    altitudeFt: event.position?.alt ?? null,
+    groundSpeedKt: event.velocity?.groundSpeed ?? null,
+    onGround: event.position?.onGround ?? null,
     data: event,
   });
   return scheduleFlush();
@@ -133,9 +166,30 @@ export function enqueueAlertEvent(event: AlertEventLike): Promise<void> {
   return scheduleFlush();
 }
 
+export function enqueueMovementEvent(
+  event: MovementEventLike,
+): Promise<void> {
+  movementBuffer.push({
+    id: (event.id as string | undefined) ?? null,
+    airportId: event.airportId ?? null,
+    trackId: event.trackId,
+    icao24: event.icao24 ?? null,
+    callsign: event.callsign ?? null,
+    type: event.type,
+    lat: event.lat,
+    lon: event.lon,
+    at: new Date(event.at),
+    data: event,
+  });
+  return scheduleFlush();
+}
+
 function scheduleFlush(): Promise<void> {
   const batch = getOrCreateBatch();
-  if (trackBuffer.length + alertBuffer.length >= MAX_BUFFER) {
+  if (
+    trackBuffer.length + alertBuffer.length + movementBuffer.length >=
+    MAX_BUFFER
+  ) {
     void flush();
     return batch.promise;
   }
@@ -154,36 +208,34 @@ export async function flush(): Promise<void> {
 
   const tracks = trackBuffer.splice(0);
   const alerts = alertBuffer.splice(0);
-  // Detach this batch's settlers before any await — enqueues that happen
-  // during the DB write below (or after) belong to a fresh batch, not this
-  // one, since getOrCreateBatch() will see currentBatch === null again.
+  const movements = movementBuffer.splice(0);
   const batch = currentBatch;
   currentBatch = null;
 
-  if (tracks.length === 0 && alerts.length === 0) {
+  if (tracks.length === 0 && alerts.length === 0 && movements.length === 0) {
     batch?.resolve();
     return;
   }
 
   try {
-    // onConflictDoNothing backs the (track_id, fused_at) / (alert_id,
-    // triggered_at) unique constraints — AeroSwarm's connector-side retry
-    // (sendWithRetry wrapping WebhookSink's own retry, up to 9 POSTs worst
-    // case for one event) can re-deliver an already-durably-written event
-    // after a lost ack; without this, that re-delivery becomes a duplicate
-    // row instead of a no-op. See docs/audit task 005.
     if (tracks.length)
       await db.insert(aeroswarmTracks).values(tracks).onConflictDoNothing();
     if (alerts.length)
       await db.insert(aeroswarmAlerts).values(alerts).onConflictDoNothing();
+    if (movements.length)
+      await db
+        .insert(aeroswarmMovements)
+        .values(movements)
+        .onConflictDoNothing();
     batch?.resolve();
   } catch (error) {
-    // Not dropped silently anymore — enqueueTrackEvent/enqueueAlertEvent's
-    // callers (the ingest controller) await this batch's promise, so a
-    // rejection here surfaces as a 5xx to the sender, which AeroSwarm's
-    // connector-side retry/DLQ machinery will actually see and act on.
     logger.error(
-      { err: error, tracks: tracks.length, alerts: alerts.length },
+      {
+        err: error,
+        tracks: tracks.length,
+        alerts: alerts.length,
+        movements: movements.length,
+      },
       "aeroswarm ingest flush failed — event not durably persisted, caller will see a 5xx",
     );
     batch?.reject(error);

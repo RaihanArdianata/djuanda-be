@@ -4,24 +4,12 @@ import {
   AirportMismatchError,
   assertExpectedAirport,
   enqueueAlertEvent,
+  enqueueMovementEvent,
   enqueueTrackEvent,
   isAlertEvent,
+  isMovementEvent,
   isTrackEvent,
 } from "./ingest.service";
-
-// Low-throughput-ceiling alternative to the HTTP webhook (one POST per
-// event — TCP/TLS/HTTP overhead per message, plus AeroSwarm's connector-side
-// retry/DLQ path can't outrun a sustained rate above what the receiver can
-// answer per second) and to the low-latency WS ingest (drops events while
-// disconnected, no buffering). Kafka/Redpanda buffers in the BROKER: a
-// connection-service restart or brief outage just delays consumption —
-// nothing is lost as long as it catches up within the topic's retention
-// window (see docker-compose.yml's redpanda-init: 1h/512MB by default).
-//
-// Message value is the raw event JSON — AeroSwarm's KafkaSink
-// (@aeroswarm/connectors ^0.3.1) sends the whole FusedTrackEvent/AlertEvent
-// as the message body (same shape the webhook sink wraps and the websocket
-// sink sends bare), so this parses exactly like ingest-socket.ts's WS path.
 
 let consumer: Consumer | null = null;
 
@@ -31,21 +19,14 @@ function parseMessageValue(raw: Buffer | null): void {
   try {
     event = JSON.parse(raw.toString());
   } catch {
-    return; // malformed message — skip, don't crash the consumer loop
+    return;
   }
 
-  if (isTrackEvent(event) || isAlertEvent(event)) {
+  if (isTrackEvent(event) || isAlertEvent(event) || isMovementEvent(event)) {
     try {
       assertExpectedAirport(event);
     } catch (err) {
       if (err instanceof AirportMismatchError) {
-        // No per-message secret on this transport (auth is broker
-        // reachability only, see the module comment above) — this check is
-        // the only thing standing between a misrouted topic/broker and a
-        // silent cross-airport write. Log loudly and skip (commit the
-        // offset, same as a malformed message) rather than crash the
-        // consumer loop — a permanent config mismatch will never resolve
-        // itself by retrying the same message.
         logger.error(
           {
             err,
@@ -66,6 +47,10 @@ function parseMessageValue(raw: Buffer | null): void {
   }
   if (isAlertEvent(event)) {
     enqueueAlertEvent(event);
+    return;
+  }
+  if (isMovementEvent(event)) {
+    enqueueMovementEvent(event);
     return;
   }
   logger.warn(

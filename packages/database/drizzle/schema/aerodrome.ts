@@ -27,11 +27,15 @@ export const LAYER_VALUES = [
   "GRASS",
   "GARDEN",
   "WATER",
+  "ROAD",
+  "BARRIER",
+  "MILITARY",
+  "OTHER",
 ] as const;
 
 export type LayerName = (typeof LAYER_VALUES)[number];
 
-export const layerEnum = pgEnum("layer", LAYER_VALUES);
+// export const layerEnum = pgEnum("layer", LAYER_VALUES);
 export const importStatusEnum = pgEnum("import_status", [
   "DRAFT",
   "COMPLETED",
@@ -49,7 +53,7 @@ export const aerodromeFeatures = pgTable(
   "aerodrome_features",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    layer: layerEnum("layer").notNull(),
+    layer: varchar("layer", { length: 64 }).notNull(),
     name: varchar("name", { length: 255 }),
     geometry: jsonb("geometry").notNull(),
     properties: jsonb("properties").notNull().default({}),
@@ -89,7 +93,7 @@ export const aerodromeImportFeatures = pgTable("aerodrome_import_features", {
   importId: uuid("import_id")
     .notNull()
     .references(() => aerodromeImports.id, { onDelete: "cascade" }),
-  layer: layerEnum("layer").notNull(),
+  layer: varchar("layer", { length: 64 }).notNull(),
   geometry: jsonb("geometry").notNull(),
   properties: jsonb("properties").notNull().default({}),
   validationStatus: validationStatusEnum("validation_status")

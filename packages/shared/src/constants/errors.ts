@@ -7,6 +7,10 @@ export const ERROR_CATALOG: Record<
   VALIDATION_ERROR: { statusCode: 400, message: "Request validation failed" },
   BAD_REQUEST: { statusCode: 400, message: "Bad request" },
   INVALID_JSON: { statusCode: 400, message: "Invalid JSON format" },
+  INVALID_DATE_RANGE: {
+    statusCode: 400,
+    message: "Start date must not be greater than end date",
+  },
   INVALID_CREDENTIALS: {
     statusCode: 401,
     message: "Invalid username or password",

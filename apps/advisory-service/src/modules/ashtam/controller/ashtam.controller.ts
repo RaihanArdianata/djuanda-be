@@ -1,8 +1,9 @@
+import { ApiError, catchAsync, success } from "@repo/shared";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 import { getAshtamHistories } from "../service/ashtam.service";
-import { success, ApiError, catchAsync } from "@repo/shared";
-function toContentfulStatus(status: number): ContentfulStatusCode {
+
+function _toContentfulStatus(status: number): ContentfulStatusCode {
   const isContentBearing =
     Number.isInteger(status) &&
     status >= 200 &&

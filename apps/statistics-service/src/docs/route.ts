@@ -1,4 +1,3 @@
-
 import { swaggerUI } from "@hono/swagger-ui";
 import { Hono } from "hono";
 import { openApiDocument } from "./openapi";
@@ -13,4 +12,3 @@ const app = new Hono()
   );
 
 export default app;
-

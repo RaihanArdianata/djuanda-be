@@ -12,7 +12,9 @@ const server = Bun.serve({
 logger.info(`statistics-service listening on http://localhost:${port}`);
 
 const shutdown = async (signal: string): Promise<never> => {
-  logger.info(`${signal} received, shutting down statistics-service gracefully`);
+  logger.info(
+    `${signal} received, shutting down statistics-service gracefully`,
+  );
   server.stop();
   await pool.end();
   process.exit(0);

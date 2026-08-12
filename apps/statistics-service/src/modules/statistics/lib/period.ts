@@ -51,7 +51,7 @@ export function truncUnitFor(period: PeriodType): "day" | "week" | "month" {
   }
 }
 
-function toUTCDateOnly(dateOnly: string): Date {
+function toUtcDateOnly(dateOnly: string): Date {
   return new Date(`${dateOnly}T00:00:00Z`);
 }
 
@@ -83,8 +83,8 @@ export function listBucketKeys(
   startDate: string,
   endDate: string,
 ): string[] {
-  const start = toUTCDateOnly(startDate);
-  const end = toUTCDateOnly(endDate);
+  const start = toUtcDateOnly(startDate);
+  const end = toUtcDateOnly(endDate);
   const keys: string[] = [];
 
   if (period === "daily") {

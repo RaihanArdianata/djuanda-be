@@ -26,9 +26,7 @@ const errorResponse = (
         error: z.object({
           code: z.string(),
           message: z.string(),
-          fields: z
-            .record(z.string(), z.array(z.string()))
-            .optional(),
+          fields: z.record(z.string(), z.array(z.string())).optional(),
         }),
         meta: z.object({
           code: z.number(),

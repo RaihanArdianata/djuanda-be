@@ -16,6 +16,7 @@ const envSchema = z.object({
   WEATHER_SERVICE_URL: z.url().default("http://localhost:3008"),
   AERODROME_SERVICE_URL: z.url().default("http://localhost:3009"),
   STATISTICS_SERVICE_URL: z.url().default("http://localhost:3010"),
+  PLAYBACK_SERVICE_URL: z.url().default("http://localhost:3011"),
 });
 
 export const env = envSchema.parse(process.env);

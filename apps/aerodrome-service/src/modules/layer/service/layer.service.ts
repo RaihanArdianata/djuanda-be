@@ -21,7 +21,7 @@ export const getLayers = async (params: LayerFilter): Promise<Layer[]> => {
 
   const layers = Array.from(countMap.entries()).map(
     ([layer, featureCount]) => ({
-      layer,
+      layer: layer as Layer["layer"],
       featureCount,
     }),
   );

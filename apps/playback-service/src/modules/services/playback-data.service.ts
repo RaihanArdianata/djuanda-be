@@ -1,13 +1,13 @@
-import { and, eq, gte, lte } from "drizzle-orm";
-import { db } from "@repo/database";
 import {
-  aeroswarmTracks,
   aeroswarmMovements,
-  weatherObservations,
+  aeroswarmTracks,
+  db,
   weatherForecasts,
+  weatherObservations,
 } from "@repo/database";
+import { and, eq, gte, lte } from "drizzle-orm";
+import type { TimelineEvent } from "../schema/playback.schema";
 import { buildDummyEvents } from "./dummy-data.service";
-import type { TimelineEvent } from "@/modules/schema/playback.schema";
 
 /**
  * Weather station id is assumed to equal the airport ICAO id (e.g. "WARR"),

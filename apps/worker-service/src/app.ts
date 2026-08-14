@@ -1,4 +1,5 @@
 import { corsMiddleware } from "@repo/gateway/src/middleware/cors";
+import { playbackWsHandlers } from "@repo/playback-service";
 import { metricsHandler, metricsMiddleware } from "@repo/shared";
 import { Hono } from "hono";
 import { websocket } from "hono/bun";
@@ -6,7 +7,6 @@ import { logger } from "hono/logger";
 import health from "./routes/health";
 import { sseHandler } from "./sse";
 import { wsHandler } from "./websocket";
-import { playbackWsHandlers } from "@repo/playback-service/src/modules/ws/ws.handler";
 
 const app = new Hono()
   .use(logger())

@@ -1,4 +1,4 @@
-import type { TimelineEvent } from "@/modules/schema/playback.schema";
+import type { TimelineEvent } from "../schema/playback.schema";
 
 /**
  * NOTAM, ASHTAM and Aerodrome data aren't wired up yet. This produces a

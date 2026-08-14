@@ -20,3 +20,5 @@ const shutdown = async (signal: string): Promise<never> => {
 
 process.on("SIGTERM", () => shutdown("SIGTERM"));
 process.on("SIGINT", () => shutdown("SIGINT"));
+
+export * from "./modules/ws/ws.handler";

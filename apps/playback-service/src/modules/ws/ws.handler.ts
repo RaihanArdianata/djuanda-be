@@ -1,9 +1,9 @@
-import type { WSContext } from "hono/ws";
-import { redisSub, streamChannel } from "@/redis/client";
-import { applyControl } from "@/modules/services/playback-engine.service";
-import { getSessionRecord } from "@/modules/services/playback-session.service";
-import type { PlaybackControlRequest } from "@/types/playback";
 import { upgradeWebSocket } from "hono/bun";
+import type { WSContext } from "hono/ws";
+import { redisSub, streamChannel } from "../../redis/client";
+import type { PlaybackControlRequest } from "../schema/playback.schema";
+import { applyControl } from "../services/playback-engine.service";
+import { getSessionRecord } from "../services/playback-session.service";
 
 // One Redis subscription per open websocket connection, keyed by session id
 // so we can unsubscribe cleanly on close instead of leaking listeners.

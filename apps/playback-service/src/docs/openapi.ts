@@ -9,7 +9,7 @@ import {
   controlSchema,
   createSessionSchema,
   playbackSessionRecordSchema,
-} from "@/modules/schema/playback.schema";
+} from "../modules/schema/playback.schema";
 
 const registry = new OpenAPIRegistry();
 

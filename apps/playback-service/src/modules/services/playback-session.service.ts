@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { redis, sessionKey } from "@/redis/client";
+import { redis, sessionKey } from "../../redis/client";
 import type {
   PlaybackSessionRecord,
   PlaybackStatus,
-} from "@/modules/schema/playback.schema";
+} from "../schema/playback.schema";
 
 const SESSION_TTL_SECONDS = 60 * 60 * 6; // 6h, sessions are meant to be short-lived
 

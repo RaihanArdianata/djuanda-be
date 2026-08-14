@@ -1,15 +1,12 @@
+import { validate } from "@repo/validation";
 import { Hono } from "hono";
-import {
-  controlSchema,
-  createSessionSchema,
-} from "@/modules/schema/playback.schema";
 import {
   controlPlaybackSession,
   createPlaybackSession,
   deletePlaybackSession,
   getPlaybackSessionById,
-} from "@/modules/controller/playback.controller";
-import { validate } from "@repo/validation";
+} from "../controller/playback.controller";
+import { controlSchema, createSessionSchema } from "../schema/playback.schema";
 
 const app = new Hono()
   .post("/sessions", validate(createSessionSchema), createPlaybackSession)

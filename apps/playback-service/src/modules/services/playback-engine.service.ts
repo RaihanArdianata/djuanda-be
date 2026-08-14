@@ -1,15 +1,15 @@
-import { redis, streamChannel } from "@/redis/client";
+import { logger } from "@repo/logger";
+import { ApiError } from "@repo/shared";
+import { redis, streamChannel } from "../../redis/client";
+import type {
+  PlaybackControlRequest,
+  TimelineEvent,
+} from "../schema/playback.schema";
 import { loadTimeline } from "./playback-data.service";
 import {
   getSessionRecord,
   saveSessionRecord,
 } from "./playback-session.service";
-import type {
-  PlaybackControlRequest,
-  TimelineEvent,
-} from "@/modules/schema/playback.schema";
-import { logger } from "@repo/logger";
-import { ApiError } from "@repo/shared";
 
 const TICK_MS = Number(process.env.PLAYBACK_TICK_MS ?? 500);
 

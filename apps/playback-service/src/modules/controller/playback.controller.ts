@@ -1,18 +1,18 @@
 import { ApiError, catchAsync, success } from "@repo/shared";
-import {
-  createSessionRecord,
-  deleteSessionRecord,
-  getSessionRecord,
-} from "@/modules/services/playback-session.service";
 import type {
-  PlaybackControlRequest,
   CreateSessionRequest,
-} from "@/modules/schema/playback.schema";
+  PlaybackControlRequest,
+} from "../schema/playback.schema";
 import {
   applyControl,
   disposeEngine,
   primeEngine,
-} from "@/modules/services/playback-engine.service";
+} from "../services/playback-engine.service";
+import {
+  createSessionRecord,
+  deleteSessionRecord,
+  getSessionRecord,
+} from "../services/playback-session.service";
 
 export const createPlaybackSession = catchAsync(async (c) => {
   const body = c.get("parsedData") as CreateSessionRequest;

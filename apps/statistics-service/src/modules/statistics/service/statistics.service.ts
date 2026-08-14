@@ -83,6 +83,41 @@ interface ParsedMovementAgg {
   peakHour: PeakHour | null;
 }
 
+function applyTotalRow(totals: MovementTotals, row: MovementAggQueryRow): void {
+  totals.aircraft = row.aircraft ?? 0;
+  totals.takeoff = row.takeoff;
+  totals.landing = row.landing;
+}
+
+function applyPeriodRow(
+  dayMovementMap: Map<string, DayMovementEntry>,
+  row: MovementAggQueryRow,
+): void {
+  if (!(row.period_bucket && row.track_id)) return;
+
+  let entry = dayMovementMap.get(row.period_bucket);
+  if (!entry) {
+    entry = { trackIds: new Set<string>(), takeoff: 0, landing: 0 };
+    dayMovementMap.set(row.period_bucket, entry);
+  }
+  entry.trackIds.add(row.track_id);
+  entry.takeoff += row.takeoff;
+  entry.landing += row.landing;
+}
+
+function applyHourRow(
+  currentPeak: PeakHour | null,
+  row: MovementAggQueryRow,
+): PeakHour | null {
+  if (!row.hour_bucket) return currentPeak;
+
+  const movement = row.takeoff + row.landing;
+  if (!currentPeak || movement > currentPeak.movement) {
+    return { hour: row.hour_bucket, movement };
+  }
+  return currentPeak;
+}
+
 function parseMovementAggRows(rows: MovementAggQueryRow[]): ParsedMovementAgg {
   const totals: MovementTotals = { aircraft: 0, takeoff: 0, landing: 0 };
   const dayMovementMap = new Map<string, DayMovementEntry>();
@@ -90,40 +125,20 @@ function parseMovementAggRows(rows: MovementAggQueryRow[]): ParsedMovementAgg {
 
   for (const row of rows) {
     switch (row.grp) {
-      case "total": {
-        totals.aircraft = row.aircraft ?? 0;
-        totals.takeoff = row.takeoff;
-        totals.landing = row.landing;
+      case "total":
+        applyTotalRow(totals, row);
         break;
-      }
-      case "period": {
-        if (row.period_bucket && row.track_id) {
-          let entry = dayMovementMap.get(row.period_bucket);
-          if (!entry) {
-            entry = { trackIds: new Set<string>(), takeoff: 0, landing: 0 };
-            dayMovementMap.set(row.period_bucket, entry);
-          }
-          entry.trackIds.add(row.track_id);
-          entry.takeoff += row.takeoff;
-          entry.landing += row.landing;
-        }
+      case "period":
+        applyPeriodRow(dayMovementMap, row);
         break;
-      }
-      case "hour": {
-        if (row.hour_bucket) {
-          const movement = row.takeoff + row.landing;
-          if (!peakHour || movement > peakHour.movement) {
-            peakHour = { hour: row.hour_bucket, movement };
-          }
-        }
+      case "hour":
+        peakHour = applyHourRow(peakHour, row);
         break;
-      }
     }
   }
 
   return { totals, dayMovementMap, peakHour };
 }
-
 interface AlertTrendRow {
   bucket: string;
   total: number;

@@ -22,9 +22,7 @@ export const createProxy = (targetBaseUrl: string) => {
 
     const hasBody = !["GET", "HEAD"].includes(c.req.method);
 
-    const body = hasBody
-      ? await c.req.arrayBuffer()
-      : undefined;
+    const body = hasBody ? await c.req.arrayBuffer() : undefined;
 
     const response = await axios.request({
       url: targetUrl.toString(),

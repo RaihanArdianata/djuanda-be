@@ -1,4 +1,3 @@
-
 export const PERIOD_VALUES = ["daily", "weekly", "monthly"] as const;
 export type PeriodType = (typeof PERIOD_VALUES)[number];
 
@@ -49,7 +48,6 @@ function endOfIsoWeek(date: Date): Date {
 function endOfMonthUtc(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
 }
-
 
 export function enumerateDaysInclusive(
   startDate: string,

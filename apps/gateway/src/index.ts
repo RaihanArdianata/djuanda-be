@@ -4,7 +4,7 @@ import { env } from "./config/env";
 
 const server = Bun.serve({
   port: env.PORT,
-  idleTimeout:30,
+  idleTimeout: 30,
   fetch: app.fetch,
 });
 

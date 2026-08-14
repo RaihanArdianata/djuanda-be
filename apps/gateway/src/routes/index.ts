@@ -5,6 +5,7 @@ import alert from "./alert";
 import auth from "./auth";
 import health from "./health";
 import notifications from "./notifications";
+import playback from "./playback";
 import rbac from "./rbac";
 import sse from "./sse";
 import statistics from "./statistics";
@@ -25,6 +26,7 @@ const app = new Hono()
   .route("/advisory", advisory)
   .route("/weather", weather)
   .route("/aerodrome", aerodrome)
-  .route("/statistics", statistics);
+  .route("/statistics", statistics)
+  .route("/playback", playback);
 
 export default app;

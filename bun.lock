@@ -130,6 +130,24 @@
         "zod": "^4.4.3",
       },
     },
+    "apps/playback-service": {
+      "name": "@repo/playback-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@asteasolutions/zod-to-openapi": "^8.5.0",
+        "@hono/swagger-ui": "^0.6.1",
+        "@repo/auth-service": "workspace:*",
+        "@repo/config": "workspace:*",
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "@repo/validation": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
+        "ioredis": "^5.11.1",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/statistics-service": {
       "name": "@repo/statistics-service",
       "version": "0.0.0",
@@ -189,6 +207,7 @@
         "@repo/database": "workspace:*",
         "@repo/gateway": "workspace:*",
         "@repo/logger": "workspace:*",
+        "@repo/playback-service": "workspace:*",
         "@repo/shared": "workspace:*",
         "hono": "^4.12.27",
         "ioredis": "^5.11.1",
@@ -425,6 +444,8 @@
     "@repo/notam-service": ["@repo/notam-service@workspace:apps/advisory-service"],
 
     "@repo/notification-service": ["@repo/notification-service@workspace:apps/notification-service"],
+
+    "@repo/playback-service": ["@repo/playback-service@workspace:apps/playback-service"],
 
     "@repo/shared": ["@repo/shared@workspace:packages/shared"],
 

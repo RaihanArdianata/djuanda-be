@@ -401,6 +401,65 @@ services:
       retries: 5
       start_period: 10s
 
+  statistics-service:
+    build:
+      context: .
+      args:
+        APP_DIR: statistics-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STATISTICS_SERVICE_PORT: ${STATISTICS_SERVICE_PORT:-3010}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3010/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  playback-service:
+    build:
+      context: .
+      args:
+        APP_DIR: playback-service
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PLAYBACK_SERVICE_PORT: ${PLAYBACK_SERVICE_PORT:-3011}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    depends_on:
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:3011/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   gateway:
     build:
       context: .
@@ -422,6 +481,8 @@ services:
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
+      STATISTICS_SERVICE_URL: http://statistics-service:${STATISTICS_SERVICE_PORT:-3010}
+      PLAYBACK_SERVICE_URL: http://playback-service:${PLAYBACK_SERVICE_PORT:-3011}
     ports:
       - "8080:8080"
     depends_on:

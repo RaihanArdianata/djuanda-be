@@ -130,6 +130,23 @@
         "zod": "^4.4.3",
       },
     },
+    "apps/statistics-service": {
+      "name": "@repo/statistics-service",
+      "version": "0.0.0",
+      "dependencies": {
+        "@asteasolutions/zod-to-openapi": "^8.5.0",
+        "@hono/swagger-ui": "^0.6.1",
+        "@repo/auth-service": "workspace:*",
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "@repo/validation": "workspace:*",
+        "@repo/worker-service": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
+        "zod": "^4.4.3",
+      },
+    },
     "apps/user-service": {
       "name": "@repo/user-service",
       "version": "0.0.0",
@@ -410,6 +427,8 @@
     "@repo/notification-service": ["@repo/notification-service@workspace:apps/notification-service"],
 
     "@repo/shared": ["@repo/shared@workspace:packages/shared"],
+
+    "@repo/statistics-service": ["@repo/statistics-service@workspace:apps/statistics-service"],
 
     "@repo/user-service": ["@repo/user-service@workspace:apps/user-service"],
 

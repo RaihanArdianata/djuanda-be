@@ -166,9 +166,7 @@ export function enqueueAlertEvent(event: AlertEventLike): Promise<void> {
   return scheduleFlush();
 }
 
-export function enqueueMovementEvent(
-  event: MovementEventLike,
-): Promise<void> {
+export function enqueueMovementEvent(event: MovementEventLike): Promise<void> {
   movementBuffer.push({
     id: (event.id as string | undefined) ?? null,
     airportId: event.airportId ?? null,

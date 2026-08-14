@@ -65,6 +65,12 @@ const operationalStatisticsResponse = z.object({
     trend: z.array(
       z.object({
         period: z.string(),
+        periodRange: z
+          .string()
+          .optional()
+          .describe(
+            "'periodStart - periodEnd', only present for weekly/monthly buckets",
+          ),
         aircraft: z.number().nullable(),
         groundVehicle: z.number().nullable(),
         takeoff: z.number().nullable(),

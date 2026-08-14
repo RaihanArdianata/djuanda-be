@@ -18,6 +18,7 @@
     "@biomejs/biome": "2.5.3",
     "@types/bun": "latest",
     "@types/node": "^26.1.0",
+    "lefthook": "^2.1.10",
     "turbo": "^2.10.3",
     "typescript": "^6.0.3"
   }

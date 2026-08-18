@@ -1,4 +1,5 @@
 import { corsMiddleware } from "@repo/gateway/src/middleware/cors";
+import { playbackWsHandlers } from "@repo/playback-service";
 import { metricsHandler, metricsMiddleware } from "@repo/shared";
 import { Hono } from "hono";
 import { websocket } from "hono/bun";
@@ -13,6 +14,7 @@ const app = new Hono()
   .use(corsMiddleware)
   .get("/metrics", metricsHandler)
   .route("/health", health)
+  .get("/ws/playback/:sessionId", playbackWsHandlers)
   .get("/ws/:topic", wsHandler)
   .get("/events/:topic", sseHandler);
 

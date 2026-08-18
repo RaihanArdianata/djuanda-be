@@ -76,10 +76,7 @@ export const aeroswarmMovements = pgTable(
     data: jsonb("data").notNull(),
   },
   (t) => ({
-    airportIdx: index("aeroswarm_movements_airport_idx").on(
-      t.airportId,
-      t.at,
-    ),
+    airportIdx: index("aeroswarm_movements_airport_idx").on(t.airportId, t.at),
     movementUnique: unique("aeroswarm_movements_track_type_at_unique").on(
       t.trackId,
       t.type,

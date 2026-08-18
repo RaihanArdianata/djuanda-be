@@ -7,5 +7,4 @@ export const corsMiddleware = cors({
   allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   exposeHeaders: ["X-Request-Id"],
   maxAge: 600,
-  credentials: true,
 });

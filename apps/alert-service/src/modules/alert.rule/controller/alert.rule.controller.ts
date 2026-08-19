@@ -20,7 +20,17 @@ export const listAlertRulesController = catchAsync(async (c) => {
   });
 
   const result = await getAllAlertRules(parsed);
-  return success(c, result, { message: "Alert rules fetched successfully" });
+  return success(
+    c,
+    result.items,
+    { message: "Alert rules fetched successfully" },
+    {
+      page: parsed.page,
+      size: parsed.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / parsed.limit),
+    },
+  );
 });
 
 export const getAlertRuleByIdController = catchAsync(async (c) => {

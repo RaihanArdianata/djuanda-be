@@ -29,6 +29,8 @@ export async function addAlertRule(
 ): Promise<AlertRule> {
   return createAlertRule({
     ...input,
+    description: input.description ?? null,
+    documentation: input.documentation ?? {},
     configuration: input.configuration as Record<string, unknown>,
   });
 }

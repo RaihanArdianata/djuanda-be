@@ -26,7 +26,17 @@ export const listAlertsController = catchAsync(async (c) => {
   });
 
   const result = await getAllAlerts(parsed);
-  return success(c, result, { message: "Alerts fetched successfully" });
+  return success(
+    c,
+    result.items,
+    { message: "Alerts fetched successfully" },
+    {
+      page: parsed.page,
+      size: parsed.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / parsed.limit),
+    },
+  );
 });
 
 export const listActiveAlertsController = catchAsync(async (c) => {
@@ -38,7 +48,17 @@ export const listActiveAlertsController = catchAsync(async (c) => {
   });
 
   const result = await getActiveAlerts(parsed);
-  return success(c, result, { message: "Active alerts fetched successfully" });
+  return success(
+    c,
+    result.items,
+    { message: "Active alerts fetched successfully" },
+    {
+      page: parsed.page,
+      size: parsed.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / parsed.limit),
+    },
+  );
 });
 
 export const getAlertByIdController = catchAsync(async (c) => {

@@ -20,11 +20,15 @@ export const createAlertRuleSchema = z.object({
   airportId: z.string().min(1),
   type: z.string().min(1),
   enabled: z.coerce.boolean().default(true),
+  description: z.string().optional(),
+  documentation: z.record(z.string(), z.unknown()).default({}),
   configuration: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const updateAlertRuleSchema = z.object({
   enabled: z.coerce.boolean().optional(),
+  description: z.string().optional(),
+  documentation: z.record(z.string(), z.unknown()).optional(),
   configuration: z.record(z.string(), z.unknown()).optional(),
 });
 

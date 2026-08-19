@@ -1,5 +1,6 @@
 export * from "./aerodrome";
 export * from "./aeroswarm";
+export * from "./aftn";
 export * from "./auth";
 export * from "./logs";
 export * from "./notams";

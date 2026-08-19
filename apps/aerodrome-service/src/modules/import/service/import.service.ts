@@ -14,6 +14,7 @@ import { and, eq } from "drizzle-orm";
 import { validateGeometry } from "@/lib/geometry-validation";
 import { resolveLayer } from "@/lib/layers";
 import type { GeoJson, GeoJsonFeature, GeoJsonGeometry } from "@/types/geojson";
+import { publishAerodromeGeometryUpdated } from "../../messaging/aerodrome.producer";
 import type {
   AddPreviewFeatureInput,
   UpdatePreviewFeatureInput,
@@ -190,11 +191,25 @@ export async function addPreviewFeature(
   return aerodromeImportFeaturesSelectSchema.parse(created);
 }
 
+function deriveAirportId(
+  features: { properties: unknown }[],
+): string | undefined {
+  for (const f of features) {
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const value =
+      (props.airportId as string) ??
+      (props.icao as string) ??
+      (props.iata as string);
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
 export async function commitImport(
   importId: string,
   userId?: string,
 ): Promise<AerodromeImport> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const session = await tx.query.aerodromeImports.findFirst({
       where: eq(aerodromeImports.id, importId),
       with: { features: true },
@@ -223,12 +238,19 @@ export async function commitImport(
       await tx.delete(aerodromeFeatures);
     }
 
+    const airportId = deriveAirportId(session.features);
+
     if (session.features.length > 0) {
       await tx.insert(aerodromeFeatures).values(
         session.features.map((f) => ({
           layer: f.layer,
           geometry: f.geometry,
-          properties: f.properties,
+          properties: airportId
+            ? {
+                ...((f.properties ?? {}) as Record<string, unknown>),
+                airportId,
+              }
+            : f.properties,
           createdBy: userId,
           updatedBy: userId,
         })),
@@ -241,8 +263,14 @@ export async function commitImport(
       .where(eq(aerodromeImports.id, importId))
       .returning();
 
-    return updated;
+    return { ...updated, airportId };
   });
+
+  if (result.airportId) {
+    await publishAerodromeGeometryUpdated(result.airportId);
+  }
+
+  return result;
 }
 
 export async function cancelImport(importId: string): Promise<AerodromeImport> {

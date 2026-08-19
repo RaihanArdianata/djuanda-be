@@ -63,6 +63,7 @@ export const aerodromeFeatures = pgTable(
   "aerodrome_features",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    airportId: varchar("airport_id", { length: 20 }),
     layer: varchar("layer", { length: 64 }).notNull(),
     name: varchar("name", { length: 255 }),
     status: featureStatusEnum("status"),
@@ -77,7 +78,10 @@ export const aerodromeFeatures = pgTable(
     createdBy: varchar("created_by", { length: 255 }),
     updatedBy: varchar("updated_by", { length: 255 }),
   },
-  (t) => [index("aerodrome_features_layer_idx").on(t.layer)],
+  (t) => [
+    index("aerodrome_features_layer_idx").on(t.layer),
+    index("aerodrome_features_airport_id_idx").on(t.airportId),
+  ],
 );
 
 // Import session (metadata upload GeoJSON).

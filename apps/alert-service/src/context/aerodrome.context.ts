@@ -176,12 +176,13 @@ function filterByAirport(
   airportId: string,
 ): AerodromeFeature[] {
   return features.filter((f) => {
+    if (f.airportId === airportId) return true;
     const props = (f.properties ?? {}) as Record<string, unknown>;
     const icao = props.icao;
     const featureAirportId = props.airportId;
     if (icao === airportId || featureAirportId === airportId) return true;
     // Fallback: data lama/import tanpa airportId dianggap milik satu-satunya bandara.
-    return icao == null && featureAirportId == null;
+    return f.airportId == null && icao == null && featureAirportId == null;
   });
 }
 

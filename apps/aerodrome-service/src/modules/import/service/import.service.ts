@@ -244,6 +244,7 @@ export async function commitImport(
       await tx.insert(aerodromeFeatures).values(
         session.features.map((f) => ({
           layer: f.layer,
+          airportId,
           geometry: f.geometry,
           properties: airportId
             ? {

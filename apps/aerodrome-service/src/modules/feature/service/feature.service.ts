@@ -14,14 +14,31 @@ import type {
   UpdateFeatureInput,
 } from "../validator/feature.validator";
 
-function getAirportIdFromFeature(
-  feature: AerodromeFeature,
-): string | undefined {
+function getAirportIdFromFeature(feature: {
+  airportId?: string | null;
+  properties?: unknown;
+}): string | undefined {
+  if (typeof feature.airportId === "string" && feature.airportId.length > 0) {
+    return feature.airportId;
+  }
   const props = (feature.properties ?? {}) as Record<string, unknown>;
   const airportId = props.airportId ?? props.icao;
   return typeof airportId === "string" && airportId.length > 0
     ? airportId
     : undefined;
+}
+
+async function resolveAirportId(feature: {
+  airportId?: string | null;
+  properties?: unknown;
+}): Promise<string | undefined> {
+  const fromProps = getAirportIdFromFeature(feature);
+  if (fromProps) return fromProps;
+
+  const fallback = await db.query.aerodromeFeatures.findFirst({
+    where: eq(aerodromeFeatures.layer, "AERODROME"),
+  });
+  return fallback ? getAirportIdFromFeature(fallback) : undefined;
 }
 
 export const listFeatureResultSchema = z.object({
@@ -79,10 +96,12 @@ export async function getFeatureById(
 export async function createFeature(
   data: CreateFeatureInput & { userId?: string },
 ): Promise<AerodromeFeature> {
+  const airportId = await resolveAirportId(data);
   const [feature] = await db
     .insert(aerodromeFeatures)
     .values({
       layer: data.layer,
+      airportId,
       name: data.name,
       status: data.status,
       geometry: data.geometry,
@@ -93,9 +112,9 @@ export async function createFeature(
     .returning();
 
   const created = aerodromeFeaturesSelectSchema.parse(feature);
-  const airportId = getAirportIdFromFeature(created);
-  if (airportId) {
-    await publishAerodromeGeometryUpdated(airportId);
+  const createdAirportId = getAirportIdFromFeature(created);
+  if (createdAirportId) {
+    await publishAerodromeGeometryUpdated(createdAirportId);
   }
   return created;
 }
@@ -105,17 +124,30 @@ export async function updateFeature(
   patch: UpdateFeatureInput,
   userId?: string,
 ): Promise<AerodromeFeature> {
+  const existing = await db.query.aerodromeFeatures.findFirst({
+    where: eq(aerodromeFeatures.id, id),
+  });
+  if (!existing)
+    throw new ApiError("NOT_FOUND", { message: "Feature not found" });
+
+  const airportId = await resolveAirportId(existing);
+
   const [updated] = await db
     .update(aerodromeFeatures)
-    .set({ ...patch, updatedBy: userId, updatedAt: new Date() })
+    .set({
+      ...patch,
+      airportId,
+      updatedBy: userId,
+      updatedAt: new Date(),
+    })
     .where(eq(aerodromeFeatures.id, id))
     .returning();
   if (!updated)
     throw new ApiError("NOT_FOUND", { message: "Feature not found" });
   const updatedFeature = aerodromeFeaturesSelectSchema.parse(updated);
-  const airportId = getAirportIdFromFeature(updatedFeature);
-  if (airportId) {
-    await publishAerodromeGeometryUpdated(airportId);
+  const updatedAirportId = getAirportIdFromFeature(updatedFeature);
+  if (updatedAirportId) {
+    await publishAerodromeGeometryUpdated(updatedAirportId);
   }
   return updatedFeature;
 }
@@ -128,7 +160,9 @@ export async function deleteFeature(id: string): Promise<void> {
   if (!deleted)
     throw new ApiError("NOT_FOUND", { message: "Feature not found" });
   const deletedFeature = aerodromeFeaturesSelectSchema.parse(deleted);
-  const airportId = getAirportIdFromFeature(deletedFeature);
+  const airportId =
+    getAirportIdFromFeature(deletedFeature) ??
+    (await resolveAirportId(deletedFeature));
   if (airportId) {
     await publishAerodromeGeometryUpdated(airportId);
   }

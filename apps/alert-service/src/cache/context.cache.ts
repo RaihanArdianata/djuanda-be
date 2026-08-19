@@ -65,6 +65,12 @@ export async function setAerodromeGeometry(
   );
 }
 
+export async function deleteAerodromeGeometry(
+  airportId: string,
+): Promise<void> {
+  await redis.del(aerodromeKey(airportId));
+}
+
 // advisory (AFTN)
 
 async function scanAftnKeys(airportId: string): Promise<string[]> {

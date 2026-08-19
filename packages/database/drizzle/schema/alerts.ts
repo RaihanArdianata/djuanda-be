@@ -52,6 +52,8 @@ export const alertRules = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     airportId: text("airport_id").notNull(),
     type: text("type").notNull(),
+    description: text("description"),
+    documentation: jsonb("documentation").notNull().default({}),
     enabled: boolean("enabled").notNull().default(true),
     configuration: jsonb("configuration").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })

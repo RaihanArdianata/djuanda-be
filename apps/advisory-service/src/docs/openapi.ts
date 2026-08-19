@@ -136,15 +136,180 @@ registry.registerPath({
   },
 });
 
+const aftnMessageSchema = z.object({
+  id: z.string().uuid(),
+  providerId: z.string(),
+  datetime: z.string(),
+  messageType: z.string(),
+  callSign: z.string().nullable(),
+  registration: z.string().nullable(),
+  aircraftType: z.string().nullable(),
+  departure: z.string().nullable(),
+  departureTime: z.string().nullable(),
+  destination: z.string().nullable(),
+  destinationTime: z.string().nullable(),
+  duration: z.string().nullable(),
+  speed: z.string().nullable(),
+  altitude: z.string().nullable(),
+  route: z.string().nullable(),
+  raw: z.string(),
+  parsed: z.record(z.string(), z.unknown()),
+  source: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+const aftnSyncResultSchema = z.object({
+  totalReceived: z.number(),
+  created: z.number(),
+  updated: z.number(),
+  unchanged: z.number(),
+  failed: z.number(),
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/advisory/aftn",
+  tags: ["AFTN"],
+  summary: "Daftar AFTN message dari database lokal",
+  description:
+    "Menyajikan AFTN message (FPL/DEP/ARR/DLA/CHG) yang sudah disinkronkan dari " +
+    "provider setiap 30 menit. Mendukung filter, pagination, dan sorting. " +
+    "Field yang tidak tersedia pada satu message type bernilai null, dan raw " +
+    "message selalu disertakan.",
+  request: {
+    query: z.object({
+      messageType: z
+        .string()
+        .optional()
+        .describe("FPL | DEP | ARR | DLA | CHG"),
+      callSign: z.string().optional(),
+      registration: z.string().optional(),
+      aircraftType: z.string().optional(),
+      departure: z.string().optional().describe("ICAO, mis. WMKK"),
+      destination: z.string().optional().describe("ICAO, mis. WBGS"),
+      startDate: z.string().optional().describe("ISO 8601, filter datetime >="),
+      endDate: z.string().optional().describe("ISO 8601, filter datetime <="),
+      page: z.coerce.number().int().min(1).optional().describe("Default 1"),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("Default 20, maks. 200"),
+      sortBy: z
+        .enum([
+          "datetime",
+          "messageType",
+          "callSign",
+          "registration",
+          "aircraftType",
+          "departure",
+          "destination",
+          "createdAt",
+        ])
+        .optional()
+        .describe("Default datetime"),
+      sortOrder: z.enum(["asc", "desc"]).optional().describe("Default desc"),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Berhasil mengambil daftar AFTN message",
+      content: {
+        "application/json": { schema: z.array(aftnMessageSchema) },
+      },
+    },
+    422: {
+      description: "Query parameter tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/advisory/aftn/{id}",
+  tags: ["AFTN"],
+  summary: "Detail satu AFTN message (normalized + raw)",
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+  },
+  responses: {
+    200: {
+      description: "Berhasil mengambil detail AFTN message",
+      content: { "application/json": { schema: aftnMessageSchema } },
+    },
+    404: {
+      description: "AFTN message tidak ditemukan",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/advisory/aftn/sync",
+  tags: ["AFTN"],
+  summary: "Manual synchronization AFTN untuk satu rentang waktu",
+  description:
+    "Memicu sinkronisasi ke provider (POST /api/aftn) untuk window yang diminta. " +
+    "Message di-upsert berdasarkan identity, sehingga rentang yang overlap dengan " +
+    "scheduled sync tidak menghasilkan duplicate.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            startDate: z.string().describe("ISO 8601"),
+            endDate: z.string().describe("ISO 8601"),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Sinkronisasi selesai",
+      content: { "application/json": { schema: aftnSyncResultSchema } },
+    },
+    422: {
+      description: "Body tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    502: upstreamErrorResponse(
+      "Provider AFTN tidak dapat dihubungi / membalas error",
+    ),
+    504: upstreamErrorResponse(
+      "Provider AFTN tidak merespons dalam batas waktu",
+    ),
+  },
+});
+
 export const openApiDocument = new OpenApiGeneratorV3(
   registry.definitions,
 ).generateDocument({
   openapi: "3.0.0",
   info: {
-    title: "Advisory Service API (NOTAM & ASHTAM)",
-    version: "1.0.0",
+    title: "Advisory Service API (NOTAM, ASHTAM & AFTN)",
+    version: "1.1.0",
     description:
-      "Bridge/proxy antara frontend dan NAVSIM untuk data NOTAM dan ASHTAM. " +
+      "NOTAM & ASHTAM: bridge/proxy antara frontend dan NAVSIM. " +
+      "AFTN: operational message yang disinkronkan dari provider setiap 30 menit " +
+      "lalu disajikan dari database lokal sebagai source of truth. " +
       "Backend adalah satu-satunya pihak yang mengakses navsim.kemenhub.go.id " +
       "secara langsung.",
   },

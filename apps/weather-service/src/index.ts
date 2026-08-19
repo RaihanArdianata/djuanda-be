@@ -2,6 +2,10 @@ import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import { app } from "./app";
 import {
+  startWeatherProducer,
+  stopWeatherProducer,
+} from "./modules/messaging/weather.producer";
+import {
   startWeatherPolling,
   stopWeatherPolling,
 } from "./modules/weather/services/weather-poller";
@@ -15,11 +19,13 @@ const server = Bun.serve({
 
 logger.info(`weather-service listening on http://localhost:${port}`);
 
+startWeatherProducer();
 startWeatherPolling();
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down weather-service gracefully`);
   stopWeatherPolling();
+  await stopWeatherProducer();
   server.stop();
   await pool.end();
   process.exit(0);

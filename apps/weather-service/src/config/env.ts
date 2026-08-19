@@ -12,6 +12,9 @@ const envSchema = z.object({
   PROVIDER_MAX_RETRIES: z.coerce.number().default(3),
   PROVIDER_RETRY_BASE_DELAY_MS: z.coerce.number().default(1000),
   OBSERVATION_STALE_MINUTES: z.coerce.number().default(45),
+
+  KAFKA_BROKERS: z.string().default(""),
+  KAFKA_WEATHER_TOPIC: z.string().default("asmgcs.weather"),
 });
 
 export const env = envSchema.parse(process.env);

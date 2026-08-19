@@ -2,6 +2,7 @@ import { logger } from "@repo/logger";
 import { publishToTopic } from "@repo/worker-service/src/sse/service";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
+import { publishWeatherEvent } from "../../messaging/weather.producer";
 import { isForecastStale, isObservationStale } from "../lib/staleness";
 import { parseMetar } from "../parser/metar.parser";
 import { parseTaf } from "../parser/taf.parser";
@@ -70,6 +71,8 @@ export const pollMetar = async (): Promise<void> => {
       source: "aviationweather",
     });
 
+    await publishWeatherEvent(item.icaoId, item.icaoId, parsed, null);
+
     logger.info(
       {
         station: item.icaoId,
@@ -123,6 +126,8 @@ export const pollTaf = async (): Promise<void> => {
       providerRaw: { ...item },
       source: "aviationweather",
     });
+
+    await publishWeatherEvent(item.icaoId, item.icaoId, null, parsed);
 
     logger.info(
       {

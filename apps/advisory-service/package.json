@@ -5,14 +5,20 @@
   "scripts": {
     "dev": "bun --env-file=../../.env run --hot src/index.ts",
     "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun --env-file=.env.test test"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",
+    "@repo/database": "workspace:*",
     "@repo/logger": "workspace:*",
     "@repo/shared": "workspace:*",
+    "@repo/validation": "workspace:*",
     "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
+    "kafkajs": "^2.2.4",
+    "node-cron": "^4.6.0",
     "zod": "^4.4.3"
   }
 }

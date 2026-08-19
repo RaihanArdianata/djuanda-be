@@ -1,4 +1,5 @@
 import type { AerodromeFeature } from "@repo/database";
+import { logger } from "@repo/logger";
 import {
   getAerodromeGeometry,
   setAerodromeGeometry,
@@ -241,7 +242,21 @@ async function fetchAerodromeGeometry(
     return null;
   }
 
-  return { features: processed, runways, surfaces, areas };
+  const context = { features: processed, runways, surfaces, areas };
+
+  logger.info(
+    {
+      airportId,
+      features: processed.length,
+      runways: runways.length,
+      surfaces: surfaces.length,
+      areas: areas.length,
+      areaTypes: areas.map((a) => a.type),
+    },
+    "aerodrome context loaded",
+  );
+
+  return context;
 }
 
 export async function getAerodromeContext(
@@ -250,7 +265,7 @@ export async function getAerodromeContext(
   let data = await getAerodromeGeometry(airportId);
   if (!data) {
     data = await fetchAerodromeGeometry(airportId);
-    if (data) await setAerodromeGeometry(airportId, data);
+    if (data) await setAerodromeGeometry(airportId, data, 60);
   }
   return data;
 }

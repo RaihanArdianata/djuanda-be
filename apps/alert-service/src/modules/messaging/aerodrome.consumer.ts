@@ -1,5 +1,6 @@
 import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
+import { deleteAerodromeGeometry } from "@/cache/context.cache";
 import { alertServiceEnv } from "@/config/env";
 import { getAerodromeContext } from "@/context/aerodrome.context";
 
@@ -44,7 +45,9 @@ export async function startAerodromeConsumer(): Promise<void> {
           raw.eventType === "AERODROME_GEOMETRY_UPDATED" &&
           raw.data?.airportId
         ) {
-          await getAerodromeContext(raw.data.airportId as string);
+          const airportId = raw.data.airportId as string;
+          await deleteAerodromeGeometry(airportId);
+          await getAerodromeContext(airportId);
         }
       } catch (err) {
         logger.warn({ err }, "aerodrome consumer: failed to process message");

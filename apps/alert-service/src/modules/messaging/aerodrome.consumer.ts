@@ -41,11 +41,13 @@ export async function startAerodromeConsumer(): Promise<void> {
       if (!message.value) return;
       try {
         const raw = JSON.parse(message.value.toString());
+        logger.info({ raw }, "aerodrome consumer: message received");
         if (
           raw.eventType === "AERODROME_GEOMETRY_UPDATED" &&
           raw.data?.airportId
         ) {
           const airportId = raw.data.airportId as string;
+          logger.info({ airportId }, "aerodrome consumer: invalidating cache");
           await deleteAerodromeGeometry(airportId);
           await getAerodromeContext(airportId);
         }

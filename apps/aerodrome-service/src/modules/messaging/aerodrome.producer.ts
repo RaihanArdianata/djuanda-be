@@ -41,7 +41,10 @@ export async function stopAerodromeProducer(): Promise<void> {
 export async function publishAerodromeGeometryUpdated(
   airportId: string,
 ): Promise<void> {
-  if (!producer) return;
+  if (!producer) {
+    logger.info({ airportId }, "aerodrome geometry updated: no producer");
+    return;
+  }
   const event: AerodromeGeometryEvent = {
     eventType: "AERODROME_GEOMETRY_UPDATED",
     timestamp: new Date().toISOString(),
@@ -51,4 +54,8 @@ export async function publishAerodromeGeometryUpdated(
     topic: env.KAFKA_AERODROME_TOPIC,
     messages: [{ key: airportId, value: JSON.stringify(event) }],
   });
+  logger.info(
+    { airportId, topic: env.KAFKA_AERODROME_TOPIC },
+    "aerodrome geometry updated published",
+  );
 }

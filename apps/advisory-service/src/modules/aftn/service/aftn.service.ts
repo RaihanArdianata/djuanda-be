@@ -3,6 +3,10 @@ import { logger } from "@repo/logger";
 import { ApiError } from "@repo/shared";
 import { env } from "@/config/env";
 import {
+  type AftnEventType,
+  publishAftnEvent,
+} from "../../messaging/advisory.producer";
+import {
   type AftnProviderItem,
   fetchAftnMessages,
 } from "../../provider/aftn.provider";
@@ -17,6 +21,11 @@ import type {
   ListAftnQueryInput,
   SyncAftnInput,
 } from "../validator/aftn.validator";
+
+const outcomeToEventType: Record<"created" | "updated", AftnEventType> = {
+  created: "AFTN_RECEIVED",
+  updated: "AFTN_UPDATED",
+};
 
 export const AFTN_SOURCE = "navsim-aftn";
 
@@ -87,6 +96,16 @@ const persistItem = async (
       providerRaw: item as Record<string, unknown>,
     });
     result[outcome] += 1;
+    if (outcome === "created" || outcome === "updated") {
+      const eventType = outcomeToEventType[outcome];
+      const airports = [
+        parsed.message.departure,
+        parsed.message.destination,
+      ].filter((a): a is string => typeof a === "string" && a.length > 0);
+      for (const airportId of new Set(airports)) {
+        await publishAftnEvent(eventType, airportId);
+      }
+    }
   } catch (err) {
     result.failed += 1;
     logger.error(

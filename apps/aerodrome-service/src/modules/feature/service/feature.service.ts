@@ -7,11 +7,22 @@ import {
 import { ApiError } from "@repo/shared";
 import { eq, type SQL, sql } from "drizzle-orm";
 import z from "zod";
+import { publishAerodromeGeometryUpdated } from "../../messaging/aerodrome.producer";
 import type {
   CreateFeatureInput,
   ListFeatureQueryInput,
   UpdateFeatureInput,
 } from "../validator/feature.validator";
+
+function getAirportIdFromFeature(
+  feature: AerodromeFeature,
+): string | undefined {
+  const props = (feature.properties ?? {}) as Record<string, unknown>;
+  const airportId = props.airportId ?? props.icao;
+  return typeof airportId === "string" && airportId.length > 0
+    ? airportId
+    : undefined;
+}
 
 export const listFeatureResultSchema = z.object({
   items: z.array(aerodromeFeaturesSelectSchema),
@@ -80,7 +91,12 @@ export async function createFeature(
     })
     .returning();
 
-  return aerodromeFeaturesSelectSchema.parse(feature);
+  const created = aerodromeFeaturesSelectSchema.parse(feature);
+  const airportId = getAirportIdFromFeature(created);
+  if (airportId) {
+    await publishAerodromeGeometryUpdated(airportId);
+  }
+  return created;
 }
 
 export async function updateFeature(
@@ -95,7 +111,12 @@ export async function updateFeature(
     .returning();
   if (!updated)
     throw new ApiError("NOT_FOUND", { message: "Feature not found" });
-  return aerodromeFeaturesSelectSchema.parse(updated);
+  const updatedFeature = aerodromeFeaturesSelectSchema.parse(updated);
+  const airportId = getAirportIdFromFeature(updatedFeature);
+  if (airportId) {
+    await publishAerodromeGeometryUpdated(airportId);
+  }
+  return updatedFeature;
 }
 
 export async function deleteFeature(id: string): Promise<void> {
@@ -105,4 +126,9 @@ export async function deleteFeature(id: string): Promise<void> {
     .returning();
   if (!deleted)
     throw new ApiError("NOT_FOUND", { message: "Feature not found" });
+  const deletedFeature = aerodromeFeaturesSelectSchema.parse(deleted);
+  const airportId = getAirportIdFromFeature(deletedFeature);
+  if (airportId) {
+    await publishAerodromeGeometryUpdated(airportId);
+  }
 }

@@ -1,8 +1,7 @@
-import type { AftnMessage } from "@repo/database";
 import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { alertServiceEnv } from "@/config/env";
-import { cacheAftnMessage } from "@/context/advisory.context";
+import { getAftnContext } from "@/context/advisory.context";
 
 let consumer: Consumer | null = null;
 
@@ -44,9 +43,9 @@ export async function startAdvisoryConsumer(): Promise<void> {
         if (
           (raw.eventType === "AFTN_RECEIVED" ||
             raw.eventType === "AFTN_UPDATED") &&
-          raw.data?.message
+          raw.data?.airportId
         ) {
-          await cacheAftnMessage(raw.data.message as AftnMessage);
+          await getAftnContext(raw.data.airportId as string);
         }
       } catch (err) {
         logger.warn({ err }, "advisory consumer: failed to process message");

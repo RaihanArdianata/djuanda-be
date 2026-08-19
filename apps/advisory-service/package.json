@@ -17,6 +17,7 @@
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
+    "kafkajs": "^2.2.4",
     "node-cron": "^4.6.0",
     "zod": "^4.4.3"
   }

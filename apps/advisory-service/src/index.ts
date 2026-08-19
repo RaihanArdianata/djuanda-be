@@ -2,6 +2,10 @@ import { logger } from "@repo/logger";
 import { app } from "./app";
 import { env } from "./config/env";
 import {
+  startAdvisoryProducer,
+  stopAdvisoryProducer,
+} from "./modules/messaging/advisory.producer";
+import {
   startAdvisorySync,
   stopAdvisorySync,
 } from "./modules/scheduler/sync.loop";
@@ -13,13 +17,15 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 
+startAdvisoryProducer();
 startAdvisorySync();
 
 logger.info(`advisory-service listening on http://localhost:${port}`);
 
-const shutdown = (signal: string): Promise<never> => {
+const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down advisory-service gracefully`);
   stopAdvisorySync();
+  await stopAdvisoryProducer();
   server.stop();
   process.exit(0);
 };

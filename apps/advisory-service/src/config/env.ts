@@ -14,6 +14,9 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform((value) => value === "true"),
+
+  KAFKA_BROKERS: z.string().default(""),
+  KAFKA_ADVISORY_TOPIC: z.string().default("asmgcs.advisory"),
 });
 
 export type Env = z.infer<typeof envSchema>;

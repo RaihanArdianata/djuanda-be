@@ -33,4 +33,4 @@ CREATE INDEX "aftn_messages_registration_idx" ON "aftn_messages" USING btree ("r
 CREATE INDEX "aftn_messages_aircraft_type_idx" ON "aftn_messages" USING btree ("aircraft_type");--> statement-breakpoint
 CREATE INDEX "aftn_messages_departure_idx" ON "aftn_messages" USING btree ("departure");--> statement-breakpoint
 CREATE INDEX "aftn_messages_destination_idx" ON "aftn_messages" USING btree ("destination");--> statement-breakpoint
-DROP TYPE "public"."layer";
+DROP TYPE IF EXISTS "public"."layer";

@@ -61,7 +61,7 @@ export async function startTrackConsumer(): Promise<void> {
   });
 
   consumer = kafka.consumer({
-    groupId: alertServiceEnv.kafkaConsumerGroup,
+    groupId: `${alertServiceEnv.kafkaConsumerGroup}-track`,
   });
 
   consumer.on(consumer.events.CRASH, ({ payload }) => {
@@ -98,7 +98,7 @@ export async function startTrackConsumer(): Promise<void> {
     {
       brokers: alertServiceEnv.kafkaBrokers,
       topic: alertServiceEnv.kafkaTrackTopic,
-      groupId: alertServiceEnv.kafkaConsumerGroup,
+      groupId: `${alertServiceEnv.kafkaConsumerGroup}-track`,
     },
     "track consumer started",
   );

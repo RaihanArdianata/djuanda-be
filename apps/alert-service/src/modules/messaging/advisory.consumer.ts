@@ -19,7 +19,7 @@ export async function startAdvisoryConsumer(): Promise<void> {
   });
 
   consumer = kafka.consumer({
-    groupId: alertServiceEnv.kafkaConsumerGroup,
+    groupId: `${alertServiceEnv.kafkaConsumerGroup}-advisory`,
   });
 
   consumer.on(consumer.events.CRASH, ({ payload }) => {
@@ -57,7 +57,7 @@ export async function startAdvisoryConsumer(): Promise<void> {
     {
       brokers: alertServiceEnv.kafkaBrokers,
       topic: alertServiceEnv.kafkaAdvisoryTopic,
-      groupId: alertServiceEnv.kafkaConsumerGroup,
+      groupId: `${alertServiceEnv.kafkaConsumerGroup}-advisory`,
     },
     "advisory consumer started",
   );

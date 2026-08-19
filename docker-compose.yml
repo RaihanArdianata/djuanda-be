@@ -276,6 +276,7 @@ services:
       - "${WORKER_SERVICE_PORT:-3003}:${WORKER_SERVICE_PORT:-3003}"
 
   alert-service:
+    container_name: backend-djuanda-alert-service
     build:
       context: .
       args:
@@ -310,6 +311,7 @@ services:
   # node-cron polling logic. Only accessed via the gateway, same as
   # user-service/alert-service; not exposed on the host.
   weather-service:
+    container_name: backend-djuanda-weather-service
     build:
       context: .
       args:
@@ -341,6 +343,7 @@ services:
       start_period: 10s
 
   advisory-service:
+    container_name: backend-djuanda-advisory-service
     build:
       context: .
       args:
@@ -371,6 +374,7 @@ services:
 
   # Aerodrome mapping data (layers/features/import/export, GeoJSON) — only
   aerodrome-service:
+    container_name: backend-djuanda-aerodrome-service
     build:
       context: .
       args:
@@ -430,6 +434,7 @@ services:
       start_period: 10s
 
   playback-service:
+    container_name: backend-djuanda-playback-service
     build:
       context: .
       args:

@@ -1,4 +1,4 @@
-import { LAYER_VALUES } from "@repo/database";
+import { FEATURE_STATUS_VALUES, LAYER_VALUES } from "@repo/database";
 import z from "zod";
 
 export const geometrySchema = z.object({
@@ -16,6 +16,7 @@ export const geometrySchema = z.object({
 export const createFeatureSchema = z.object({
   layer: z.enum(LAYER_VALUES),
   name: z.string().max(255).optional(),
+  status: z.enum(FEATURE_STATUS_VALUES).optional(),
   geometry: geometrySchema,
   properties: z.record(z.string(), z.any()).default({}),
 });

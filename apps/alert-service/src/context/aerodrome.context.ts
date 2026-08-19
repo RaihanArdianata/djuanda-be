@@ -53,6 +53,7 @@ async function fetchAerodromeGeometry(
     .map((f) => ({
       id: f.id,
       layer: f.layer,
+      status: f.status,
       name: f.name,
       polygon: extractPolygon(f.geometry),
       properties: f.properties as Record<string, unknown>,
@@ -60,15 +61,22 @@ async function fetchAerodromeGeometry(
     .filter((f) => f.polygon.length > 0);
 
   const runways = processed
-    .filter((f) => f.layer === "RUNWAY")
+    .filter((f) => f.layer === "RUNWAY" && f.status !== "INACTIVE")
     .map((f) => ({
       id: f.id,
-      active: f.properties.active === true || f.properties.status === "ACTIVE",
+      active:
+        f.status === "ACTIVE" ||
+        f.properties.active === true ||
+        f.properties.status === "ACTIVE",
       polygon: f.polygon,
     }));
 
   const surfaces = processed
-    .filter((f) => f.layer === "TAXIWAY" || f.layer === "APRON")
+    .filter(
+      (f) =>
+        (f.layer === "TAXIWAY" || f.layer === "APRON") &&
+        f.status !== "INACTIVE",
+    )
     .map((f) => ({
       id: f.id,
       type: f.layer as "TAXIWAY" | "APRON",
@@ -76,7 +84,13 @@ async function fetchAerodromeGeometry(
     }));
 
   const areas = processed
-    .filter((f) => f.layer === "RESTRICTED" || f.properties.restricted === true)
+    .filter(
+      (f) =>
+        (f.layer === "RESTRICTED" ||
+          f.status === "RESTRICTED" ||
+          f.properties.restricted === true) &&
+        f.status !== "INACTIVE",
+    )
     .map((f) => ({
       id: f.id,
       type: (f.properties.type as string) ?? f.layer ?? "RESTRICTED",

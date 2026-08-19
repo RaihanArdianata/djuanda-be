@@ -19,6 +19,7 @@ export const LAYER_VALUES = [
   "RUNWAY",
   "TAXIWAY",
   "APRON",
+  "RESTRICTED",
   "TERMINAL",
   "PARKING",
   "BUILDING",
@@ -46,6 +47,15 @@ export const validationStatusEnum = pgEnum("validation_status", [
   "VALID",
   "INVALID",
 ]);
+export const FEATURE_STATUS_VALUES = [
+  "ACTIVE",
+  "INACTIVE",
+  "RESTRICTED",
+] as const;
+export const featureStatusEnum = pgEnum(
+  "feature_status",
+  FEATURE_STATUS_VALUES,
+);
 
 // Master data. Geometry & properties disimpan sebagai JSONB GeoJSON mentah
 // (bukan tipe geometry PostGIS) supaya tidak butuh extension tambahan di DB.
@@ -55,6 +65,7 @@ export const aerodromeFeatures = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     layer: varchar("layer", { length: 64 }).notNull(),
     name: varchar("name", { length: 255 }),
+    status: featureStatusEnum("status"),
     geometry: jsonb("geometry").notNull(),
     properties: jsonb("properties").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })

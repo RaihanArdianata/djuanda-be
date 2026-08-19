@@ -84,6 +84,7 @@ export async function createFeature(
     .values({
       layer: data.layer,
       name: data.name,
+      status: data.status,
       geometry: data.geometry,
       properties: data.properties,
       createdBy: data.userId,

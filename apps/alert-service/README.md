@@ -12,6 +12,16 @@ Di `packages/database/seed-alert-rules.ts` sudah disiapkan 5 aturan aktif untuk 
 | `AREA_PENETRATION` | WARNING | Track masuk restricted area. |
 | `DEVIATION` | WARNING | Track menyimpang dari expected route (horizontal, altitude, waktu). |
 
+## Arti Alert dalam Bahasa Simpel
+
+| Tipe Alert | Arti Sederhana |
+|------------|----------------|
+| `STCA` | Dua objek (pesawat/kendaraan) diprediksi bakal terlalu dekat dalam waktu singkat. Intinya: hampir tabrakan. |
+| `RUNWAY_INCURSION` | Ada pesawat atau kendaraan yang masuk ke landasan pacu (runway) yang sedang dipakai. Berbahaya karena bisa nabrak pesawat yang akan lepas landas/mendarat. |
+| `TAXIWAY_APRON_INCURSION` | Kendaraan/pesawat masuk ke jalan taxi atau area apron yang bukan jalurnya, atau keluar dari rute yang sudah ditentukan. |
+| `AREA_PENETRATION` | Ada objek yang masuk ke area terlarang/terbatas di bandara, seperti zona kritis atau zona keamanan. |
+| `DEVIATION` | Pesawat tidak mengikuti rute yang sudah dijanjikan, baik jalur, ketinggian, atau waktunya menyimpang dari rencana. |
+
 ## Data apa saja yang dipakai?
 
 | Sumber Data | Dari Mana | Dipakai Oleh Alert |

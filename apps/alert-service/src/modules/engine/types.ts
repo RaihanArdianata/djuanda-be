@@ -42,6 +42,7 @@ export interface WeatherContextData {
 export interface AerodromeFeatureContext {
   id: string;
   layer: string;
+  status: string | null;
   name?: string | null;
   polygon: [number, number][];
   properties: Record<string, unknown>;

@@ -20,7 +20,7 @@ export async function startWeatherConsumer(): Promise<void> {
   });
 
   consumer = kafka.consumer({
-    groupId: alertServiceEnv.kafkaConsumerGroup,
+    groupId: `${alertServiceEnv.kafkaConsumerGroup}-weather`,
   });
 
   consumer.on(consumer.events.CRASH, ({ payload }) => {
@@ -57,7 +57,7 @@ export async function startWeatherConsumer(): Promise<void> {
     {
       brokers: alertServiceEnv.kafkaBrokers,
       topic: alertServiceEnv.kafkaWeatherTopic,
-      groupId: alertServiceEnv.kafkaConsumerGroup,
+      groupId: `${alertServiceEnv.kafkaConsumerGroup}-weather`,
     },
     "weather consumer started",
   );

@@ -20,7 +20,7 @@ export async function startAerodromeConsumer(): Promise<void> {
   });
 
   consumer = kafka.consumer({
-    groupId: alertServiceEnv.kafkaConsumerGroup,
+    groupId: `${alertServiceEnv.kafkaConsumerGroup}-aerodrome`,
   });
 
   consumer.on(consumer.events.CRASH, ({ payload }) => {
@@ -61,7 +61,7 @@ export async function startAerodromeConsumer(): Promise<void> {
     {
       brokers: alertServiceEnv.kafkaBrokers,
       topic: alertServiceEnv.kafkaAerodromeTopic,
-      groupId: alertServiceEnv.kafkaConsumerGroup,
+      groupId: `${alertServiceEnv.kafkaConsumerGroup}-aerodrome`,
     },
     "aerodrome consumer started",
   );

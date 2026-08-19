@@ -289,6 +289,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: redpanda:9092
     depends_on:
       pgbouncer:
         condition: service_started
@@ -324,6 +325,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: redpanda:9092
     depends_on:
       pgbouncer:
         condition: service_started
@@ -356,6 +358,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: redpanda:9092
     depends_on:
       redis:
         condition: service_healthy
@@ -387,6 +390,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: redpanda:9092
     depends_on:
       pgbouncer:
         condition: service_started

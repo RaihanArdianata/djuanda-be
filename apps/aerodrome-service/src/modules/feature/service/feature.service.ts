@@ -15,8 +15,12 @@ import type {
 } from "../validator/feature.validator";
 
 function getAirportIdFromFeature(feature: {
+  airportId?: string | null;
   properties?: unknown;
 }): string | undefined {
+  if (typeof feature.airportId === "string" && feature.airportId.length > 0) {
+    return feature.airportId;
+  }
   const props = (feature.properties ?? {}) as Record<string, unknown>;
   const airportId = props.airportId ?? props.icao;
   return typeof airportId === "string" && airportId.length > 0
@@ -25,6 +29,7 @@ function getAirportIdFromFeature(feature: {
 }
 
 async function resolveAirportId(feature: {
+  airportId?: string | null;
   properties?: unknown;
 }): Promise<string | undefined> {
   const fromProps = getAirportIdFromFeature(feature);
@@ -96,12 +101,11 @@ export async function createFeature(
     .insert(aerodromeFeatures)
     .values({
       layer: data.layer,
+      airportId,
       name: data.name,
       status: data.status,
       geometry: data.geometry,
-      properties: airportId
-        ? { ...data.properties, airportId }
-        : data.properties,
+      properties: data.properties,
       createdBy: data.userId,
       updatedBy: data.userId,
     })
@@ -127,15 +131,15 @@ export async function updateFeature(
     throw new ApiError("NOT_FOUND", { message: "Feature not found" });
 
   const airportId = await resolveAirportId(existing);
-  const baseProperties =
-    patch.properties ?? (existing.properties as Record<string, unknown>);
-  const properties = airportId
-    ? { ...baseProperties, airportId }
-    : baseProperties;
 
   const [updated] = await db
     .update(aerodromeFeatures)
-    .set({ ...patch, properties, updatedBy: userId, updatedAt: new Date() })
+    .set({
+      ...patch,
+      airportId,
+      updatedBy: userId,
+      updatedAt: new Date(),
+    })
     .where(eq(aerodromeFeatures.id, id))
     .returning();
   if (!updated)

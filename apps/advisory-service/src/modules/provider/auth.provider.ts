@@ -5,7 +5,8 @@ const TOKEN_ENDPOINT = "/api/token";
 
 const EXPIRY_SAFETY_MARGIN_MS = 60_000;
 
-const FALLBACK_TOKEN_LIFETIME_MS = 15 * 60_000;
+const FALLBACK_TOKEN_LIFETIME_MS: number =
+  env.ADVISORY_PROVIDER_TOKEN_LIFETIME_MS;
 
 export class ProviderAuthError extends Error {
   readonly status: number;

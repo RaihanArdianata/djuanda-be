@@ -289,7 +289,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      KAFKA_BROKERS: redpanda:9092
+      ALERT_KAFKA_BROKERS: redpanda:9092
     depends_on:
       pgbouncer:
         condition: service_started

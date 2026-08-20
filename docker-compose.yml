@@ -290,6 +290,7 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       ALERT_KAFKA_BROKERS: redpanda:9092
+      AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
     depends_on:
       pgbouncer:
         condition: service_started

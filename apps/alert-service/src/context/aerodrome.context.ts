@@ -163,12 +163,37 @@ function extractPolygon(
 }
 
 async function fetchFeatures(): Promise<AerodromeFeature[]> {
-  const url = new URL("/features", alertServiceEnv.aerodromeServiceUrl);
-  url.searchParams.set("limit", "200");
-  const res = await fetch(url.toString());
-  if (!res.ok) return [];
-  const json = (await res.json()) as { data?: { items: AerodromeFeature[] } };
-  return json.data?.items ?? [];
+  const all: AerodromeFeature[] = [];
+  let page = 1;
+  const limit = 200;
+
+  while (true) {
+    const url = new URL(
+      "/aerodrome/features",
+      alertServiceEnv.aerodromeServiceUrl,
+    );
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("limit", String(limit));
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      logger.warn(
+        { status: res.status, url: url.toString() },
+        "fetchFeatures: aerodrome-service returned non-ok status",
+      );
+      break;
+    }
+    const json = (await res.json()) as {
+      data?: { items: AerodromeFeature[]; total?: number };
+    };
+    const items = json.data?.items ?? [];
+    if (items.length === 0) break;
+    all.push(...items);
+    if (items.length < limit) break;
+    if (json.data?.total && all.length >= json.data.total) break;
+    page++;
+  }
+
+  return all;
 }
 
 function filterByAirport(

@@ -2,6 +2,7 @@ export * from "./aerodrome";
 export * from "./aeroswarm";
 export * from "./aftn";
 export * from "./alerts";
+export * from "./ashtam";
 export * from "./auth";
 export * from "./logs";
 export * from "./notams";

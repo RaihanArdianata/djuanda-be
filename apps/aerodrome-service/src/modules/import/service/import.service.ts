@@ -7,6 +7,7 @@ import {
   aerodromeImportFeaturesSelectSchema,
   aerodromeImports,
   db,
+  FEATURE_STATUS_VALUES,
   type LayerName,
 } from "@repo/database";
 import { ApiError } from "@repo/shared";
@@ -242,19 +243,39 @@ export async function commitImport(
 
     if (session.features.length > 0) {
       await tx.insert(aerodromeFeatures).values(
-        session.features.map((f) => ({
-          layer: f.layer,
-          airportId,
-          geometry: f.geometry,
-          properties: airportId
-            ? {
-                ...((f.properties ?? {}) as Record<string, unknown>),
-                airportId,
-              }
-            : f.properties,
-          createdBy: userId,
-          updatedBy: userId,
-        })),
+        session.features.map((f) => {
+          const previousProps = (f.properties ?? {}) as Record<string, unknown>;
+          const importedStatus =
+            typeof previousProps.status === "string" &&
+            FEATURE_STATUS_VALUES.includes(
+              previousProps.status as (typeof FEATURE_STATUS_VALUES)[number],
+            )
+              ? previousProps.status
+              : "ACTIVE";
+          const active =
+            typeof previousProps.active === "boolean"
+              ? previousProps.active
+              : importedStatus === "ACTIVE";
+
+          return {
+            layer: f.layer,
+            name:
+              (previousProps.name as string | undefined) ??
+              (previousProps.ref as string | undefined) ??
+              null,
+            airportId,
+            status: importedStatus as (typeof FEATURE_STATUS_VALUES)[number],
+            geometry: f.geometry,
+            properties: {
+              ...previousProps,
+              ...(airportId ? { airportId } : {}),
+              status: importedStatus,
+              active,
+            },
+            createdBy: userId,
+            updatedBy: userId,
+          };
+        }),
       );
     }
 

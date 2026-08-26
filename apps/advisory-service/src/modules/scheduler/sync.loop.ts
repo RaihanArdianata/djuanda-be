@@ -37,8 +37,6 @@ export const runAftnSyncCycle = async (): Promise<void> => {
     await syncAftnIncremental();
   } catch (err) {
     logger.error({ err }, "aftn synchronization cycle failed");
-
-    throw err;
   }
 };
 

@@ -11,8 +11,6 @@ export const runNotamSyncCycle = async (): Promise<void> => {
     await syncNotamIncremental();
   } catch (err) {
     logger.error({ err }, "notam synchronization cycle failed");
-
-    throw err;
   }
 };
 

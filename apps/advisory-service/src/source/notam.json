@@ -1,0 +1,24 @@
+{
+  "data": [
+    {
+      "header": null,
+      "msg_id": "B0617/26 NOTAMN",
+      "fir": "WIIF",
+      "qcode": "QWULW",
+      "traffic": "IV",
+      "purpose": "BO",
+      "scope": "W",
+      "lower_limit": "000",
+      "upper_limit": "002",
+      "coordinates": "0736S11012E001",
+      "location": "WIIF",
+      "effective_time": "2026-05-30 23:00:00",
+      "expiration_time": "2026-05-31 15:00:00",
+      "schedule": "30 2300-0300 31 1000-1500",
+      "remark": "UA VEHICLE ACT WILL TAKE PLACE WI COOR AS FLW: 073625S1101205E - 073624S1101233E - 073632S1101231E - 073632S1101204E - 073625S1101205E",
+      "lower_altitude_limit": "SFC",
+      "upper_altitude_limit": "197FT AMSL",
+      "raw": "(B0617/26 NOTAMN\nQ)WIIF/QWULW/IV/BO/W/000/002/0736S11012E001\nA)WIIF\nB)2605302300\nC)2605311500\nD)30 2300-0300 31 1000-1500\nE)UA VEHICLE ACT WILL TAKE PLACE WI COOR AS FLW:\n073625S1101205E - 073624S1101233E - 073632S1101231E -\n073632S1101204E - 073625S1101205E\nF)SFC\nG)197FT AMSL)"
+    }
+  ]
+}

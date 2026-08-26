@@ -1,7 +1,7 @@
 import { aerodromeFeatures, db } from "@repo/database";
 import { logger } from "@repo/logger";
 import { ApiError } from "@repo/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   publishAerodromeGeometryUpdated,
   publishNotamEvent,
@@ -150,6 +150,20 @@ function isPointInFeature(
   return pointInPolygon(point, polygon);
 }
 
+function extractFeatureRef(item: NotamSourceItem): string | null {
+  const raw = typeof item.raw === "string" ? item.raw : undefined;
+  const remark = typeof item.remark === "string" ? item.remark : undefined;
+  const source = [raw, remark].filter(Boolean).join(" ");
+  const matches: string[] = [];
+  const pattern = /(?:TAXIWAY|TWY|RWY|RUNWAY|APRON)\s+([A-Z][A-Z0-9]+)/gi;
+  let match: RegExpExecArray | null = null;
+  do {
+    match = pattern.exec(source);
+    if (match) matches.push(match[1].toUpperCase());
+  } while (match !== null);
+  return matches[0] ?? null;
+}
+
 export async function triggerNotam({
   body,
   airportId,
@@ -197,9 +211,25 @@ export async function triggerNotam({
     return f.airportId == null && icao == null && featureAirportId == null;
   });
 
-  const matched = features.find((feature) =>
+  let matched = features.find((feature) =>
     isPointInFeature(notamPoint, feature),
   );
+
+  if (!matched) {
+    const notamRef = extractFeatureRef(body);
+    if (notamRef) {
+      matched = features.find((f) => {
+        const props = (f.properties ?? {}) as Record<string, unknown>;
+        const ref = props.ref as string | undefined;
+        const name = props.name as string | undefined;
+        return (
+          f.name?.toUpperCase() === notamRef ||
+          ref?.toUpperCase() === notamRef ||
+          name?.toUpperCase() === notamRef
+        );
+      });
+    }
+  }
 
   logger.info(
     {

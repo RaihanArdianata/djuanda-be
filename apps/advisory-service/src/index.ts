@@ -18,8 +18,8 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 
-// startAdvisoryProducer();
-// startAdvisorySync();
+startAdvisoryProducer();
+startAdvisorySync();
 startNotamSync();
 
 logger.info(`advisory-service listening on http://localhost:${port}`);

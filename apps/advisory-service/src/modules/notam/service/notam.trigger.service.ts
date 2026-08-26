@@ -184,15 +184,34 @@ export async function triggerNotam({
 
   const notamLayers = ["RUNWAY", "TAXIWAY", "APRON", "RESTRICTED"] as const;
 
-  const features = await db.query.aerodromeFeatures.findMany({
-    where: and(
-      eq(aerodromeFeatures.airportId, airportId),
-      inArray(aerodromeFeatures.layer, [...notamLayers]),
-    ),
+  const candidates = await db.query.aerodromeFeatures.findMany({
+    where: inArray(aerodromeFeatures.layer, [...notamLayers]),
+  });
+
+  const features = candidates.filter((f) => {
+    if (f.airportId === airportId) return true;
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    const icao = props.icao;
+    const featureAirportId = props.airportId;
+    if (icao === airportId || featureAirportId === airportId) return true;
+    return f.airportId == null && icao == null && featureAirportId == null;
   });
 
   const matched = features.find((feature) =>
     isPointInFeature(notamPoint, feature),
+  );
+
+  logger.info(
+    {
+      airportId,
+      notamPoint,
+      candidates: candidates.length,
+      matchedLayerCount: features.length,
+      matchedId: matched?.id,
+      matchedLayer: matched?.layer,
+      matchedName: matched?.name,
+    },
+    "NOTAM aerodrome feature lookup",
   );
 
   const notamProperties = {

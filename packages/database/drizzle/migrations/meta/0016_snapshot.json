@@ -1,5 +1,5 @@
 {
-  "id": "0324625b-127f-4869-9738-e56c378dbfd2",
+  "id": "4625fcaf-5f0f-4ba9-8f2e-e185f31783c6",
   "prevId": "fee1816a-1e69-4573-b2bf-03ce403f8f44",
   "version": "7",
   "dialect": "postgresql",
@@ -1749,6 +1749,356 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.notam_messages": {
+      "name": "notam_messages",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_id": {
+          "name": "provider_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "header": {
+          "name": "header",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "series": {
+          "name": "series",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "number": {
+          "name": "number",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "year": {
+          "name": "year",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fir": {
+          "name": "fir",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "icao_location": {
+          "name": "icao_location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "qcode": {
+          "name": "qcode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "traffic": {
+          "name": "traffic",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lower_limit": {
+          "name": "lower_limit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upper_limit": {
+          "name": "upper_limit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "coordinates": {
+          "name": "coordinates",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "effective_from": {
+          "name": "effective_from",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "effective_to": {
+          "name": "effective_to",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "schedule": {
+          "name": "schedule",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lower_altitude": {
+          "name": "lower_altitude",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "upper_altitude": {
+          "name": "upper_altitude",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "subject": {
+          "name": "subject",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "content_hash": {
+          "name": "content_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw": {
+          "name": "raw",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "notam_messages_provider_id_idx": {
+          "name": "notam_messages_provider_id_idx",
+          "columns": [
+            {
+              "expression": "provider_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_icao_location_idx": {
+          "name": "notam_messages_icao_location_idx",
+          "columns": [
+            {
+              "expression": "icao_location",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_fir_idx": {
+          "name": "notam_messages_fir_idx",
+          "columns": [
+            {
+              "expression": "fir",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_qcode_idx": {
+          "name": "notam_messages_qcode_idx",
+          "columns": [
+            {
+              "expression": "qcode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_status_idx": {
+          "name": "notam_messages_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_type_idx": {
+          "name": "notam_messages_type_idx",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_effective_from_idx": {
+          "name": "notam_messages_effective_from_idx",
+          "columns": [
+            {
+              "expression": "effective_from",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_effective_to_idx": {
+          "name": "notam_messages_effective_to_idx",
+          "columns": [
+            {
+              "expression": "effective_to",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "notam_messages_series_number_year_idx": {
+          "name": "notam_messages_series_number_year_idx",
+          "columns": [
+            {
+              "expression": "series",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "year",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "notam_messages_source_series_number_year_unique": {
+          "name": "notam_messages_source_series_number_year_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "source",
+            "series",
+            "number",
+            "year"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.notification_recipients": {
       "name": "notification_recipients",
       "schema": "",
@@ -2431,283 +2781,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.ashtam_messages": {
-      "name": "ashtam_messages",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_id": {
-          "name": "provider_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ASHTAM'"
-        },
-        "number": {
-          "name": "number",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "header": {
-          "name": "header",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "affected_fir": {
-          "name": "affected_fir",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "effective_from": {
-          "name": "effective_from",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "effective_to": {
-          "name": "effective_to",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "volcano_name": {
-          "name": "volcano_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "volcano_coordinates": {
-          "name": "volcano_coordinates",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "colour_code": {
-          "name": "colour_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "volcanic_ash": {
-          "name": "volcanic_ash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "volcanic_ash_direction": {
-          "name": "volcanic_ash_direction",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "air_routes_affected": {
-          "name": "air_routes_affected",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "air_routes_closure": {
-          "name": "air_routes_closure",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "information_source": {
-          "name": "information_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "remark": {
-          "name": "remark",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'ACTIVE'"
-        },
-        "content_hash": {
-          "name": "content_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "raw": {
-          "name": "raw",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider_raw": {
-          "name": "provider_raw",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "ashtam_messages_provider_id_idx": {
-          "name": "ashtam_messages_provider_id_idx",
-          "columns": [
-            {
-              "expression": "provider_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_affected_fir_idx": {
-          "name": "ashtam_messages_affected_fir_idx",
-          "columns": [
-            {
-              "expression": "affected_fir",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_volcano_name_idx": {
-          "name": "ashtam_messages_volcano_name_idx",
-          "columns": [
-            {
-              "expression": "volcano_name",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_colour_code_idx": {
-          "name": "ashtam_messages_colour_code_idx",
-          "columns": [
-            {
-              "expression": "colour_code",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_status_idx": {
-          "name": "ashtam_messages_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_effective_from_idx": {
-          "name": "ashtam_messages_effective_from_idx",
-          "columns": [
-            {
-              "expression": "effective_from",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ashtam_messages_effective_to_idx": {
-          "name": "ashtam_messages_effective_to_idx",
-          "columns": [
-            {
-              "expression": "effective_to",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "ashtam_messages_source_provider_id_unique": {
-          "name": "ashtam_messages_source_provider_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "source",
-            "provider_id"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

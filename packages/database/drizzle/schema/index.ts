@@ -5,6 +5,7 @@ export * from "./alerts";
 export * from "./ashtam";
 export * from "./auth";
 export * from "./logs";
+export * from "./notam";
 export * from "./notams";
 export * from "./notifications";
 export * from "./rbac";

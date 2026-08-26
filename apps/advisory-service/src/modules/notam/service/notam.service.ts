@@ -1,8 +1,15 @@
 import { logger } from "@repo/logger";
+import { resolveIncrementalWindow } from "../../aftn/service/aftn.service";
 import { fetchNotamHistories } from "../../client/navsim.client";
+import {
+  type NotamEventType,
+  publishNotamEvent,
+} from "../../messaging/advisory.producer";
+import { fetchNotamMessages } from "../../provider/notam.provider";
 import type { NormalizedNotamMessage, NotamSourceItem } from "../parser/common";
 import { parseNotamMessage } from "../parser/notam.parser";
 import {
+  findLatestNotamDatetime,
   type NotamUpsertOutcome,
   upsertNotamMessage,
 } from "../repository/notam.repository";
@@ -14,6 +21,13 @@ import {
 const NOTAM_HISTORY_SIZE = 2000;
 
 export const NOTAM_MOCK_SOURCE = "notam-mock";
+
+export const NOTAM_PROVIDER_SOURCE = "advisory-provider-notam";
+
+const outcomeToEventType: Record<"created" | "updated", NotamEventType> = {
+  created: "NOTAM_RECEIVED",
+  updated: "NOTAM_UPDATED",
+};
 
 export interface NotamSyncResult {
   totalReceived: number;
@@ -95,6 +109,87 @@ export const syncNotamFromSource = async (
   );
 
   return result;
+};
+
+export interface SyncNotamInput {
+  startDate: Date;
+  endDate: Date;
+}
+
+const persistNotamProviderItem = async (
+  item: NotamSourceItem,
+  result: NotamSyncResult,
+): Promise<void> => {
+  const parsed = parseNotamMessage(item);
+
+  if (!parsed.ok) {
+    result.failed += 1;
+    logger.warn(
+      { reason: parsed.reason, item },
+      "notam message rejected during validation",
+    );
+    return;
+  }
+
+  try {
+    const outcome = await upsertNotamMessage(parsed.message, {
+      source: NOTAM_PROVIDER_SOURCE,
+    });
+    result[outcome] += 1;
+
+    if (outcome === "created" || outcome === "updated") {
+      const eventType = outcomeToEventType[outcome];
+      const airportId = parsed.message.icaoLocation;
+
+      if (airportId) {
+        await publishNotamEvent(eventType, airportId);
+      }
+    }
+  } catch (err) {
+    result.failed += 1;
+    logger.error(
+      { err, providerId: parsed.message.providerId },
+      "failed to persist notam message",
+    );
+  }
+};
+
+export const syncNotamWindow = async (
+  startDate: Date,
+  endDate: Date,
+): Promise<NotamSyncResult> => {
+  const startedAt = Date.now();
+  const items = await fetchNotamMessages({ startDate, endDate });
+  const result = emptyNotamSyncResult();
+  result.totalReceived = items.length;
+
+  for (const item of items) {
+    await persistNotamProviderItem(item, result);
+  }
+
+  logger.info(
+    {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      durationMs: Date.now() - startedAt,
+      ...result,
+    },
+    "notam synchronization finished",
+  );
+
+  return result;
+};
+
+export const syncNotam = async (
+  input: SyncNotamInput,
+): Promise<NotamSyncResult> =>
+  await syncNotamWindow(input.startDate, input.endDate);
+
+export const syncNotamIncremental = async (): Promise<NotamSyncResult> => {
+  const latestStoredAt = await findLatestNotamDatetime();
+  const window = resolveIncrementalWindow(latestStoredAt);
+
+  return await syncNotamWindow(window.startDate, window.endDate);
 };
 
 export async function getNotamHistories(): Promise<unknown> {

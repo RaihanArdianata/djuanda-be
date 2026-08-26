@@ -18,6 +18,7 @@ const envSchema = z.object({
 
   KAFKA_BROKERS: z.string().default(""),
   KAFKA_ADVISORY_TOPIC: z.string().default("asmgcs.advisory"),
+  KAFKA_AERODROME_TOPIC: z.string().default("asmgcs.aerodrome"),
   ADVISORY_NOTAM_SYNC_INTERVAL_MS: z.coerce.number().default(1_800_000),
   ADVISORY_NOTAM_SYNC_ENABLED: z
     .enum(["true", "false"])

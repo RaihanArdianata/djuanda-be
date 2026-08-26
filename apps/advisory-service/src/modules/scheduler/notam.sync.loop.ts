@@ -1,18 +1,14 @@
 import { logger } from "@repo/logger";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
-import { publishNotamEvent } from "../messaging/advisory.producer";
-import { syncNotamFromSource } from "../notam/service/notam.service";
+import { syncNotamIncremental } from "../notam/service/notam.service";
 import { intervalMsToCronExpression } from "./sync.loop";
-
-const NOTAM_AIRPORT_ID: string = process.env.AEROSWARM_AIRPORT_ID ?? "WARR";
 
 let notamTask: ScheduledTask | null = null;
 
 export const runNotamSyncCycle = async (): Promise<void> => {
   try {
-    await syncNotamFromSource();
-    await publishNotamEvent("NOTAM_UPDATED", NOTAM_AIRPORT_ID);
+    await syncNotamIncremental();
   } catch (err) {
     logger.error({ err }, "notam synchronization cycle failed");
 

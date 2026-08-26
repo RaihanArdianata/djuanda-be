@@ -1,5 +1,5 @@
 import { db, type NotamMessage, notamMessages } from "@repo/database";
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import type { NormalizedNotamMessage } from "../parser/common";
 import { computeNotamContentHash } from "./notam.identity";
 
@@ -105,3 +105,11 @@ export const findNotamByIdentity = async (
       eq(notamMessages.year, year),
     ),
   });
+
+export const findLatestNotamDatetime = async (): Promise<Date | null> => {
+  const [row] = await db
+    .select({ latest: max(notamMessages.effectiveFrom) })
+    .from(notamMessages);
+
+  return row?.latest ?? null;
+};

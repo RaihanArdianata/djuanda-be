@@ -9,7 +9,7 @@ import {
 import type { FetchNotamParams } from "../../provider/notam.provider";
 import { fetchNotamMessages } from "../../provider/notam.provider";
 import { extractPolygon } from "../lib/aerodrome-polygon";
-import type { NotamSourceItem } from "../parser/common";
+import type { NormalizedNotamMessage, NotamSourceItem } from "../parser/common";
 import { parseNotamMessage } from "../parser/notam.parser";
 import {
   type NotamUpsertOutcome,
@@ -155,7 +155,8 @@ function extractFeatureRef(item: NotamSourceItem): string | null {
   const remark = typeof item.remark === "string" ? item.remark : undefined;
   const source = [raw, remark].filter(Boolean).join(" ");
   const matches: string[] = [];
-  const pattern = /(?:TAXIWAY|TWY|RWY|RUNWAY|APRON)\s+([A-Z][A-Z0-9]+)/gi;
+  const pattern =
+    /(?:TAXIWAY|TWY|RWY|RUNWAY|APRON)\s+([A-Z0-9]+(?:\/[A-Z0-9]+)?)/gi;
   let match: RegExpExecArray | null = null;
   do {
     match = pattern.exec(source);
@@ -164,6 +165,56 @@ function extractFeatureRef(item: NotamSourceItem): string | null {
   return matches[0] ?? null;
 }
 
+function isNotamClosure(item: NotamSourceItem): boolean {
+  const raw = typeof item.raw === "string" ? item.raw : "";
+  const remark = typeof item.remark === "string" ? item.remark : "";
+  const source = `${raw} ${remark}`.toUpperCase();
+  return /\b(?:CLSD|CLOSED|RESTRICTED)\b/i.test(source);
+}
+
+async function reactivateNotamFeatures(
+  notam: NormalizedNotamMessage,
+  airportId: string,
+): Promise<string[]> {
+  const features = await db.query.aerodromeFeatures.findMany({
+    where: eq(aerodromeFeatures.airportId, airportId),
+  });
+
+  const reactivatedIds: string[] = [];
+  for (const f of features) {
+    const props = (f.properties ?? {}) as Record<string, unknown>;
+    if (
+      props.notamSeries === notam.series &&
+      props.notamNumber === notam.number &&
+      props.notamYear === notam.year &&
+      f.status !== "ACTIVE"
+    ) {
+      const previousProperties = (f.properties ?? {}) as Record<
+        string,
+        unknown
+      >;
+
+      await db
+        .update(aerodromeFeatures)
+        .set({
+          status: "ACTIVE",
+          properties: {
+            ...previousProperties,
+            status: "ACTIVE",
+            active: true,
+          },
+          updatedAt: new Date(),
+        })
+        .where(eq(aerodromeFeatures.id, f.id));
+
+      reactivatedIds.push(f.id);
+    }
+  }
+
+  return reactivatedIds;
+}
+
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: NOTAM trigger coordinates multiple feature layers and status cases by design.
 export async function triggerNotam({
   body,
   airportId,
@@ -183,13 +234,40 @@ export async function triggerNotam({
 
   await publishNotamEvent("NOTAM_UPDATED", airportId);
 
+  let geometryUpdated = false;
+
+  if (message.type === "NOTAMC" || message.type === "NOTAMR") {
+    const reactivated = await reactivateNotamFeatures(message, airportId);
+    if (reactivated.length > 0) {
+      geometryUpdated = true;
+    }
+    logger.info(
+      { notamType: message.type, reactivated: reactivated.length },
+      "NOTAM reactivated features",
+    );
+    if (message.type === "NOTAMC") {
+      if (geometryUpdated) {
+        await publishAerodromeGeometryUpdated(airportId);
+      }
+      return {
+        notamOutcome: outcome,
+        airportId,
+        notam: body,
+      };
+    }
+  }
+
   const notamCoord = parseNotamCoordinate(message.coordinates);
 
   if (!notamCoord) {
-    logger.warn(
-      { airportId, coordinates: message.coordinates },
-      "NOTAM coordinates could not be parsed",
-    );
+    if (geometryUpdated) {
+      await publishAerodromeGeometryUpdated(airportId);
+    } else {
+      logger.warn(
+        { airportId, coordinates: message.coordinates },
+        "NOTAM coordinates could not be parsed",
+      );
+    }
     return { notamOutcome: outcome, airportId, notam: body };
   }
 
@@ -246,6 +324,9 @@ export async function triggerNotam({
 
   const notamProperties = {
     notamId: message.providerId,
+    notamSeries: message.series,
+    notamNumber: message.number,
+    notamYear: message.year,
     notamQcode: message.qcode,
     notamEffectiveFrom: message.effectiveFrom.toISOString(),
     notamEffectiveTo: message.effectiveTo.toISOString(),
@@ -268,27 +349,38 @@ export async function triggerNotam({
 
   if (matched) {
     const newStatus =
-      matched.layer === "RESTRICTED" ? "RESTRICTED" : "INACTIVE";
+      matched.layer === "RESTRICTED"
+        ? "RESTRICTED"
+        : isNotamClosure(body)
+          ? "INACTIVE"
+          : undefined;
 
-    const previousProperties = (matched.properties ?? {}) as Record<
-      string,
-      unknown
-    >;
+    if (newStatus) {
+      const previousProperties = (matched.properties ?? {}) as Record<
+        string,
+        unknown
+      >;
 
-    await db
-      .update(aerodromeFeatures)
-      .set({
+      await db
+        .update(aerodromeFeatures)
+        .set({
+          status: newStatus,
+          properties: buildAerodromeProperties(previousProperties, newStatus),
+          updatedAt: new Date(),
+        })
+        .where(eq(aerodromeFeatures.id, matched.id));
+
+      matchedFeature = {
+        id: matched.id,
+        name: matched.name,
         status: newStatus,
-        properties: buildAerodromeProperties(previousProperties, newStatus),
-        updatedAt: new Date(),
-      })
-      .where(eq(aerodromeFeatures.id, matched.id));
-
-    matchedFeature = {
-      id: matched.id,
-      name: matched.name,
-      status: newStatus,
-    };
+      };
+    } else {
+      logger.info(
+        { matchedId: matched.id, matchedName: matched.name },
+        "NOTAM matched but not a closure; no status change",
+      );
+    }
   } else {
     logger.warn(
       { airportId, coordinates: message.coordinates },
@@ -323,7 +415,9 @@ export async function triggerNotam({
     matchedFeature = inserted[0] ?? undefined;
   }
 
-  await publishAerodromeGeometryUpdated(airportId);
+  if (matchedFeature !== undefined || geometryUpdated) {
+    await publishAerodromeGeometryUpdated(airportId);
+  }
 
   return {
     notamOutcome: outcome,

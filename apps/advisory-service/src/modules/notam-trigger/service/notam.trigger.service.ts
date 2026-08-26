@@ -15,7 +15,8 @@ import {
   type NotamUpsertOutcome,
   upsertNotamMessage,
 } from "../repository/notam.repository";
-import { NOTAM_PROVIDER_SOURCE } from "./notam.service";
+
+const NOTAM_PROVIDER_SOURCE = "advisory-provider-notam";
 
 export interface TriggerNotamInput {
   body: NotamSourceItem;

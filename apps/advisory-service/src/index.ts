@@ -5,7 +5,6 @@ import {
   startAdvisoryProducer,
   stopAdvisoryProducer,
 } from "./modules/messaging/advisory.producer";
-import { startNotamSync } from "./modules/scheduler/notam.sync.loop";
 import {
   startAdvisorySync,
   stopAdvisorySync,
@@ -20,7 +19,6 @@ const server = Bun.serve({
 
 startAdvisoryProducer();
 startAdvisorySync();
-startNotamSync();
 
 logger.info(`advisory-service listening on http://localhost:${port}`);
 

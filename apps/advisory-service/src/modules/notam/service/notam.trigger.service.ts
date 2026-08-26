@@ -1,7 +1,7 @@
 import { aerodromeFeatures, db } from "@repo/database";
 import { logger } from "@repo/logger";
 import { ApiError } from "@repo/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   publishAerodromeGeometryUpdated,
   publishNotamEvent,
@@ -38,6 +38,15 @@ type LatLon = [number, number];
 const COORDINATE_PATTERN =
   /^(\d{2})(\d{2})(\d{2})?([NS])(\d{3})(\d{2})(\d{2})?([EW])(\d{3})?$/;
 
+const DEFAULT_NOTAM_RADIUS_M = 100;
+const METERS_PER_DEGREE_LAT = 111320;
+
+interface ParsedNotamCoordinate {
+  lat: number;
+  lon: number;
+  radius: number | null;
+}
+
 function toDecimal(
   degrees: number,
   minutes: number,
@@ -48,7 +57,31 @@ function toDecimal(
   return hemisphere === "S" || hemisphere === "W" ? -value : value;
 }
 
-function parseNotamCoordinate(value: string | null): LatLon | null {
+function metersPerDegreeLon(latitude: number): number {
+  return METERS_PER_DEGREE_LAT * Math.cos((latitude * Math.PI) / 180);
+}
+
+function buildCirclePolygon(
+  lat: number,
+  lon: number,
+  radiusMeters: number,
+  segments = 32,
+): { type: "Polygon"; coordinates: [number, number][][] } {
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= segments; i++) {
+    const theta = (2 * Math.PI * i) / segments;
+    const dx = radiusMeters * Math.cos(theta);
+    const dy = radiusMeters * Math.sin(theta);
+    const dLat = dy / METERS_PER_DEGREE_LAT;
+    const dLon = dx / metersPerDegreeLon(lat);
+    ring.push([lon + dLon, lat + dLat]);
+  }
+  return { type: "Polygon", coordinates: [ring] };
+}
+
+function parseNotamCoordinate(
+  value: string | null,
+): ParsedNotamCoordinate | null {
   if (!value) {
     return null;
   }
@@ -58,7 +91,8 @@ function parseNotamCoordinate(value: string | null): LatLon | null {
     return null;
   }
 
-  const [, latDeg, latMin, latSec, latH, lonDeg, lonMin, lonSec, lonH] = match;
+  const [, latDeg, latMin, latSec, latH, lonDeg, lonMin, lonSec, lonH, radius] =
+    match;
 
   const lat = toDecimal(
     Number(latDeg),
@@ -73,7 +107,11 @@ function parseNotamCoordinate(value: string | null): LatLon | null {
     lonH as "E" | "W",
   );
 
-  return [lat, lon];
+  return {
+    lat,
+    lon,
+    radius: radius ? Number(radius) : null,
+  };
 }
 
 function pointInPolygon(point: LatLon, polygon: LatLon[]): boolean {
@@ -131,9 +169,9 @@ export async function triggerNotam({
 
   await publishNotamEvent("NOTAM_UPDATED", airportId);
 
-  const notamPoint = parseNotamCoordinate(message.coordinates);
+  const notamCoord = parseNotamCoordinate(message.coordinates);
 
-  if (!notamPoint) {
+  if (!notamCoord) {
     logger.warn(
       { airportId, coordinates: message.coordinates },
       "NOTAM coordinates could not be parsed",
@@ -141,45 +179,92 @@ export async function triggerNotam({
     return { notamOutcome: outcome, airportId, notam: body };
   }
 
-  const taxiways = await db.query.aerodromeFeatures.findMany({
+  const notamPoint: LatLon = [notamCoord.lat, notamCoord.lon];
+  const notamRadius = notamCoord.radius ?? DEFAULT_NOTAM_RADIUS_M;
+
+  const notamLayers = ["RUNWAY", "TAXIWAY", "APRON", "RESTRICTED"] as const;
+
+  const features = await db.query.aerodromeFeatures.findMany({
     where: and(
       eq(aerodromeFeatures.airportId, airportId),
-      eq(aerodromeFeatures.layer, "TAXIWAY"),
+      inArray(aerodromeFeatures.layer, [...notamLayers]),
     ),
   });
 
-  const matched = taxiways.find((feature) =>
+  const matched = features.find((feature) =>
     isPointInFeature(notamPoint, feature),
   );
 
-  if (!matched) {
+  const notamProperties = {
+    notamId: message.providerId,
+    notamQcode: message.qcode,
+    notamEffectiveFrom: message.effectiveFrom.toISOString(),
+    notamEffectiveTo: message.effectiveTo.toISOString(),
+    notamTriggeredAt: new Date().toISOString(),
+  };
+
+  let matchedFeature: TriggerNotamResult["matchedFeature"];
+
+  if (matched) {
+    const newStatus =
+      matched.layer === "RESTRICTED" ? "RESTRICTED" : "INACTIVE";
+
+    const previousProperties = (matched.properties ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+    await db
+      .update(aerodromeFeatures)
+      .set({
+        status: newStatus,
+        properties: {
+          ...previousProperties,
+          ...notamProperties,
+        },
+        updatedAt: new Date(),
+      })
+      .where(eq(aerodromeFeatures.id, matched.id));
+
+    matchedFeature = {
+      id: matched.id,
+      name: matched.name,
+      status: newStatus,
+    };
+  } else {
     logger.warn(
       { airportId, coordinates: message.coordinates },
-      "NOTAM point did not match any taxiway",
+      "NOTAM point did not match any existing aerodrome feature; creating temporary restricted area",
     );
-    return { notamOutcome: outcome, airportId, notam: body };
+
+    const inserted = await db
+      .insert(aerodromeFeatures)
+      .values({
+        airportId,
+        layer: "RESTRICTED",
+        name: message.providerId,
+        status: "RESTRICTED",
+        geometry: buildCirclePolygon(
+          notamCoord.lat,
+          notamCoord.lon,
+          notamRadius,
+        ),
+        properties: {
+          ...notamProperties,
+          restricted: true,
+          source: "NOTAM",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning({
+        id: aerodromeFeatures.id,
+        name: aerodromeFeatures.name,
+        status: aerodromeFeatures.status,
+      });
+
+    matchedFeature = inserted[0] ?? undefined;
   }
-
-  const previousProperties = (matched.properties ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  await db
-    .update(aerodromeFeatures)
-    .set({
-      status: "INACTIVE",
-      properties: {
-        ...previousProperties,
-        notamId: message.providerId,
-        notamQcode: message.qcode,
-        notamEffectiveFrom: message.effectiveFrom.toISOString(),
-        notamEffectiveTo: message.effectiveTo.toISOString(),
-        notamTriggeredAt: new Date().toISOString(),
-      },
-      updatedAt: new Date(),
-    })
-    .where(eq(aerodromeFeatures.id, matched.id));
 
   await publishAerodromeGeometryUpdated(airportId);
 
@@ -187,11 +272,7 @@ export async function triggerNotam({
     notamOutcome: outcome,
     airportId,
     notam: body,
-    matchedFeature: {
-      id: matched.id,
-      name: matched.name,
-      status: "INACTIVE",
-    },
+    matchedFeature,
   };
 }
 

@@ -203,6 +203,18 @@ export async function triggerNotam({
     notamTriggeredAt: new Date().toISOString(),
   };
 
+  function buildAerodromeProperties(
+    previous: Record<string, unknown>,
+    newStatus: string,
+  ): Record<string, unknown> {
+    return {
+      ...previous,
+      ...notamProperties,
+      status: newStatus,
+      active: newStatus === "ACTIVE",
+    };
+  }
+
   let matchedFeature: TriggerNotamResult["matchedFeature"];
 
   if (matched) {
@@ -218,10 +230,7 @@ export async function triggerNotam({
       .update(aerodromeFeatures)
       .set({
         status: newStatus,
-        properties: {
-          ...previousProperties,
-          ...notamProperties,
-        },
+        properties: buildAerodromeProperties(previousProperties, newStatus),
         updatedAt: new Date(),
       })
       .where(eq(aerodromeFeatures.id, matched.id));
@@ -249,11 +258,10 @@ export async function triggerNotam({
           notamCoord.lon,
           notamRadius,
         ),
-        properties: {
-          ...notamProperties,
-          restricted: true,
-          source: "NOTAM",
-        },
+        properties: buildAerodromeProperties(
+          { restricted: true, source: "NOTAM" },
+          "RESTRICTED",
+        ),
         createdAt: new Date(),
         updatedAt: new Date(),
       })

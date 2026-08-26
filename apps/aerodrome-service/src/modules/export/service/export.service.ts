@@ -36,8 +36,8 @@ export const getAerodromeExport = async (): Promise<GeoJson> => {
       properties: {
         layer: f.layer,
         name: f.name,
-        status: f.status,
         ...(f.properties as object),
+        status: f.status,
       },
     })),
   };

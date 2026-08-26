@@ -213,9 +213,9 @@ async function fetchAerodromeGeometry(
       name: f.name ?? null,
       status: f.status ?? null,
       active:
-        f.status === "ACTIVE" ||
-        f.properties.active === true ||
-        f.properties.status === "ACTIVE",
+        f.status != null
+          ? f.status === "ACTIVE"
+          : f.properties.active === true || f.properties.status === "ACTIVE",
       polygon: f.polygon,
     }));
 

@@ -1,6 +1,7 @@
 import type {
   AftnMessage,
   MetarParsedData,
+  NotamMessage,
   TafParsedData,
 } from "@repo/database";
 
@@ -50,18 +51,36 @@ export interface AerodromeFeatureContext {
 
 export interface AerodromeContextData {
   features: AerodromeFeatureContext[];
-  runways: { id: string; active: boolean; polygon: [number, number][] }[];
+  runways: {
+    id: string;
+    name: string | null;
+    status: string | null;
+    active: boolean;
+    polygon: [number, number][];
+  }[];
   surfaces: {
     id: string;
+    name: string | null;
+    status: string | null;
     type: "TAXIWAY" | "APRON";
     polygon: [number, number][];
   }[];
-  areas: { id: string; type: string; polygon: [number, number][] }[];
+  areas: {
+    id: string;
+    name: string | null;
+    status: string | null;
+    type: string;
+    polygon: [number, number][];
+  }[];
 }
 
 export interface AftnContextData {
   messages: AftnMessage[];
   byCallsign: Record<string, AftnMessage[]>;
+}
+
+export interface NotamContextData {
+  messages: NotamMessage[];
 }
 
 export interface AlertContext {
@@ -71,6 +90,7 @@ export interface AlertContext {
   weather?: WeatherContextData | null;
   aerodrome?: AerodromeContextData | null;
   aftn?: AftnContextData | null;
+  notam?: NotamContextData | null;
 }
 
 export interface DetectionRule {
@@ -89,6 +109,7 @@ export interface AlertCandidate {
   status: "ACTIVE";
   trackId: string;
   relatedTrackId?: string;
+  aerodromeFeatureId?: string;
   triggeredAt: Date;
   data: Record<string, unknown>;
 }

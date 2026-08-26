@@ -1,4 +1,4 @@
-import type { AftnMessage } from "@repo/database";
+import type { AftnMessage, NotamMessage } from "@repo/database";
 import { redis } from "@/redis/client";
 import type {
   AerodromeContextData,
@@ -10,6 +10,7 @@ const aerodromeKey = (airportId: string): string =>
   `aerodrome:${airportId}:geometry`;
 const aftnKey = (airportId: string, id: string): string =>
   `advisory:aftn:${airportId}:${id}`;
+const notamKey = (airportId: string): string => `advisory:notam:${airportId}`;
 
 // weather
 
@@ -121,4 +122,35 @@ export async function setAftnMessage(
     "EX",
     ttlSeconds,
   );
+}
+
+// notam
+
+export async function getNotamMessages(
+  airportId: string,
+): Promise<NotamMessage[] | null> {
+  const value = await redis.get(notamKey(airportId));
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as NotamMessage[];
+  } catch {
+    return null;
+  }
+}
+
+export async function setNotamMessages(
+  airportId: string,
+  messages: NotamMessage[],
+  ttlSeconds = 3600,
+): Promise<void> {
+  await redis.set(
+    notamKey(airportId),
+    JSON.stringify(messages),
+    "EX",
+    ttlSeconds,
+  );
+}
+
+export async function deleteNotamMessages(airportId: string): Promise<void> {
+  await redis.del(notamKey(airportId));
 }

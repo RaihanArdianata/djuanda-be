@@ -1,7 +1,7 @@
 import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { alertServiceEnv } from "@/config/env";
-import { getAftnContext } from "@/context/advisory.context";
+import { getAftnContext, getNotamContext } from "@/context/advisory.context";
 
 let consumer: Consumer | null = null;
 
@@ -46,6 +46,16 @@ export async function startAdvisoryConsumer(): Promise<void> {
           raw.data?.airportId
         ) {
           await getAftnContext(raw.data.airportId as string);
+        }
+
+        if (
+          (raw.eventType === "NOTAM_RECEIVED" ||
+            raw.eventType === "NOTAM_UPDATED") &&
+          (raw.data?.airportId || raw.data?.icaoLocation)
+        ) {
+          const airportId = (raw.data.airportId ??
+            raw.data.icaoLocation) as string;
+          await getNotamContext(airportId);
         }
       } catch (err) {
         logger.warn({ err }, "advisory consumer: failed to process message");

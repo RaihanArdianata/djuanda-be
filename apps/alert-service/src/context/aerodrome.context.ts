@@ -210,6 +210,8 @@ async function fetchAerodromeGeometry(
     .filter((f) => f.layer === "RUNWAY" && f.status !== "INACTIVE")
     .map((f) => ({
       id: f.id,
+      name: f.name ?? null,
+      status: f.status ?? null,
       active:
         f.status === "ACTIVE" ||
         f.properties.active === true ||
@@ -225,6 +227,8 @@ async function fetchAerodromeGeometry(
     )
     .map((f) => ({
       id: f.id,
+      name: f.name ?? null,
+      status: f.status ?? null,
       type: f.layer as "TAXIWAY" | "APRON",
       polygon: f.polygon,
     }));
@@ -239,6 +243,8 @@ async function fetchAerodromeGeometry(
     )
     .map((f) => ({
       id: f.id,
+      name: f.name ?? null,
+      status: f.status ?? null,
       type: (f.properties.type as string) ?? f.layer ?? "RESTRICTED",
       polygon: f.polygon,
     }));

@@ -1,7 +1,22 @@
-import type { AftnMessage } from "@repo/database";
-import { getAftnMessages, setAftnMessage } from "@/cache/context.cache";
+import {
+  type AftnMessage,
+  db,
+  type NotamMessage,
+  notamMessages,
+} from "@repo/database";
+import { and, eq, gte, lte } from "drizzle-orm";
+import {
+  deleteNotamMessages,
+  getAftnMessages,
+  getNotamMessages,
+  setAftnMessage,
+  setNotamMessages,
+} from "@/cache/context.cache";
 import { alertServiceEnv } from "@/config/env";
-import type { AftnContextData } from "../modules/engine/types";
+import type {
+  AftnContextData,
+  NotamContextData,
+} from "../modules/engine/types";
 
 async function fetchAftnMessages(airportId: string): Promise<AftnMessage[]> {
   const url = new URL("/aftn", alertServiceEnv.advisoryServiceUrl);
@@ -45,4 +60,43 @@ export async function getAftnContext(
   }
 
   return { messages, byCallsign };
+}
+
+async function fetchNotamMessages(airportId: string): Promise<NotamMessage[]> {
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(notamMessages)
+    .where(
+      and(
+        eq(notamMessages.icaoLocation, airportId),
+        eq(notamMessages.status, "ACTIVE"),
+        lte(notamMessages.effectiveFrom, now),
+        gte(notamMessages.effectiveTo, now),
+      ),
+    );
+  return rows;
+}
+
+export async function cacheNotamMessages(
+  airportId: string,
+  messages: NotamMessage[],
+): Promise<void> {
+  await setNotamMessages(airportId, messages);
+}
+
+export async function getNotamContext(
+  airportId: string,
+): Promise<NotamContextData | null> {
+  let messages = await getNotamMessages(airportId);
+  if (!messages) {
+    messages = await fetchNotamMessages(airportId);
+    if (messages.length === 0) return null;
+    await setNotamMessages(airportId, messages);
+  }
+  return { messages };
+}
+
+export async function invalidateNotamCache(airportId: string): Promise<void> {
+  await deleteNotamMessages(airportId);
 }

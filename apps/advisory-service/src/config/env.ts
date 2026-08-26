@@ -9,7 +9,7 @@ const envSchema = z.object({
   ADVISORY_PROVIDER_TIMEOUT_MS: z.coerce.number().default(20_000),
   ADVISORY_PROVIDER_TOKEN_LIFETIME_MS: z.coerce.number().default(900_000),
 
-  ADVISORY_SYNC_INTERVAL_MS: z.coerce.number().default(600_000),
+  ADVISORY_SYNC_INTERVAL_MS: z.coerce.number().default(1_800_000),
   ADVISORY_SYNC_OVERLAP_MS: z.coerce.number().default(300_000),
   ADVISORY_SYNC_ENABLED: z
     .enum(["true", "false"])

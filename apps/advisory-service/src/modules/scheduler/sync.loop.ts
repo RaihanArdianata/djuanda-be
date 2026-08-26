@@ -3,7 +3,7 @@ import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
 import { syncAftnIncremental } from "../aftn/service/aftn.service";
 
-const intervalMsToCronExpression = (intervalMs: number): string => {
+export const intervalMsToCronExpression = (intervalMs: number): string => {
   if (intervalMs <= 0 || intervalMs % 60_000 !== 0) {
     throw new Error(
       `Sync interval must be a whole number of minutes, got ${intervalMs}ms`,
@@ -69,5 +69,3 @@ export const stopAdvisorySync = (): void => {
     aftnTask = null;
   }
 };
-
-export { intervalMsToCronExpression };

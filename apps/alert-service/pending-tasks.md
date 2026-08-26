@@ -14,14 +14,14 @@ Daftar fitur A-SMGCS `alert-service` yang belum diimplementasikan atau masih par
 - `cache/context.cache.ts` for operational context cache
 - `context/weather.context.ts` — METAR/TAF fetch with Redis cache
 - `context/aerodrome.context.ts` — runway / taxiway / apron / restricted area features
-- `context/advisory.context.ts` — AFTN FPL fetch by destination
-- `detection.context.ts` now loads weather, aerodrome, and AFTN contexts
+- `context/advisory.context.ts` — AFTN FPL and NOTAM fetch by destination / icaoLocation
+- `detection.context.ts` now loads weather, aerodrome, AFTN, and NOTAM contexts
 - Rules for runway, taxiway/apron, and area penetration fall back to aerodrome context
+- **NOTAM integration** — advisory context, cache, consumer, and advisory-service `NOTAM_UPDATED` event publishing
 
 ## Still pending
 
 ### On hold (nanti dulu)
-- **NOTAM integration** — advisory context, cache, dan consumer
 - **ASHTAM integration** — volcanic ash context dan optional `VOLCANIC_ASH` rule
 
 *Catatan: item di atas bergantung pada `advisory-service`.*

@@ -14,8 +14,18 @@ const producer = kafka?.producer();
 
 export type AftnEventType = "AFTN_RECEIVED" | "AFTN_UPDATED";
 
+export type NotamEventType = "NOTAM_RECEIVED" | "NOTAM_UPDATED";
+
 export interface AftnEvent {
   eventType: AftnEventType;
+  timestamp: string;
+  data: {
+    airportId: string;
+  };
+}
+
+export interface NotamEvent {
+  eventType: NotamEventType;
   timestamp: string;
   data: {
     airportId: string;
@@ -44,6 +54,22 @@ export async function publishAftnEvent(
 ): Promise<void> {
   if (!producer) return;
   const event: AftnEvent = {
+    eventType,
+    timestamp: new Date().toISOString(),
+    data: { airportId },
+  };
+  await producer.send({
+    topic: env.KAFKA_ADVISORY_TOPIC,
+    messages: [{ key: airportId, value: JSON.stringify(event) }],
+  });
+}
+
+export async function publishNotamEvent(
+  eventType: NotamEventType,
+  airportId: string,
+): Promise<void> {
+  if (!producer) return;
+  const event: NotamEvent = {
     eventType,
     timestamp: new Date().toISOString(),
     data: { airportId },

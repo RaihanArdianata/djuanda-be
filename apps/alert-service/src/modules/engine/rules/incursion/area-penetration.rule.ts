@@ -3,6 +3,8 @@ import { pointInPolygon } from "../geometry/geometry";
 
 interface AreaConfig {
   id: string;
+  name?: string | null;
+  status?: string | null;
   type: string;
   polygon: [number, number][];
 }
@@ -25,6 +27,10 @@ export const areaPenetrationRule: DetectionRule = {
         }
 
         const alertId = `AREA_PENETRATION|${ctx.airportId}|${track.trackId}-${area.id}`;
+        const callsign = track.callsign ?? track.trackId;
+        const featureName = area.name ?? area.id;
+        const featureStatus = area.status ?? "RESTRICTED";
+
         candidates.push({
           alertId,
           airportId: ctx.airportId,
@@ -32,10 +38,17 @@ export const areaPenetrationRule: DetectionRule = {
           severity: "WARNING",
           status: "ACTIVE",
           trackId: track.trackId,
+          aerodromeFeatureId: area.id,
           triggeredAt: ctx.timestamp,
           data: {
+            track,
+            area,
             areaId: area.id,
+            areaName: featureName,
             areaType: area.type,
+            areaStatus: featureStatus,
+            callsign,
+            message: `${callsign} entered restricted area ${featureName} (${featureStatus})`,
             latitude: track.latitude,
             longitude: track.longitude,
           },

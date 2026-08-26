@@ -90,7 +90,7 @@ export const evaluateMovement = async (
       notamId: null,
       ashtamId: null,
       aftnMessageId: null,
-      aerodromeFeatureId: null,
+      aerodromeFeatureId: candidate.aerodromeFeatureId ?? null,
       acknowledgedAt: null,
       acknowledgedBy: null,
       clearedAt: null,

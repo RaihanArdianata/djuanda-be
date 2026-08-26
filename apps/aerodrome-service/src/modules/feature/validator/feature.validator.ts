@@ -25,6 +25,8 @@ export const updateFeatureSchema = createFeatureSchema.partial();
 
 export const listFeatureQuerySchema = z.object({
   layer: z.enum(LAYER_VALUES).optional(),
+  airportId: z.string().max(255).optional(),
+  status: z.enum(FEATURE_STATUS_VALUES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });

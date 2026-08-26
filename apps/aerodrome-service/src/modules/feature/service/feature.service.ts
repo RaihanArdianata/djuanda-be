@@ -5,7 +5,7 @@ import {
   db,
 } from "@repo/database";
 import { ApiError } from "@repo/shared";
-import { eq, type SQL, sql } from "drizzle-orm";
+import { and, eq, type SQL, sql } from "drizzle-orm";
 import z from "zod";
 import { publishAerodromeGeometryUpdated } from "../../messaging/aerodrome.producer";
 import type {
@@ -53,11 +53,16 @@ export type ListFeatureResult = z.infer<typeof listFeatureResultSchema>;
 export async function listFeatures(
   params: ListFeatureQueryInput,
 ): Promise<ListFeatureResult> {
-  const { layer, page, limit } = params;
+  const { layer, airportId, status, page, limit } = params;
   const offset = (page - 1) * limit;
-  const where: SQL | undefined = layer
-    ? eq(aerodromeFeatures.layer, layer)
-    : undefined;
+
+  const conditions: SQL[] = [];
+  if (layer) conditions.push(eq(aerodromeFeatures.layer, layer));
+  if (airportId) conditions.push(eq(aerodromeFeatures.airportId, airportId));
+  if (status) conditions.push(eq(aerodromeFeatures.status, status));
+
+  const where: SQL | undefined =
+    conditions.length > 0 ? and(...conditions) : undefined;
 
   const [items, totalRow] = await Promise.all([
     db

@@ -1,4 +1,7 @@
-import { getAftnContext } from "../../context/advisory.context";
+import {
+  getAftnContext,
+  getNotamContext,
+} from "../../context/advisory.context";
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getWeatherContext } from "../../context/weather.context";
 import type { AlertContext, MovementTrack } from "./types";
@@ -12,10 +15,11 @@ export interface BuildDetectionContextInput {
 export async function buildAlertContext(
   input: BuildDetectionContextInput,
 ): Promise<AlertContext> {
-  const [weather, aerodrome, aftn] = await Promise.all([
+  const [weather, aerodrome, aftn, notam] = await Promise.all([
     getWeatherContext(input.airportId),
     getAerodromeContext(input.airportId),
     getAftnContext(input.airportId),
+    getNotamContext(input.airportId),
   ]);
 
   return {
@@ -25,5 +29,6 @@ export async function buildAlertContext(
     weather: weather ?? null,
     aerodrome: aerodrome ?? null,
     aftn: aftn ?? null,
+    notam: notam ?? null,
   };
 }

@@ -211,14 +211,10 @@ export async function triggerNotam({
     return f.airportId == null && icao == null && featureAirportId == null;
   });
 
-  let matched = features.find((feature) =>
-    isPointInFeature(notamPoint, feature),
-  );
+  const notamRef = extractFeatureRef(body);
 
-  if (!matched) {
-    const notamRef = extractFeatureRef(body);
-    if (notamRef) {
-      matched = features.find((f) => {
+  let matched = notamRef
+    ? features.find((f) => {
         const props = (f.properties ?? {}) as Record<string, unknown>;
         const ref = props.ref as string | undefined;
         const name = props.name as string | undefined;
@@ -227,14 +223,18 @@ export async function triggerNotam({
           ref?.toUpperCase() === notamRef ||
           name?.toUpperCase() === notamRef
         );
-      });
-    }
+      })
+    : undefined;
+
+  if (!matched) {
+    matched = features.find((feature) => isPointInFeature(notamPoint, feature));
   }
 
   logger.info(
     {
       airportId,
       notamPoint,
+      notamRef: notamRef ?? null,
       candidates: candidates.length,
       matchedLayerCount: features.length,
       matchedId: matched?.id,

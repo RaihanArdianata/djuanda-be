@@ -16,6 +16,12 @@ const envSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
 
+  ADVISORY_ASHTAM_SYNC_INTERVAL_MS: z.coerce.number().default(1_800_000),
+  ADVISORY_ASHTAM_SYNC_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+
   KAFKA_BROKERS: z.string().default(""),
   KAFKA_ADVISORY_TOPIC: z.string().default("asmgcs.advisory"),
   ADVISORY_NOTAM_SYNC_INTERVAL_MS: z.coerce.number().default(1_800_000),

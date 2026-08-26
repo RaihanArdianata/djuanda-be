@@ -8,6 +8,7 @@ import {
 } from "../../messaging/advisory.producer";
 import type { FetchNotamParams } from "../../provider/notam.provider";
 import { fetchNotamMessages } from "../../provider/notam.provider";
+import { extractPolygon } from "../lib/aerodrome-polygon";
 import type { NotamSourceItem } from "../parser/common";
 import { parseNotamMessage } from "../parser/notam.parser";
 import {
@@ -94,30 +95,20 @@ function pointInPolygon(point: LatLon, polygon: LatLon[]): boolean {
   return inside;
 }
 
-function isPointInFeature(point: LatLon, geometry: unknown): boolean {
-  const geo = geometry as {
-    type?: unknown;
-    coordinates?: unknown;
-  };
-
-  if (!geo || geo.type !== "Polygon" || !Array.isArray(geo.coordinates)) {
-    return false;
-  }
-
-  const rings = geo.coordinates as unknown[][];
-  const firstRing = rings[0];
-
-  if (!Array.isArray(firstRing) || firstRing.length === 0) {
-    return false;
-  }
-
-  const ring = firstRing.filter(
-    (p): p is [number, number] =>
-      Array.isArray(p) && p.length >= 2 && typeof p[0] === "number",
+function isPointInFeature(
+  point: LatLon,
+  feature: {
+    layer: string;
+    geometry: unknown;
+    properties: unknown;
+  },
+): boolean {
+  const polygon = extractPolygon(
+    feature.geometry,
+    feature.layer,
+    (feature.properties ?? {}) as Record<string, unknown>,
   );
-
-  const polygon = ring.map<LatLon>(([lon, lat]) => [lat, lon]);
-
+  if (polygon.length === 0) return false;
   return pointInPolygon(point, polygon);
 }
 
@@ -158,7 +149,7 @@ export async function triggerNotam({
   });
 
   const matched = taxiways.find((feature) =>
-    isPointInFeature(notamPoint, feature.geometry),
+    isPointInFeature(notamPoint, feature),
   );
 
   if (!matched) {

@@ -299,6 +299,156 @@ registry.registerPath({
   },
 });
 
+const notamItemSchema = z
+  .object({
+    header: z.string().optional(),
+    msg_id: z.string().optional(),
+    fir: z.string().optional(),
+    qcode: z.string().optional(),
+    traffic: z.string().optional(),
+    purpose: z.string().optional(),
+    scope: z.string().optional(),
+    lower_limit: z.string().optional(),
+    upper_limit: z.string().optional(),
+    coordinates: z.string().optional(),
+    location: z.string().optional(),
+    effective_time: z.string().optional(),
+    expiration_time: z.string().optional(),
+    schedule: z.string().optional(),
+    remark: z.string().optional(),
+    lower_altitude_limit: z.string().optional(),
+    upper_altitude_limit: z.string().optional(),
+    raw: z.unknown().optional(),
+  })
+  .partial()
+  .passthrough();
+
+const notamTriggerBodySchema = z.union([
+  notamItemSchema,
+  z.array(notamItemSchema),
+]);
+
+const notamFetchBodySchema = z.object({
+  start_date: z.string().describe("YYYY-MM-DD HH:mm:ss"),
+  end_date: z.string().describe("YYYY-MM-DD HH:mm:ss"),
+});
+
+const notamPublishBodySchema = z.object({
+  eventType: z
+    .enum(["NOTAM_RECEIVED", "NOTAM_UPDATED"])
+    .optional()
+    .describe("Default NOTAM_UPDATED"),
+});
+
+const successResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.unknown(),
+});
+
+const notamQuerySchema = z.object({
+  airportId: z.string().describe("ICAO airport identifier"),
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/advisory/notam/trigger",
+  tags: ["NOTAM"],
+  summary: "Manual trigger NOTAM",
+  description:
+    "Menerima satu NOTAM atau array NOTAM, menyimpannya, memetakan ke taxiway, " +
+    "mengubah status taxiway yang cocok menjadi INACTIVE, dan menerbitkan event ke Redpanda.",
+  request: {
+    query: notamQuerySchema,
+    body: {
+      content: {
+        "application/json": { schema: notamTriggerBodySchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Trigger berhasil diproses",
+      content: { "application/json": { schema: successResponseSchema } },
+    },
+    400: {
+      description: "Body atau query tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    500: upstreamErrorResponse("Gagal memproses trigger NOTAM"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/advisory/notam/fetch",
+  tags: ["NOTAM"],
+  summary: "Ambil dan trigger NOTAM dari provider",
+  description:
+    "Memanggil provider /api/notam (auth sama seperti AFTN) untuk window yang diberikan, " +
+    "lalu memproses setiap NOTAM seperti endpoint /advisory/notam/trigger.",
+  request: {
+    query: notamQuerySchema,
+    body: {
+      content: { "application/json": { schema: notamFetchBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Fetch dan trigger berhasil",
+      content: { "application/json": { schema: successResponseSchema } },
+    },
+    400: {
+      description: "Body atau query tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    502: upstreamErrorResponse("Provider NOTAM membalas error"),
+    504: upstreamErrorResponse(
+      "Provider NOTAM tidak merespons dalam batas waktu",
+    ),
+    500: upstreamErrorResponse("Gagal fetch dan trigger NOTAM"),
+  },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/advisory/notam/publish",
+  tags: ["NOTAM"],
+  summary: "Publish event NOTAM ke Redpanda",
+  description:
+    "Menerbitkan event NOTAM_RECEIVED atau NOTAM_UPDATED untuk airportId yang dituju ke Redpanda. " +
+    "Alert-service akan mengonsumsinya dan memperbarui context-nya.",
+  request: {
+    query: notamQuerySchema,
+    body: {
+      content: { "application/json": { schema: notamPublishBodySchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: "Event berhasil dipublish",
+      content: { "application/json": { schema: successResponseSchema } },
+    },
+    400: {
+      description: "Body atau query tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    500: upstreamErrorResponse("Gagal publish NOTAM event"),
+  },
+});
+
 export const openApiDocument = new OpenApiGeneratorV3(
   registry.definitions,
 ).generateDocument({

@@ -10,6 +10,10 @@ import {
   stopAshtamSync,
 } from "./modules/scheduler/ashtam.sync.loop";
 import {
+  startNotamSync,
+  stopNotamSync,
+} from "./modules/scheduler/notam.sync.loop";
+import {
   startAdvisorySync,
   stopAdvisorySync,
 } from "./modules/scheduler/sync.loop";
@@ -24,6 +28,7 @@ const server = Bun.serve({
 startAdvisoryProducer();
 startAdvisorySync();
 startAshtamSync();
+startNotamSync();
 
 logger.info(`advisory-service listening on http://localhost:${port}`);
 
@@ -31,6 +36,7 @@ const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down advisory-service gracefully`);
   stopAdvisorySync();
   stopAshtamSync();
+  stopNotamSync();
   await stopAdvisoryProducer();
   server.stop();
   process.exit(0);

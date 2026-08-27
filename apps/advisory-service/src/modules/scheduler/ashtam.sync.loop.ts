@@ -1,18 +1,16 @@
 import { logger } from "@repo/logger";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
-import { syncAshtamFromSource } from "../ashtam/service/ashtam.service";
+import { syncAshtamIncremental } from "../ashtam/service/ashtam.service";
 import { intervalMsToCronExpression } from "./sync.loop";
 
 let ashtamTask: ScheduledTask | null = null;
 
 export const runAshtamSyncCycle = async (): Promise<void> => {
   try {
-    await syncAshtamFromSource();
+    await syncAshtamIncremental();
   } catch (err) {
     logger.error({ err }, "ashtam synchronization cycle failed");
-
-    throw err;
   }
 };
 export const startAshtamSync = (): void => {

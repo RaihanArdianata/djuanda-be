@@ -136,6 +136,59 @@ registry.registerPath({
   },
 });
 
+const ashtamSyncBodyDocSchema = z.object({
+  start_date: z.string().describe("YYYY-MM-DD HH:mm:ss"),
+  end_date: z.string().describe("YYYY-MM-DD HH:mm:ss"),
+});
+
+const ashtamSyncResultSchema = z.object({
+  totalReceived: z.number(),
+  created: z.number(),
+  updated: z.number(),
+  unchanged: z.number(),
+  failed: z.number(),
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/advisory/ashtam/sync",
+  tags: ["ASHTAM"],
+  summary: "Manual synchronization ASHTAM untuk satu rentang waktu",
+  description:
+    "Memicu sinkronisasi ke provider (POST /api/ashtam, auth sama seperti AFTN) " +
+    "untuk window yang diminta. Message di-upsert berdasarkan identity, sehingga " +
+    "rentang yang overlap dengan scheduled sync tidak menghasilkan duplicate. " +
+    "Body key snake_case (`start_date` / `end_date`) mengikuti convention " +
+    "`/advisory/notam/fetch`, bukan `/advisory/aftn/sync` yang camelCase.",
+  request: {
+    body: {
+      content: {
+        "application/json": { schema: ashtamSyncBodyDocSchema },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Sinkronisasi selesai",
+      content: { "application/json": { schema: ashtamSyncResultSchema } },
+    },
+    400: {
+      description: "Body tidak valid",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    502: upstreamErrorResponse(
+      "Provider ASHTAM tidak dapat dihubungi / membalas error",
+    ),
+    504: upstreamErrorResponse(
+      "Provider ASHTAM tidak merespons dalam batas waktu",
+    ),
+  },
+});
+
 const aftnMessageSchema = z.object({
   id: z.string().uuid(),
   providerId: z.string(),

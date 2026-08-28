@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { NormalizedNotamMessage } from "../parser/common";
+import type { NormalizedNotamMessage } from "../../notam/parser/common";
 
 export const computeNotamContentHash = (
   message: NormalizedNotamMessage,

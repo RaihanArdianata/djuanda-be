@@ -5,7 +5,7 @@ import {
   type NotamSourceItem,
   parseNotamDatetime,
   parseNotamMsgId,
-} from "./common";
+} from "../../notam/parser/common";
 
 export interface NotamParseFailure {
   ok: false;

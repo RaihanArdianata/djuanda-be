@@ -3,6 +3,10 @@ import { logger } from "@repo/logger";
 import { app } from "./app";
 import { env } from "./config/env";
 import {
+  startAerodromeConsumer,
+  stopAerodromeConsumer,
+} from "./modules/messaging/aerodrome.consumer";
+import {
   startAerodromeProducer,
   stopAerodromeProducer,
 } from "./modules/messaging/aerodrome.producer";
@@ -17,10 +21,12 @@ logger.info(
 );
 
 startAerodromeProducer();
+void startAerodromeConsumer();
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down aerodrome-service gracefully`);
   await stopAerodromeProducer();
+  await stopAerodromeConsumer();
   server.stop();
   await pool.end();
   process.exit(0);

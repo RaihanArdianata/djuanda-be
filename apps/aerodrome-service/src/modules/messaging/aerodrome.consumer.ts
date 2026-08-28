@@ -1,22 +1,17 @@
 import { aerodromeFeatures, db } from "@repo/database";
 import { logger } from "@repo/logger";
 import { eq } from "drizzle-orm";
-import { type EachMessagePayload, Kafka } from "kafkajs";
+import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { env } from "@/config/env";
 import { publishAerodromeGeometryUpdated } from "./aerodrome.producer";
 
-const kafka =
-  env.KAFKA_BROKERS.length > 0
-    ? new Kafka({
-        clientId: "aerodrome-service",
-        brokers: env.KAFKA_BROKERS.split(","),
-      })
-    : null;
+let consumer: Consumer | null = null;
 
-const consumer = kafka?.consumer({ groupId: "aerodrome-service" });
+export type AerodromeObjectStatusUpdatedEventType =
+  "aerodrome.object.status.updated";
 
-export type AerodromeObjectStatusUpdatedEvent = {
-  eventType: "aerodrome.object.status.updated";
+export interface AerodromeObjectStatusUpdatedEvent {
+  eventType: AerodromeObjectStatusUpdatedEventType;
   timestamp: string;
   data: {
     airportId: string;
@@ -27,7 +22,7 @@ export type AerodromeObjectStatusUpdatedEvent = {
     effectiveFrom: string;
     effectiveTo?: string;
   };
-};
+}
 
 function toDbStatus(
   status: AerodromeObjectStatusUpdatedEvent["data"]["status"],
@@ -46,10 +41,26 @@ function toDbStatus(
 }
 
 export async function startAerodromeConsumer(): Promise<void> {
-  if (!consumer) {
-    logger.info("Aerodrome consumer not configured");
+  if (env.KAFKA_BROKERS.length === 0) {
+    logger.info(
+      "Aerodrome Kafka brokers not configured — aerodrome consumer disabled",
+    );
     return;
   }
+
+  const kafka = new Kafka({
+    clientId: "aerodrome-service",
+    brokers: env.KAFKA_BROKERS.split(","),
+  });
+
+  consumer = kafka.consumer({ groupId: "aerodrome-service" });
+
+  consumer.on(consumer.events.CRASH, ({ payload }) => {
+    logger.error(
+      { err: payload.error, restarting: payload.restart },
+      "aerodrome consumer crashed",
+    );
+  });
 
   await consumer.connect();
   await consumer.subscribe({
@@ -128,4 +139,5 @@ export async function stopAerodromeConsumer(): Promise<void> {
   await consumer.disconnect().catch((err: unknown) => {
     logger.warn({ err }, "aerodrome consumer disconnect failed");
   });
+  consumer = null;
 }

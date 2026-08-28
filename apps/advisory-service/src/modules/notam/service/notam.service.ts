@@ -2,14 +2,13 @@ import { logger } from "@repo/logger";
 import { env } from "@/config/env";
 import { resolveIncrementalWindow } from "../../aftn/service/aftn.service";
 import { fetchNotamHistories } from "../../client/navsim.client";
-import type { NotamSourceItem } from "../../notam-trigger/parser/common";
-import { parseNotamMessage } from "../../notam-trigger/parser/notam.parser";
+import { parseNotamMessage } from "../../notam/parser/notam.parser";
+import { fetchNotamMessages } from "../../provider/notam.provider";
+import type { NotamSourceItem } from "../parser/common";
 import {
   findLatestNotamDatetime,
   upsertNotamMessage,
-} from "../../notam-trigger/repository/notam.repository";
-
-import { fetchNotamMessages } from "../../provider/notam.provider";
+} from "../repository/notam.repository";
 
 const NOTAM_HISTORY_SIZE = 2000;
 const NOTAM_PROVIDER_SOURCE = "advisory-provider-notam";

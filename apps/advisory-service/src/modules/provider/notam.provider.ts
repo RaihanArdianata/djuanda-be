@@ -1,6 +1,6 @@
 import { logger } from "@repo/logger";
 import { env } from "@/config/env";
-import type { NotamSourceItem } from "../notam-trigger/parser/common";
+import type { NotamSourceItem } from "../notam/parser/common";
 import { toProviderDateString } from "./aftn.provider";
 import { getAccessToken, providerBaseUrl } from "./auth.provider";
 

@@ -25,9 +25,9 @@ const server = Bun.serve({
   fetch: app.fetch,
 });
 
-// startAdvisoryProducer();
-// startAdvisorySync();
-// startAshtamSync();
+startAdvisoryProducer();
+startAdvisorySync();
+startAshtamSync();
 startNotamSync();
 
 logger.info(`advisory-service listening on http://localhost:${port}`);

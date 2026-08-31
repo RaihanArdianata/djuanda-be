@@ -4,5 +4,6 @@ public/
 
 # Environment variables
 .env
+.env.development
 
 /docs/

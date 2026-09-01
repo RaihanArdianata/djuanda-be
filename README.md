@@ -44,7 +44,7 @@ docker compose up -d
 Pastikan `postgres`, `pgbouncer`, `redis`, dan `redpanda` healthy:
 
 ```powershell
-docker compose ps
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml up -d
 ```
 
 Postgres pakai image `timescale/timescaledb` karena project menggunakan `create_hypertable`. Ekstensi diaktifkan otomatis via `init-timescaledb.sql`.

@@ -38,14 +38,10 @@ bun install
 ### 3. Jalankan infrastruktur Docker
 
 ```powershell
-docker compose up -d
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml up -d
 ```
 
 Pastikan `postgres`, `pgbouncer`, `redis`, dan `redpanda` healthy:
-
-```powershell
-docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml up -d
-```
 
 Postgres pakai image `timescale/timescaledb` karena project menggunakan `create_hypertable`. Ekstensi diaktifkan otomatis via `init-timescaledb.sql`.
 
@@ -87,7 +83,7 @@ Setiap app juga punya script `dev` di `package.json`.
   `aeroswarm-project/docs/development/federation/` (khususnya 004 untuk sisi repo ini)
 
 
-docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml down
-docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml up -d
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml down
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml up -d
 
 ssh -fN -o ServerAliveInterval=60 -R 0.0.0.0:13005:localhost:3005 mid@192.168.2.231

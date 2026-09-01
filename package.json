@@ -13,8 +13,8 @@
     "db:generate": "bun --env-file=../../.env run --cwd packages/database db:generate",
     "db:migrate": "bun --env-file=../../.env run --cwd packages/database db:migrate",
     "seed": "bun --env-file=../../.env run --cwd packages/database seed",
-    "db:local:reset": "docker compose -f docker-compose.yml -f docker-compose.override.yml rm -fsv postgres && docker volume rm backend-djuanda-postgres-data",
-    "db:local:up": "docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml up -d pgbouncer postgres",
+    "db:local:reset": "docker compose -f docker-compose.yml -f docker-compose.local.yml rm -fsv postgres && docker volume rm backend-djuanda-postgres-data",
+    "db:local:up": "docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml up -d pgbouncer postgres",
     "db:local:migrate": "cmd /c \"set DATABASE_URL=postgresql://postgres:postgres@localhost:5432/backend_djuanda && set AEROSWARM_AIRPORT_ID=WARR && bun run --cwd packages/database db:migrate\"",
     "db:local:seed": "cmd /c \"set DATABASE_URL=postgresql://postgres:postgres@localhost:5432/backend_djuanda && set AEROSWARM_AIRPORT_ID=WARR && bun run --cwd packages/database seed-alert-rules.ts\""
   },

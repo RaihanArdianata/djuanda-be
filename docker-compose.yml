@@ -243,6 +243,12 @@ services:
     # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
     ports:
       - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   worker-service:
     build:
       context: .

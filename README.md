@@ -85,3 +85,9 @@ Setiap app juga punya script `dev` di `package.json`.
   record/playback, rules & taxiway lock)
 - **Integrasi AeroSwarm (federasi history/replay)**: lihat
   `aeroswarm-project/docs/development/federation/` (khususnya 004 untuk sisi repo ini)
+
+
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml down
+docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.override.yml up -d
+
+ssh -fN -o ServerAliveInterval=60 -R 0.0.0.0:13005:localhost:3005 mid@192.168.2.231

@@ -62,10 +62,11 @@ services:
       - --reserve-memory=0M
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092,TUNNEL://0.0.0.0:19093
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092,TUNNEL://${ADVERTISED_KAFKA_HOST}:19093
     ports:
       - "19092:19092"
+      - "19093:19093"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     healthcheck:
@@ -221,7 +222,7 @@ services:
       # Kafka ingest consumer (alternative to http/websocket — see
       # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run
       # without it; the http/websocket ingest paths are unaffected either way.
-      AEROSWARM_INGEST_KAFKA_BROKERS: redpanda:9092
+      AEROSWARM_INGEST_KAFKA_BROKERS: ${AEROSWARM_INGEST_KAFKA_BROKERS:-redpanda:9092}
       AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
       AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
       REDIS_HOST: redis
@@ -242,6 +243,12 @@ services:
     # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
     ports:
       - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   worker-service:
     build:
       context: .

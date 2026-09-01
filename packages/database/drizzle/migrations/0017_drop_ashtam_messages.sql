@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS "ashtam_messages" CASCADE;bunx drizzle-kit migrate --config=drizzle/drizzle.config.ts
+DROP TABLE IF EXISTS "ashtam_messages" CASCADE;

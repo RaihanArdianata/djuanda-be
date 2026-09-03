@@ -1,14 +1,72 @@
 import {
+  type AeroswarmMovement,
   aeroswarmAlerts,
   aeroswarmMovements,
   aeroswarmTracks,
   db,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { publishToTopic } from "@repo/worker-service/src/sse/service";
+import { sql } from "drizzle-orm";
+import { buildMovementId } from "../lib/movement-id";
 
 type TrackRow = typeof aeroswarmTracks.$inferInsert;
 type AlertRow = typeof aeroswarmAlerts.$inferInsert;
 type MovementRow = typeof aeroswarmMovements.$inferInsert;
+const DB_TO_API_MOVEMENT_TYPE = {
+  takeoff: "TAKE_OFF",
+  landing: "LANDING",
+} as const;
+
+async function publishMovementEvent(row: AeroswarmMovement): Promise<void> {
+  logger.info(
+    { trackId: row.trackId, type: row.type, airportId: row.airportId },
+    "publishMovementEvent: called",
+  );
+
+  if (row.type !== "takeoff" && row.type !== "landing") {
+    logger.info(
+      { trackId: row.trackId, type: row.type },
+      "publishMovementEvent: skipped, invalid type",
+    );
+    return;
+  }
+  if (!row.airportId) {
+    logger.info(
+      { trackId: row.trackId },
+      "publishMovementEvent: skipped, no airportId",
+    );
+    return;
+  }
+
+  const topic =
+    row.type === "takeoff" ? "movement.takeoff" : "movement.landing";
+
+  logger.info(
+    { topic, trackId: row.trackId },
+    "publishMovementEvent: publishing to redis",
+  );
+
+  await publishToTopic(topic, {
+    id: buildMovementId(row.trackId, row.type, row.at),
+    type: topic,
+    timestamp: new Date().toISOString(),
+    data: {
+      id: buildMovementId(row.trackId, row.type, row.at),
+      trackId: row.trackId,
+      ...(row.callsign ? { callsign: row.callsign } : {}),
+      ...(row.icao24 ? { icao24: row.icao24 } : {}),
+      airportId: row.airportId,
+      type: DB_TO_API_MOVEMENT_TYPE[row.type],
+      eventTime: row.at.toISOString(),
+    },
+  });
+
+  logger.info(
+    { topic, trackId: row.trackId },
+    "publishMovementEvent: publish done",
+  );
+}
 
 const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
@@ -269,11 +327,33 @@ export async function flush(): Promise<void> {
       await db.insert(aeroswarmTracks).values(tracks).onConflictDoNothing();
     if (alerts.length)
       await db.insert(aeroswarmAlerts).values(alerts).onConflictDoNothing();
-    if (movements.length)
-      await db
+    if (movements.length) {
+      const upsertedMovements = await db
         .insert(aeroswarmMovements)
         .values(movements)
-        .onConflictDoNothing();
+        .onConflictDoUpdate({
+          target: [
+            aeroswarmMovements.trackId,
+            aeroswarmMovements.type,
+            aeroswarmMovements.at,
+          ],
+          set: { data: sql`excluded.data` },
+        })
+        .returning();
+
+      const results = await Promise.allSettled(
+        upsertedMovements.map((row) => publishMovementEvent(row)),
+      );
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          const row = upsertedMovements[index] as AeroswarmMovement;
+          logger.error(
+            { err: result.reason, trackId: row.trackId, type: row.type },
+            "movement SSE publish failed — movement is persisted, event was not broadcast",
+          );
+        }
+      });
+    }
     batch?.resolve();
   } catch (error) {
     logger.error(

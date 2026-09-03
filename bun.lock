@@ -109,6 +109,7 @@
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
+        "@repo/worker-service": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.12.27",
         "kafkajs": "^2.2.4",

@@ -74,13 +74,34 @@ Setiap app juga punya script `dev` di `package.json`.
 - `DATABASE_URL` di `.env` kamu aktif saat ini pakai `pgbouncer` (`:6432`) untuk container Docker, atau direct ke `localhost:5432` untuk `bun` di host.
 - Kalau muncul error `relation "weather_forecasts" does not exist`, berarti migration belum dijalankan — ulangi langkah 4.
 
+## Integrasi dengan AeroSwarm (backend baru)
+
+Agar backend baru bisa menerima dan menyajikan replay data dari/ke AeroSwarm, setelah deploy pastikan env berikut sesuai:
+
+| Variabel | Sumber / nilai | Catatan |
+|---|---|---|
+| `CONNECTION_SERVICE_PORT` | `3005` | Port yang di-expose ke AeroSwarm (bisa via SSH reverse tunnel). |
+| `AEROSWARM_AIRPORT_ID` | ICAO bandara, e.g. `WARR` | Scope ingest & history/replay. |
+| `AEROSWARM_INGEST_SECRET` | Dashboard → *Connect backend* → kopas dari *env block* | Untuk HTTP/WebSocket; header `x-aero-ingest-secret` atau query `?secret=`. |
+| `AEROSWARM_MONITOR_TOKENS` | Dashboard → *Connect backend* → kopas dari *env block* | Comma-separated monitor token (`srctk_...`). |
+| `AEROSWARM_INGEST_KAFKA_BROKERS` (opsional) | e.g. `redpanda:9092` | Hanya kalau pakai transport Kafka. |
+| `AEROSWARM_INGEST_KAFKA_TOPIC` (opsional) | Dashboard → *Connect backend* | Hanya kalau pakai transport Kafka. |
+
+Langkahnya:
+
+1. Pastikan `connection-service` bisa diakses dari jarak oleh AeroSwarm (mis. `http://<ip-vps>:3005/aero`).
+2. Di dashboard AeroSwarm: **Airports → bandara → Backend connection → Connect backend**.
+3. Pilih transport dan masukkan base URL `http://<ip-vps>:3005/aero`.
+4. Kopas blok env yang muncul ke `.env` di sini, lalu restart `connection-service`.
+5. Untuk Kafka, isi juga `ADVERTISED_KAFKA_HOST` (alamat Redpanda yang bisa dijangkau AeroSwarm) dan `AEROSWARM_INGEST_KAFKA_BROKERS`.
+
 ## Dokumentasi
 
 - **A-SMGCS Juanda — kebutuhan inti → tugas implementasi**: [docs/asmgcs/000-ringkasan.md](docs/asmgcs/000-ringkasan.md)
   (seri 000–007: lalu lintas, warning function, persistence, NOTAM/ASHTAM, cuaca BMKG,
   record/playback, rules & taxiway lock)
 - **Integrasi AeroSwarm (federasi history/replay)**: lihat
-  `aeroswarm-project/docs/development/federation/` (khususnya 004 untuk sisi repo ini)
+  `aeroswarm-project/docs/development/federation/006-connecting-a-backend.md`
 
 
 docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml down

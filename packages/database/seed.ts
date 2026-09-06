@@ -1,6 +1,6 @@
 // biome-ignore-start lint/suspicious/noConsole: seed output
 
-import { bcryptHash } from "@repo/shared/src/utils/hashing";
+import { bcryptHash } from "@repo/shared/utils/hashing";
 import { eq } from "drizzle-orm";
 import {
   credentials,

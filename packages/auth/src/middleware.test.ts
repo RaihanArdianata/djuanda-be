@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 import { Hono } from "hono";
 import { sign } from "hono/jwt";
 
@@ -14,23 +14,12 @@ mock.module("ioredis", () => ({
 const getUserById = mock();
 const validateAccessToken = mock();
 
-// The mock must re-export every name other importers (e.g. auth.controller)
-// bind from this module — Bun resolves mock.module per-module-path.
-mock.module("../modules/auth/service/auth.service", () => ({
+mock.module("./service", () => ({
   getUserById,
   validateAccessToken,
-  getUser: mock(),
-  getUsers: mock(),
-  createUser: mock(),
-  createUserSession: mock(),
-  getUserSession: mock(),
-  saveRefreshToken: mock(),
-  rotateRefreshToken: mock(),
-  revokeRefreshToken: mock(),
-  revokeAllUserSessions: mock(),
 }));
 
-const { authentication, rbacMiddleware } = await import("./auth.middleware");
+const { authentication, rbacMiddleware } = await import("./middleware");
 
 process.env.JWT_SECRET = "test-secret";
 

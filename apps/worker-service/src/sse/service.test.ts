@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { FakeRedis, fakeRedis } from "@repo/shared/src/testing/fakeRedis";
+import { FakeRedis, fakeRedis } from "@repo/shared/testing/fakeRedis";
 
 // The SSE fan-out goes through Redis pub/sub -- stub ioredis so no real
 // connection to localhost:6379 is attempted. The fake is shared

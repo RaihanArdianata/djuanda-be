@@ -1,19 +1,19 @@
+import type { GetUserType } from "@repo/auth";
 import {
   authTokens,
   type CreateUserProfileInput,
   type CreateUserSessionInput,
   credentials,
   db,
-  type UserWithPermissionsType,
   userPermissionsQueryConfig,
   userRoles,
   userSessions,
   users,
 } from "@repo/database";
 import { logger } from "@repo/logger";
-import { bcryptHash, sha256Hash, transformPhoneNumber } from "@repo/shared";
+import { transformPhoneNumber } from "@repo/shared/utils/formatter";
+import { bcryptHash, sha256Hash } from "@repo/shared/utils/hashing";
 import { and, eq, gt, ilike, isNull, or } from "drizzle-orm";
-import { verifyToken } from "../../../utils/jwt";
 
 type UserType = typeof users.$inferSelect;
 type AuthTokensType = typeof authTokens.$inferSelect;
@@ -35,11 +35,7 @@ export async function getUsers(): Promise<GetUsersType[]> {
 
 // Login bisa pakai email, nomor telepon, ATAU username -- cocokkan identifier yang sama
 // ke ketiga kolom itu sekaligus.
-// export type GetUserType = NonNullable<Awaited<ReturnType<typeof getUser>>>;
-type GetUserType = UserWithPermissionsType & {
-  permissions: string[];
-  passwordHash?: string;
-};
+// GetUserType now lives in @repo/auth.
 
 export async function getUser({
   identifier,
@@ -100,22 +96,6 @@ export async function createUser(data: RegisterUserInput): Promise<UserType> {
 
     return user;
   });
-}
-
-export async function getUserById(id: string): Promise<GetUserType | null> {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, id),
-    ...userPermissionsQueryConfig,
-  });
-
-  if (!user) return null;
-
-  return {
-    ...user,
-    passwordHash: undefined,
-    permissions:
-      user.role?.rolePermissions.map((rp) => rp.permission.code) || [],
-  };
 }
 
 export async function saveRefreshToken(
@@ -269,47 +249,4 @@ export async function createUserSession(
 export async function revokeAllUserSessions(): Promise<void> {
   await db.update(userSessions).set({ revokedAt: new Date() });
   await db.update(authTokens).set({ isActive: false, usedAt: new Date() });
-}
-
-export async function validateAccessToken(
-  userId: string,
-  token: string,
-): Promise<{
-  isValid: boolean;
-  isExpired: boolean;
-}> {
-  const isJwtValid = await verifyToken(token);
-
-  if (!isJwtValid) {
-    logger.debug(`JWT verification failed for user ${userId}. Token: ${token}`);
-    return {
-      isValid: false,
-      isExpired: true,
-    };
-  }
-
-  const accessTokenHash = sha256Hash(token);
-
-  const existingToken = await db.query.authTokens.findFirst({
-    where: and(
-      eq(authTokens.userId, userId),
-      eq(authTokens.isActive, true),
-      isNull(authTokens.usedAt),
-      gt(authTokens.expiresAt, new Date()),
-      eq(authTokens.token, accessTokenHash),
-    ),
-  });
-
-  if (!existingToken) {
-    logger.debug(`No active token found for user ${userId}. Token: ${token}`);
-    return {
-      isValid: false,
-      isExpired: false,
-    };
-  }
-
-  return {
-    isValid: true,
-    isExpired: false,
-  };
 }

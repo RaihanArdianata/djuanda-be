@@ -1,4 +1,4 @@
-import { failureFromCode } from "@repo/shared";
+import { failureFromCode } from "@repo/shared/api-response";
 import type { Context, Next } from "hono";
 import { ZodError, type ZodType, z } from "zod";
 

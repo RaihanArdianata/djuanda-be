@@ -7,18 +7,25 @@ const passthroughMiddleware = async (
   await next();
 };
 
-mock.module("@repo/auth-service/src/middleware/auth.middleware", () => ({
-  authentication: passthroughMiddleware,
-  rbacMiddleware: passthroughMiddleware,
-}));
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
-
-// Shared fake (packages/shared/src/testing/fakeRedis.ts) — mock.module is
+// Shared fake (packages/shared/src/testing/fakeRedis.ts) ï¿½ mock.module is
 // process-wide in bun test; all files must register the same fake.
 mock.module("ioredis", () => ({
   Redis: FakeRedis,
   default: FakeRedis,
+}));
+
+const authModule = await import("@repo/auth");
+
+// Preserve real auth package exports; only override middleware so routes can be
+// tested without a real database/user. Without the spread, other test files that
+// import named helpers like `generateRefreshToken` from `@repo/auth` break because
+// `mock.module` is process-global in bun:test.
+mock.module("@repo/auth", () => ({
+  ...authModule,
+  authentication: passthroughMiddleware,
+  rbacMiddleware: passthroughMiddleware,
 }));
 
 class FakeKafka {

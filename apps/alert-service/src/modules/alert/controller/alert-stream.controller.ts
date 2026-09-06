@@ -1,4 +1,4 @@
-import { catchAsync } from "@repo/shared";
+import { catchAsync } from "@repo/shared/catch-async";
 import { addStreamClient } from "../service/alert-broadcast.service";
 
 export const alertStreamController = catchAsync(async (c) => {

@@ -1,4 +1,5 @@
-import { errorHandler, metricsHandler, metricsMiddleware } from "@repo/shared";
+import { errorHandler } from "@repo/shared/error-handler";
+import { metricsHandler, metricsMiddleware } from "@repo/shared/metrics";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";

@@ -10,7 +10,14 @@ const passthroughMiddleware = async (
   await next();
 };
 
-mock.module("@repo/auth-service/src/middleware/auth.middleware", () => ({
+const authModule = await import("@repo/auth");
+
+// Preserve real auth package exports; only override middleware so routes can be
+// tested without a real database/user. Without the spread, other test files that
+// import named helpers like `generateRefreshToken` from `@repo/auth` break because
+// `mock.module` is process-global in bun:test.
+mock.module("@repo/auth", () => ({
+  ...authModule,
   authentication: passthroughMiddleware,
   rbacMiddleware: passthroughMiddleware,
 }));

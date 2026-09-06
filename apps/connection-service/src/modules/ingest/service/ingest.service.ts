@@ -6,7 +6,7 @@ import {
   db,
 } from "@repo/database";
 import { logger } from "@repo/logger";
-import { publishToTopic } from "@repo/shared";
+import { publishToTopic } from "@repo/shared/sse/publisher";
 import { sql } from "drizzle-orm";
 import { buildMovementId } from "../lib/movement-id";
 

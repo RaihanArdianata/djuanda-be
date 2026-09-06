@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 
 // The service snapshots these env vars into module-level constants at import
 // time, so they must be set before the dynamic import below.

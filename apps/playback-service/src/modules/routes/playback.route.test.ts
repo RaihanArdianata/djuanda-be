@@ -1,14 +1,13 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
+// @repo/shared's rate limiter creates a Redis client at module load time --
+// stub ioredis so importing the controller never dials localhost:6379.
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 import type {
   PlaybackControlRequest,
   PlaybackSessionRecord,
 } from "../schema/playback.schema";
 
-// @repo/shared's rate limiter creates a Redis client at module load time --
-// stub ioredis so importing the controller never dials localhost:6379.
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
-
-// Shared fake (packages/shared/src/testing/fakeRedis.ts) — mock.module is
+// Shared fake (packages/shared/src/testing/fakeRedis.ts) ï¿½ mock.module is
 // process-wide in bun test; all files must register the same fake.
 mock.module("ioredis", () => ({
   Redis: FakeRedis,

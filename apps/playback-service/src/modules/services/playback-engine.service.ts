@@ -1,5 +1,5 @@
 import { logger } from "@repo/logger";
-import { ApiError } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
 import { redis, streamChannel } from "../../redis/client";
 import type {
   PlaybackControlRequest,

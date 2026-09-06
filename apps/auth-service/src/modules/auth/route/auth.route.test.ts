@@ -1,41 +1,45 @@
 import { beforeAll, beforeEach, describe, expect, it, mock } from "bun:test";
+import { generateRefreshToken } from "@repo/auth";
 // Real submodules imported directly (bypassing the @repo/shared barrel) so the
 // mocked barrel can re-export them — the barrel loads rateLimiter.ts which
 // instantiates a nested ioredis copy that mock.module("ioredis") cannot reach.
-import ApiError from "@repo/shared/src/apiError";
-import {
-  failure,
-  failureFromCode,
-  success,
-} from "@repo/shared/src/apiResponse";
-import { catchAsync } from "@repo/shared/src/catchAsync";
+import ApiError from "@repo/shared/api-error";
+import { failure, failureFromCode, success } from "@repo/shared/api-response";
+import { catchAsync } from "@repo/shared/catch-async";
 import {
   passwordSchema,
   transformPhoneNumber,
-} from "@repo/shared/src/utils/formatter";
+} from "@repo/shared/utils/formatter";
 import {
   bcryptHash,
   bcryptVerify,
   sha256Hash,
-} from "@repo/shared/src/utils/hashing";
-import { generateRefreshToken } from "@/utils/jwt";
+} from "@repo/shared/utils/hashing";
 
 process.env.JWT_SECRET = "test-secret";
 
 const checkRateLimit = mock(async () => ({ allowed: true, remaining: 5 }));
 const resetRateLimit = mock(async () => undefined);
 
-mock.module("@repo/shared", () => ({
-  ApiError,
-  catchAsync,
+// Mock subpaths explicitly; the shared barrel is gone, so mocking "@repo/shared"
+// alone no longer intercepts controller imports.
+mock.module("@repo/shared/api-error", () => ({ default: ApiError }));
+mock.module("@repo/shared/api-response", () => ({
   failure,
   failureFromCode,
   success,
+}));
+mock.module("@repo/shared/catch-async", () => ({ catchAsync }));
+mock.module("@repo/shared/utils/formatter", () => ({
+  passwordSchema,
+  transformPhoneNumber,
+}));
+mock.module("@repo/shared/utils/hashing", () => ({
   bcryptHash,
   bcryptVerify,
   sha256Hash,
-  passwordSchema,
-  transformPhoneNumber,
+}));
+mock.module("@repo/shared/rate-limiter", () => ({
   checkRateLimit,
   resetRateLimit,
 }));

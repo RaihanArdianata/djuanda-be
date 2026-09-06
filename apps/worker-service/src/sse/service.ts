@@ -1,8 +1,8 @@
 import { logger } from "@repo/logger";
-import { getPublisher, publishToTopic } from "@repo/shared";
+import { getPublisher, publishToTopic } from "@repo/shared/sse/publisher";
 import type Redis from "ioredis";
 
-export type { TopicMessageHandler } from "@repo/shared";
+export type { TopicMessageHandler } from "@repo/shared/sse/publisher";
 export { publishToTopic };
 
 export function createSubscriber(): Redis {

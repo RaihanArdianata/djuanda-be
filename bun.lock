@@ -36,7 +36,7 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
@@ -59,7 +59,7 @@
       "name": "@repo/alert-service",
       "version": "0.0.0",
       "dependencies": {
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
@@ -78,6 +78,7 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
+        "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
@@ -148,7 +149,7 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
@@ -166,7 +167,7 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
@@ -183,7 +184,7 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
@@ -199,12 +200,11 @@
       "dependencies": {
         "@asteasolutions/zod-to-openapi": "^8.5.0",
         "@hono/swagger-ui": "^0.6.1",
-        "@repo/auth-service": "workspace:*",
+        "@repo/auth": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
         "@repo/validation": "workspace:*",
-        "@repo/worker-service": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.12.27",
         "kafkajs": "^2.2.4",
@@ -224,6 +224,17 @@
         "@repo/shared": "workspace:*",
         "hono": "^4.12.27",
         "ioredis": "^5.11.1",
+      },
+    },
+    "packages/auth": {
+      "name": "@repo/auth",
+      "version": "0.0.0",
+      "dependencies": {
+        "@repo/database": "workspace:*",
+        "@repo/logger": "workspace:*",
+        "@repo/shared": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+        "hono": "^4.12.27",
       },
     },
     "packages/config": {
@@ -447,6 +458,8 @@
     "@repo/aerodrome-service": ["@repo/aerodrome-service@workspace:apps/aerodrome-service"],
 
     "@repo/alert-service": ["@repo/alert-service@workspace:apps/alert-service"],
+
+    "@repo/auth": ["@repo/auth@workspace:packages/auth"],
 
     "@repo/auth-service": ["@repo/auth-service@workspace:apps/auth-service"],
 

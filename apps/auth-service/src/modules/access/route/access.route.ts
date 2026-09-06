@@ -1,5 +1,5 @@
+import { authentication, rbacMiddleware } from "@repo/auth";
 import { Hono } from "hono";
-import { authentication, rbacMiddleware } from "@/middleware/auth.middleware";
 import {
   getPermissions,
   getRolePermissionsHandler,

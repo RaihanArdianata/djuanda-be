@@ -4,7 +4,7 @@ import {
   generateRefreshToken,
   generateToken,
   verifyToken,
-} from "@/utils/jwt";
+} from "./jwt";
 
 describe("jwt utilities", () => {
   beforeAll(() => {

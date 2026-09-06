@@ -11,6 +11,7 @@
                     "test:coverage":  "bun test --coverage --coverage-reporter=text"
                 },
     "dependencies":  {
+                         "@repo/auth":  "workspace:*",
                          "@repo/database":  "workspace:*",
                          "@repo/shared":  "workspace:*",
                          "@repo/config":  "workspace:*",

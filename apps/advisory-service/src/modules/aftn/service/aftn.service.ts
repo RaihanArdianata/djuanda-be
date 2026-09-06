@@ -1,6 +1,6 @@
 import type { AftnMessage } from "@repo/database";
 import { logger } from "@repo/logger";
-import { ApiError } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
 import { env } from "@/config/env";
 import {
   type AftnEventType,

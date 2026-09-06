@@ -10,11 +10,6 @@ const passthroughMiddleware = async (
   await next();
 };
 
-mock.module("@repo/auth-service/src/middleware/auth.middleware", () => ({
-  authentication: passthroughMiddleware,
-  rbacMiddleware: passthroughMiddleware,
-}));
-
 // @repo/database opens a Postgres pool on import. The route only needs
 // userStatusEnum (for the status filter union in the validator); every other
 // export is irrelevant here because the service layer is mocked below.
@@ -24,13 +19,25 @@ mock.module("@repo/database", () => ({
 
 // @repo/shared (via its barrel) constructs an ioredis client at module load.
 // Replace it so no real connection to localhost:6379 is attempted.
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 
-// Shared fake (packages/shared/src/testing/fakeRedis.ts) — mock.module is
+// Shared fake (packages/shared/src/testing/fakeRedis.ts) ï¿½ mock.module is
 // process-wide in bun test; all files must register the same fake.
 mock.module("ioredis", () => ({
   Redis: FakeRedis,
   default: FakeRedis,
+}));
+
+const authModule = await import("@repo/auth");
+
+// Preserve real auth package exports; only override middleware so routes can be
+// tested without a real database/user. Without the spread, other test files that
+// import named helpers like `generateRefreshToken` from `@repo/auth` break because
+// `mock.module` is process-global in bun:test.
+mock.module("@repo/auth", () => ({
+  ...authModule,
+  authentication: passthroughMiddleware,
+  rbacMiddleware: passthroughMiddleware,
 }));
 
 const getAllUsers = mock();
@@ -49,9 +56,9 @@ mock.module("../service/user.service", () => ({
   deleteUser,
 }));
 
-// ApiError must come from the real @repo/shared so `instanceof ApiError`
+// ApiError must come from the real @repo/shared/api-error so `instanceof ApiError`
 // inside catchAsync still holds for errors thrown by the mocked service.
-const { ApiError } = await import("@repo/shared");
+const { default: ApiError } = await import("@repo/shared/api-error");
 
 // Imported dynamically, after the mocks above are registered, so the route
 // (via the controller) picks up the mocked auth middleware and service layer

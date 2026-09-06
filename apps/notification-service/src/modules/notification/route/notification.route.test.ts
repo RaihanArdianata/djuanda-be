@@ -7,9 +7,9 @@ mock.module("@repo/database", () => ({}));
 
 // @repo/shared (via its barrel) constructs an ioredis client at module load.
 // Replace it so no real connection to localhost:6379 is attempted.
-import { FakeRedis } from "@repo/shared/src/testing/fakeRedis";
+import { FakeRedis } from "@repo/shared/testing/fakeRedis";
 
-// Shared fake (packages/shared/src/testing/fakeRedis.ts) — mock.module is
+// Shared fake (packages/shared/src/testing/fakeRedis.ts) ï¿½ mock.module is
 // process-wide in bun test; all files must register the same fake.
 mock.module("ioredis", () => ({
   Redis: FakeRedis,

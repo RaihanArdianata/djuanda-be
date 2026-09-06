@@ -38,3 +38,23 @@ scrape_configs:
   - job_name: alert-service
     static_configs:
       - targets: ['alert-service:3006']
+
+  - job_name: advisory-service
+    static_configs:
+      - targets: ['advisory-service:3007']
+
+  - job_name: weather-service
+    static_configs:
+      - targets: ['weather-service:3008']
+
+  - job_name: aerodrome-service
+    static_configs:
+      - targets: ['aerodrome-service:3009']
+
+  - job_name: statistics-service
+    static_configs:
+      - targets: ['statistics-service:3010']
+
+  - job_name: playback-service
+    static_configs:
+      - targets: ['playback-service:3011']

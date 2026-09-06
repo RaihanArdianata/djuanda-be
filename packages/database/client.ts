@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { logger } from "@repo/logger";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./drizzle/schema";
@@ -16,6 +17,10 @@ export const pool = new Pool({
   ),
 });
 
-pool.on("error", (_err) => {});
+pool.on("error", (err) => {
+  // Log idle/connection errors so they are observable, but keep the pool
+  // alive — most of these are recoverable client errors rather than fatal.
+  logger.error({ err }, "database pool error");
+});
 
 export const db = drizzle({ client: pool, schema });

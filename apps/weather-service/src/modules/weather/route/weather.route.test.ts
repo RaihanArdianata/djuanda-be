@@ -32,7 +32,6 @@ mock.module("../services/weather.service", () => ({
 // Imported dynamically, after the mocks above are registered, so the route
 // (via the controller) picks up the mocked auth middleware and service layer
 // instead of the real ones.
-// biome-ignore lint/nursery/useExplicitType: destructured from a dynamic import, already fully inferred from ./weather.route
 const { default: weatherRoute } = await import("./weather.route");
 
 const sampleObservation = {

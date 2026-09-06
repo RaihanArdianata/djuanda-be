@@ -1,22 +1,25 @@
 {
-  "name": "@repo/user-service",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "bun --env-file=../../.env run --hot src/index.ts",
-    "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@repo/logger": "workspace:*",
-    "@repo/database": "workspace:*",
-    "@repo/shared": "workspace:*",
-    "@repo/validation": "workspace:*",
-    "@repo/auth-service": "workspace:*",
-    "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@hono/swagger-ui": "^0.6.1",
-    "hono": "^4.12.27",
-    "drizzle-orm": "^0.45.2",
-    "zod": "^4.4.3"
-  }
+    "name":  "@repo/user-service",
+    "version":  "0.0.0",
+    "private":  true,
+    "scripts":  {
+                    "dev":  "bun --env-file=../../.env run --hot src/index.ts",
+                    "start":  "bun run src/index.ts",
+                    "test":  "bun test",
+                    "typecheck":  "tsc --noEmit",
+                    "test:watch":  "bun test --watch",
+                    "test:coverage":  "bun test --coverage --coverage-reporter=text"
+                },
+    "dependencies":  {
+                         "@repo/logger":  "workspace:*",
+                         "@repo/database":  "workspace:*",
+                         "@repo/shared":  "workspace:*",
+                         "@repo/validation":  "workspace:*",
+                         "@repo/auth-service":  "workspace:*",
+                         "@asteasolutions/zod-to-openapi":  "^8.5.0",
+                         "@hono/swagger-ui":  "^0.6.1",
+                         "hono":  "^4.12.27",
+                         "drizzle-orm":  "^0.45.2",
+                         "zod":  "^4.4.3"
+                     }
 }

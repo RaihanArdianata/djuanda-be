@@ -15,6 +15,7 @@ export const ERROR_CATALOG: Record<
     statusCode: 401,
     message: "Invalid username or password",
   },
+  UNAUTHORIZED: { statusCode: 401, message: "Unauthorized" },
   TOO_MANY_ATTEMPTS: {
     statusCode: 429,
     message: "Too many login attempts, please try again later",

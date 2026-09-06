@@ -1,4 +1,3 @@
-// biome-ignore-start lint/nursery/useExplicitType: test fixtures
 import { describe, expect, test } from "bun:test";
 import type { AlertContext } from "../../types";
 import { stcaRule } from "./stca.rule";
@@ -134,4 +133,3 @@ describe("stcaRule", () => {
     expect(results[0].data.predictedVerticalSeparationFt).toBe(500);
   });
 });
-// biome-ignore-end lint/nursery/useExplicitType: test fixtures

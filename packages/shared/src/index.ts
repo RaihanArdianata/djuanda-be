@@ -5,5 +5,6 @@ export * from "./constants/errors";
 export * from "./errorHandler";
 export * from "./metrics";
 export * from "./rateLimiter";
+export * from "./sse/publisher";
 export * from "./types/api-response";
 export * from "./utils";

@@ -1,3 +1,4 @@
+import { logger } from "@repo/logger";
 import { ApiError, catchAsync, success } from "@repo/shared";
 import { z } from "zod";
 import {
@@ -64,7 +65,22 @@ export const ingest = catchAsync(async (c) => {
     throw err;
   }
 
-  await enqueueIngestEvent(event);
+  // Fire-and-forget: the HTTP caller should not wait for the 500ms buffer
+  // flush. Resolve 202 Accepted immediately once the event is enqueued; any
+  // flush error is logged and the persisted ingest log reflects the queue.
+  enqueueIngestEvent(event).catch((err) => {
+    logger.error({ err, id, kind }, "http ingest: enqueue/flush failed");
+    recordIngestLog({
+      source: "http",
+      kind,
+      status: "error",
+      id,
+      airportId,
+      message:
+        err instanceof Error ? err.message : "enqueue/flush error after 202",
+    });
+  });
+
   recordIngestLog({ source: "http", kind, status: "accepted", id, airportId });
-  return success(c, { kind }, { message: `${kind} event accepted` });
+  return success(c, { kind }, { code: 202, message: "event enqueued" });
 });

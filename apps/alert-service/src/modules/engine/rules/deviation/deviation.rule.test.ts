@@ -1,4 +1,3 @@
-// biome-ignore-start lint/nursery/useExplicitType: test fixtures
 import { describe, expect, test } from "bun:test";
 import type { AlertContext } from "../../types";
 import { deviationRule } from "./deviation.rule";
@@ -85,4 +84,3 @@ describe("deviationRule", () => {
     expect(results[0].data.timeExceeded).toBe(true);
   });
 });
-// biome-ignore-end lint/nursery/useExplicitType: test fixtures

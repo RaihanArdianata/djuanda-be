@@ -15,7 +15,7 @@ function getEventKeys(event: unknown): string[] | string {
   return event && typeof event === "object" ? Object.keys(event) : typeof event;
 }
 
-function parseMessageValue(raw: Buffer | null): void {
+async function parseMessageValue(raw: Buffer | null): Promise<void> {
   if (!raw) return;
   let event: unknown;
   try {
@@ -27,6 +27,10 @@ function parseMessageValue(raw: Buffer | null): void {
       status: "rejected",
       message: "kafka ingest: message is not valid JSON",
     });
+    logger.warn(
+      { raw: raw.toString() },
+      "kafka ingest: message is not valid JSON",
+    );
     return;
   }
 
@@ -68,8 +72,32 @@ function parseMessageValue(raw: Buffer | null): void {
     throw err;
   }
 
-  void enqueueIngestEvent(event);
-  recordIngestLog({ source: "kafka", kind, status: "accepted", id, airportId });
+  // Await the enqueue/flush so KafkaJS does not commit the offset for an event
+  // that has not been durably persisted, and errors are not silently lost.
+  try {
+    await enqueueIngestEvent(event);
+    recordIngestLog({
+      source: "kafka",
+      kind,
+      status: "accepted",
+      id,
+      airportId,
+    });
+  } catch (err) {
+    recordIngestLog({
+      source: "kafka",
+      kind,
+      status: "error",
+      id,
+      airportId,
+      message: err instanceof Error ? err.message : "enqueue/flush error",
+    });
+    logger.error(
+      { err, id, kind },
+      "kafka ingest: enqueue/flush failed — message will not be committed",
+    );
+    throw err;
+  }
 }
 
 /** No-op (consumer stays unset) when AEROSWARM_INGEST_KAFKA_BROKERS is
@@ -106,7 +134,7 @@ export async function startIngestKafkaConsumer(): Promise<void> {
   await consumer.subscribe({ topic, fromBeginning: false });
   await consumer.run({
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
-      parseMessageValue(message.value);
+      await parseMessageValue(message.value);
     },
   });
 

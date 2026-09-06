@@ -4,6 +4,22 @@ import {
   haversineMeters,
 } from "../geometry/geometry";
 
+function findNearestRouteIndex(
+  point: [number, number],
+  route: [number, number][],
+): number {
+  let nearestIndex = 0;
+  let minDist = Infinity;
+  for (let i = 0; i < route.length; i++) {
+    const d = haversineMeters(point, route[i]);
+    if (d < minDist) {
+      minDist = d;
+      nearestIndex = i;
+    }
+  }
+  return nearestIndex;
+}
+
 export const deviationRule: DetectionRule = {
   type: "DEVIATION",
   // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: deviation logic
@@ -22,15 +38,36 @@ export const deviationRule: DetectionRule = {
 
     const candidates: AlertCandidate[] = [];
 
+    const defaultExpectedAltitude = config.expectedAltitude as
+      | number
+      | undefined;
+    const expectedRouteAltitudes = Array.isArray(config.expectedRouteAltitudes)
+      ? (config.expectedRouteAltitudes as (number | null | undefined)[])
+      : undefined;
+
+    const maxTimeDeviation =
+      (config.maximumTimeDeviation as number | undefined) ?? Infinity;
+
     for (const track of ctx.tracks) {
       const point: [number, number] = [track.latitude, track.longitude];
       const horizontalDistance = distanceToPolylineMeters(point, expectedRoute);
+      const nearestIndex = findNearestRouteIndex(point, expectedRoute);
 
       const altitude = track.altitude ?? 0;
-      const altitudeExceeded = Math.abs(altitude) > maxAltitudeDeviationFt;
+      const nearestRouteAltitude = expectedRouteAltitudes?.[nearestIndex];
+      const expectedAltitude =
+        typeof nearestRouteAltitude === "number"
+          ? nearestRouteAltitude
+          : typeof defaultExpectedAltitude === "number"
+            ? defaultExpectedAltitude
+            : undefined;
 
-      const maxTimeDeviation =
-        (config.maximumTimeDeviation as number | undefined) ?? Infinity;
+      const altitudeDeviation =
+        expectedAltitude !== undefined ? altitude - expectedAltitude : 0;
+      const altitudeExceeded =
+        expectedAltitude !== undefined &&
+        Math.abs(altitudeDeviation) > maxAltitudeDeviationFt;
+
       let timeDeviationSeconds = 0;
       let timeExceeded = false;
 
@@ -39,15 +76,6 @@ export const deviationRule: DetectionRule = {
         Array.isArray(config.expectedRouteTimes) &&
         expectedRoute.length > 0
       ) {
-        let nearestIndex = 0;
-        let minDist = Infinity;
-        for (let i = 0; i < expectedRoute.length; i++) {
-          const d = haversineMeters(point, expectedRoute[i]);
-          if (d < minDist) {
-            minDist = d;
-            nearestIndex = i;
-          }
-        }
         const expectedTimeStr = config.expectedRouteTimes[nearestIndex];
         if (typeof expectedTimeStr === "string") {
           const expectedTime = new Date(expectedTimeStr);
@@ -80,7 +108,10 @@ export const deviationRule: DetectionRule = {
         data: {
           horizontalDistanceMeters: horizontalDistance,
           maxDistanceMeters,
-          altitudeDeviationFt: altitude,
+          altitudeFt: altitude,
+          expectedAltitude: expectedAltitude ?? null,
+          altitudeDeviationFt:
+            expectedAltitude !== undefined ? altitudeDeviation : null,
           maxAltitudeDeviationFt,
           timeDeviationSeconds,
           maximumTimeDeviation:

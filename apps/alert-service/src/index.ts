@@ -23,7 +23,7 @@ import {
 } from "./modules/messaging/weather.consumer";
 import { redis } from "./redis/client";
 
-const port: string | number = process.env.ALERT_SERVICE_PORT || 3005;
+const port: string | number = process.env.ALERT_SERVICE_PORT || 3006;
 
 const server = Bun.serve({
   port,

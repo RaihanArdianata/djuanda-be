@@ -27,14 +27,6 @@ scrape_configs:
   # (apps/connection-service/src/app.ts exposes /metrics) — previously
   # missing here entirely, so its own health/throughput was invisible to
   # Prometheus. worker-service and alert-service were the same gap.
-  #
-  # connection-service and alert-service both default to port 3005
-  # (CONNECTION_SERVICE_PORT / ALERT_SERVICE_PORT in .env.example) — this
-  # looks like a collision but isn't one: they're separate containers on the
-  # compose network, each with their own DNS name, and only
-  # connection-service publishes its port to the host (see docker-compose.yml).
-  # Two containers listening on the same internal port number is fine;
-  # Prometheus reaches them as distinct targets by hostname regardless.
   - job_name: connection-service
     static_configs:
       - targets: ['connection-service:3005']
@@ -45,4 +37,4 @@ scrape_configs:
 
   - job_name: alert-service
     static_configs:
-      - targets: ['alert-service:3005']
+      - targets: ['alert-service:3006']

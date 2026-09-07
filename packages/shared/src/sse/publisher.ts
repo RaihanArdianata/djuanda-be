@@ -37,3 +37,48 @@ export async function publishToTopic(
 }
 
 export type TopicMessageHandler = (message: string) => void | Promise<void>;
+
+export function createSubscriber(): Redis {
+  return getPublisher().duplicate();
+}
+
+export function subscribeToTopic(
+  topic: string,
+  onMessage: TopicMessageHandler,
+): () => Promise<void> {
+  const sub = createSubscriber();
+  const channel = `events:${topic}`;
+  let closed = false;
+
+  sub.on("error", (err) => {
+    logger.error({ err }, `[SSE Redis] subscriber error on ${channel}`);
+  });
+
+  sub.subscribe(channel, (err) => {
+    if (err) {
+      logger.error({ err }, `[SSE Redis] failed to subscribe to ${channel}`);
+    }
+  });
+
+  sub.on("message", (receivedChannel, message) => {
+    if (receivedChannel === channel) {
+      void onMessage(message);
+    }
+  });
+
+  return async function unsubscribe(): Promise<void> {
+    if (closed) return;
+    closed = true;
+    sub.removeAllListeners("message");
+    try {
+      await sub.unsubscribe(channel);
+    } catch {
+      // already unsubscribed/disconnected — fine
+    }
+    try {
+      await sub.quit();
+    } catch {
+      // already closed — fine
+    }
+  };
+}

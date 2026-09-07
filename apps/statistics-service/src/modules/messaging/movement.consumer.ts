@@ -26,7 +26,7 @@ export function isMovementRecordedEvent(
   value: unknown,
 ): value is MovementRecordedEvent {
   const e = value as Record<string, unknown> | null;
-  if (!e || e.eventType !== "MOVEMENT_RECORDED") return false;
+  if (e?.eventType !== "MOVEMENT_RECORDED") return false;
   const data = e.data as Record<string, unknown> | undefined;
   return (
     typeof data?.id === "string" &&

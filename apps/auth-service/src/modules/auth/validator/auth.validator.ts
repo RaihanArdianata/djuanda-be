@@ -1,4 +1,4 @@
-import { passwordSchema } from "@repo/shared";
+import { passwordSchema } from "@repo/shared/utils/formatter";
 import { z } from "zod";
 
 export const loginSchema = z.object({

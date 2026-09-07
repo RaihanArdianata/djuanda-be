@@ -4,15 +4,85 @@
   "private": true,
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./api-error": {
+      "types": "./src/apiError.ts",
+      "default": "./src/apiError.ts"
+    },
+    "./api-response": {
+      "types": "./src/apiResponse.ts",
+      "default": "./src/apiResponse.ts"
+    },
+    "./catch-async": {
+      "types": "./src/catchAsync.ts",
+      "default": "./src/catchAsync.ts"
+    },
+    "./constants/errors": {
+      "types": "./src/constants/errors.ts",
+      "default": "./src/constants/errors.ts"
+    },
+    "./cors": {
+      "types": "./src/cors.ts",
+      "default": "./src/cors.ts"
+    },
+    "./error-handler": {
+      "types": "./src/errorHandler.ts",
+      "default": "./src/errorHandler.ts"
+    },
+    "./metrics": {
+      "types": "./src/metrics.ts",
+      "default": "./src/metrics.ts"
+    },
+    "./rate-limiter": {
+      "types": "./src/rateLimiter.ts",
+      "default": "./src/rateLimiter.ts"
+    },
+    "./sse/publisher": {
+      "types": "./src/sse/publisher.ts",
+      "default": "./src/sse/publisher.ts"
+    },
+    "./testing/fakeRedis": {
+      "types": "./src/testing/fakeRedis.ts",
+      "default": "./src/testing/fakeRedis.ts"
+    },
+    "./types/api-response": {
+      "types": "./src/types/api-response.ts",
+      "default": "./src/types/api-response.ts"
+    },
+    "./utils": {
+      "types": "./src/utils/index.ts",
+      "default": "./src/utils/index.ts"
+    },
+    "./utils/fileUtils": {
+      "types": "./src/utils/fileUtils.ts",
+      "default": "./src/utils/fileUtils.ts"
+    },
+    "./utils/formatter": {
+      "types": "./src/utils/formatter.ts",
+      "default": "./src/utils/formatter.ts"
+    },
+    "./utils/hashing": {
+      "types": "./src/utils/hashing.ts",
+      "default": "./src/utils/hashing.ts"
+    }
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@repo/config": "workspace:*",
     "@repo/logger": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "hono": "^4.12.27",
     "ioredis": "^5.11.1",
     "prom-client": "^15.1.3",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0"
   }
 }

@@ -210,4 +210,4 @@ AEROSWARM_AIRPORT_ID=WARR bun run packages/database/seed-alert-rules.ts
 
 ## Healthcheck
 
-`alert-service` punya endpoint `/health` di port `3005` (default). Healthcheck Docker menggunakannya.
+`alert-service` punya endpoint `/health` di port `3006` (default). Healthcheck Docker menggunakannya.

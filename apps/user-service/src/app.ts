@@ -1,4 +1,4 @@
-import { metricsHandler, metricsMiddleware } from "@repo/shared";
+import { metricsHandler, metricsMiddleware } from "@repo/shared/metrics";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import routes from "./routes";

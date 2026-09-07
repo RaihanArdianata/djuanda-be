@@ -1,4 +1,3 @@
-// biome-ignore-start lint/nursery/useExplicitType: test fixtures
 import { describe, expect, test } from "bun:test";
 import type { AlertContext } from "../../types";
 import { runwayIncursionRule } from "./runway-incursion.rule";
@@ -82,4 +81,3 @@ describe("runwayIncursionRule", () => {
     expect(results.length).toBe(0);
   });
 });
-// biome-ignore-end lint/nursery/useExplicitType: test fixtures

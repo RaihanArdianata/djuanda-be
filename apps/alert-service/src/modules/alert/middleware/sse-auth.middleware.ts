@@ -1,9 +1,6 @@
-import {
-  getUserById,
-  validateAccessToken,
-} from "@repo/auth-service/src/modules/auth/service/auth.service";
-import { ApiError, catchAsync } from "@repo/shared";
-import { verify } from "hono/jwt";
+import { getUserById, validateAccessToken, verifyToken } from "@repo/auth";
+import ApiError from "@repo/shared/api-error";
+import { catchAsync } from "@repo/shared/catch-async";
 import type { JWTPayload } from "hono/utils/jwt/types";
 
 export const sseAuthentication = catchAsync(async (c, next) => {
@@ -17,7 +14,7 @@ export const sseAuthentication = catchAsync(async (c, next) => {
 
   let payload: JWTPayload;
   try {
-    payload = await verify(token, process.env.JWT_SECRET as string, "HS256");
+    payload = await verifyToken(token);
   } catch {
     throw new ApiError("UNAUTHORIZED");
   }

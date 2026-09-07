@@ -10,7 +10,14 @@ const passthroughMiddleware = async (
   await next();
 };
 
-mock.module("@repo/auth-service/src/middleware/auth.middleware", () => ({
+const authModule = await import("@repo/auth");
+
+// Preserve real auth package exports; only override middleware so routes can be
+// tested without a real database/user. Without the spread, other test files that
+// import named helpers like `generateRefreshToken` from `@repo/auth` break because
+// `mock.module` is process-global in bun:test.
+mock.module("@repo/auth", () => ({
+  ...authModule,
   authentication: passthroughMiddleware,
   rbacMiddleware: passthroughMiddleware,
 }));
@@ -32,7 +39,6 @@ mock.module("../services/weather.service", () => ({
 // Imported dynamically, after the mocks above are registered, so the route
 // (via the controller) picks up the mocked auth middleware and service layer
 // instead of the real ones.
-// biome-ignore lint/nursery/useExplicitType: destructured from a dynamic import, already fully inferred from ./weather.route
 const { default: weatherRoute } = await import("./weather.route");
 
 const sampleObservation = {

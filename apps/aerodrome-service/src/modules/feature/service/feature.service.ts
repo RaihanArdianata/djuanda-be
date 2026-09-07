@@ -4,7 +4,7 @@ import {
   aerodromeFeaturesSelectSchema,
   db,
 } from "@repo/database";
-import { ApiError } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
 import { and, eq, type SQL, sql } from "drizzle-orm";
 import z from "zod";
 import { publishAerodromeGeometryUpdated } from "../../messaging/aerodrome.producer";

@@ -6,4 +6,4 @@ public/
 .env
 .env.development
 
-/docs/
+# /docs/ -- dikecualikan via .git/info/exclude (lokal saja), jangan di-uncomment di sini

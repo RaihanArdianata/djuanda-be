@@ -1,4 +1,3 @@
-// biome-ignore-start lint/nursery/useExplicitType: test fixtures
 import { describe, expect, test } from "bun:test";
 import type { AlertContext } from "../../types";
 import { areaPenetrationRule } from "./area-penetration.rule";
@@ -59,4 +58,3 @@ describe("areaPenetrationRule", () => {
     expect(results.length).toBe(0);
   });
 });
-// biome-ignore-end lint/nursery/useExplicitType: test fixtures

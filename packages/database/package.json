@@ -12,6 +12,8 @@
     "seed:alerts": "bun --env-file=../../.env run seed-alert-rules.ts"
   },
   "dependencies": {
+    "@repo/logger": "workspace:*",
+    "@repo/shared": "workspace:*",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.8.3",

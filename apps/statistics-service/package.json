@@ -11,14 +11,16 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@hono/swagger-ui": "^0.6.1",
-    "@repo/worker-service": "workspace:*",
     "@repo/auth-service": "workspace:*",
+    "@repo/config": "workspace:*",
     "@repo/database": "workspace:*",
     "@repo/logger": "workspace:*",
     "@repo/shared": "workspace:*",
     "@repo/validation": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
+    "ioredis": "^5.11.1",
+    "kafkajs": "^2.2.4",
     "zod": "^4.4.3"
   }
 }

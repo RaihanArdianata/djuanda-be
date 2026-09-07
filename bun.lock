@@ -139,6 +139,7 @@
         "@repo/validation": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "hono": "^4.12.27",
+        "kafkajs": "^2.2.4",
         "zod": "^4.4.3",
       },
     },
@@ -168,7 +169,6 @@
         "@hono/swagger-ui": "^0.6.1",
         "@repo/auth-service": "workspace:*",
         "@repo/config": "workspace:*",
-        "@repo/auth": "workspace:*",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
@@ -220,7 +220,6 @@
       "dependencies": {
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
-        "@repo/gateway": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/playback-service": "workspace:*",
         "@repo/shared": "workspace:*",

@@ -17,6 +17,7 @@
     "@repo/logger": "workspace:*",
     "@repo/shared": "workspace:*",
     "@repo/validation": "workspace:*",
+    "@repo/auth": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
     "ioredis": "^5.11.1",

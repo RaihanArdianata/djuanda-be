@@ -1,5 +1,5 @@
 import { logger } from "@repo/logger";
-import { publishToTopic } from "@repo/worker-service/src/sse/service";
+import { publishToTopic } from "@repo/shared/sse/publisher";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
 import { publishWeatherEvent } from "../../messaging/weather.producer";

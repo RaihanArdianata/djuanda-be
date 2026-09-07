@@ -1,4 +1,5 @@
-import { catchAsync, success } from "@repo/shared";
+import { success } from "@repo/shared/api-response";
+import { catchAsync } from "@repo/shared/catch-async";
 import { getMovements } from "../service/movement.service";
 import type { GetMovementsParams } from "../validator/movement.validator";
 

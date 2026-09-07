@@ -10,7 +10,7 @@ import {
   FEATURE_STATUS_VALUES,
   type LayerName,
 } from "@repo/database";
-import { ApiError } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
 import { and, eq } from "drizzle-orm";
 import { validateGeometry } from "@/lib/geometry-validation";
 import { resolveLayer } from "@/lib/layers";

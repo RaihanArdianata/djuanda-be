@@ -1,4 +1,4 @@
-import { metricsHandler, metricsMiddleware } from "@repo/shared";
+import { metricsHandler, metricsMiddleware } from "@repo/shared/metrics";
 import { Hono } from "hono";
 import { compression } from "./middleware/compression";
 import { corsMiddleware } from "./middleware/cors";

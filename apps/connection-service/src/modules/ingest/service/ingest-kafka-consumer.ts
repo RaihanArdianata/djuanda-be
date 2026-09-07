@@ -3,63 +3,101 @@ import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import {
   AirportMismatchError,
   assertExpectedAirport,
-  enqueueAlertEvent,
-  enqueueMovementEvent,
-  enqueueTrackEvent,
-  isAlertEvent,
-  isMovementEvent,
-  isTrackEvent,
+  enqueueIngestEvent,
+  getIngestEventIdentity,
+  getIngestLogKind,
+  recordIngestLog,
 } from "./ingest.service";
 
 let consumer: Consumer | null = null;
 
-function parseMessageValue(raw: Buffer | null): void {
+function getEventKeys(event: unknown): string[] | string {
+  return event && typeof event === "object" ? Object.keys(event) : typeof event;
+}
+
+async function parseMessageValue(raw: Buffer | null): Promise<void> {
   if (!raw) return;
   let event: unknown;
   try {
     event = JSON.parse(raw.toString());
   } catch {
+    recordIngestLog({
+      source: "kafka",
+      kind: "unknown",
+      status: "rejected",
+      message: "kafka ingest: message is not valid JSON",
+    });
+    logger.warn(
+      { raw: raw.toString() },
+      "kafka ingest: message is not valid JSON",
+    );
     return;
   }
 
-  if (isTrackEvent(event) || isAlertEvent(event) || isMovementEvent(event)) {
-    try {
-      assertExpectedAirport(event);
-    } catch (err) {
-      if (err instanceof AirportMismatchError) {
-        logger.error(
-          {
-            err,
-            trackId: (event as { trackId?: string }).trackId,
-            alertId: (event as { alertId?: string }).alertId,
-          },
-          "kafka ingest: airport mismatch — event dropped",
-        );
-        return;
-      }
-      throw err;
+  const { id, airportId } = getIngestEventIdentity(event);
+  const kind = getIngestLogKind(event);
+
+  if (kind === "unknown") {
+    recordIngestLog({
+      source: "kafka",
+      kind: "unknown",
+      status: "rejected",
+      message: "kafka ingest: unrecognized event shape — dropped",
+    });
+    logger.warn(
+      { keys: getEventKeys(event) },
+      "kafka ingest: unrecognized event shape — dropped",
+    );
+    return;
+  }
+
+  try {
+    assertExpectedAirport(event as { airportId?: string });
+  } catch (err) {
+    if (err instanceof AirportMismatchError) {
+      recordIngestLog({
+        source: "kafka",
+        kind,
+        status: "rejected",
+        id,
+        airportId,
+        message: err.message,
+      });
+      logger.error(
+        { err, trackId: id, alertId: id },
+        "kafka ingest: airport mismatch — event dropped",
+      );
+      return;
     }
+    throw err;
   }
 
-  if (isTrackEvent(event)) {
-    enqueueTrackEvent(event);
-    return;
+  // Await the enqueue/flush so KafkaJS does not commit the offset for an event
+  // that has not been durably persisted, and errors are not silently lost.
+  try {
+    await enqueueIngestEvent(event);
+    recordIngestLog({
+      source: "kafka",
+      kind,
+      status: "accepted",
+      id,
+      airportId,
+    });
+  } catch (err) {
+    recordIngestLog({
+      source: "kafka",
+      kind,
+      status: "error",
+      id,
+      airportId,
+      message: err instanceof Error ? err.message : "enqueue/flush error",
+    });
+    logger.error(
+      { err, id, kind },
+      "kafka ingest: enqueue/flush failed — message will not be committed",
+    );
+    throw err;
   }
-  if (isAlertEvent(event)) {
-    enqueueAlertEvent(event);
-    return;
-  }
-  if (isMovementEvent(event)) {
-    enqueueMovementEvent(event);
-    return;
-  }
-  logger.warn(
-    {
-      keys:
-        event && typeof event === "object" ? Object.keys(event) : typeof event,
-    },
-    "kafka ingest: unrecognized event shape — dropped",
-  );
 }
 
 /** No-op (consumer stays unset) when AEROSWARM_INGEST_KAFKA_BROKERS is
@@ -96,7 +134,7 @@ export async function startIngestKafkaConsumer(): Promise<void> {
   await consumer.subscribe({ topic, fromBeginning: false });
   await consumer.run({
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
-      parseMessageValue(message.value);
+      await parseMessageValue(message.value);
     },
   });
 

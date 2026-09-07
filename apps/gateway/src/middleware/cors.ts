@@ -1,10 +1,6 @@
-import { cors } from "hono/cors";
+import { createCorsMiddleware } from "@repo/shared/cors";
 import { env } from "../config/env";
 
-export const corsMiddleware = cors({
+export const corsMiddleware = createCorsMiddleware({
   origin: env.CORS_ORIGIN,
-  allowHeaders: ["Content-Type", "Authorization", "X-Request-Id"],
-  allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  exposeHeaders: ["X-Request-Id"],
-  maxAge: 600,
 });

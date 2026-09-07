@@ -1,10 +1,8 @@
 import { logger } from "@repo/logger";
-import { ApiError, catchAsync } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
+import { catchAsync } from "@repo/shared/catch-async";
 import { jwt } from "hono/jwt";
-import {
-  getUserById,
-  validateAccessToken,
-} from "../modules/auth/service/auth.service";
+import { getUserById, validateAccessToken } from "./service";
 
 export const authentication = catchAsync(async (c, next) => {
   const jwtMiddleware = jwt({

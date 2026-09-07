@@ -12,6 +12,13 @@
     "test": {
       "dependsOn": ["^typecheck"],
       "cache": false
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "cache": false
     }
   },
   "concurrency": "20"

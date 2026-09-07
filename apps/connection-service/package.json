@@ -1,20 +1,23 @@
 {
-  "name": "@repo/connection-service",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "bun --env-file=../../.env run --hot src/index.ts",
-    "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@aeroswarm/replay-server": "^0.2.0",
-    "@repo/database": "workspace:*",
-    "@repo/logger": "workspace:*",
-    "@repo/shared": "workspace:*",
-    "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.27",
-    "kafkajs": "^2.2.4",
-    "zod": "^4.4.3"
-  }
+    "name":  "@repo/connection-service",
+    "version":  "0.0.0",
+    "private":  true,
+    "scripts":  {
+                    "dev":  "bun --env-file=../../.env.development run --hot src/index.ts",
+                    "start":  "bun run src/index.ts",
+                    "test":  "bun test",
+                    "typecheck":  "tsc --noEmit",
+                    "test:watch":  "bun test --watch",
+                    "test:coverage":  "bun test --coverage --coverage-reporter=text"
+                },
+    "dependencies":  {
+                         "@aeroswarm/replay-server":  "^0.2.0",
+                         "@repo/database":  "workspace:*",
+                         "@repo/logger":  "workspace:*",
+                         "@repo/shared":  "workspace:*",
+                         "drizzle-orm":  "^0.45.2",
+                         "hono":  "^4.12.27",
+                         "kafkajs":  "^2.2.4",
+                         "zod":  "^4.4.3"
+                     }
 }

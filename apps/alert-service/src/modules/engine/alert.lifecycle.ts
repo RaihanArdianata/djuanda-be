@@ -30,22 +30,22 @@ function toAlertEvent(alert: Alert, eventType: AlertEventType): AlertEvent {
 
 export async function publishAlertCreated(alert: Alert): Promise<void> {
   await publishAlertEvent(toAlertEvent(alert, "ALERT_CREATED"));
-  broadcastAlert(alert, "ALERT_CREATED");
+  await broadcastAlert(alert, "ALERT_CREATED");
 }
 
 export async function publishAlertUpdated(alert: Alert): Promise<void> {
   await publishAlertEvent(toAlertEvent(alert, "ALERT_UPDATED"));
-  broadcastAlert(alert, "ALERT_UPDATED");
+  await broadcastAlert(alert, "ALERT_UPDATED");
 }
 
 export async function publishAlertAcknowledged(alert: Alert): Promise<void> {
   await publishAlertEvent(toAlertEvent(alert, "ALERT_ACKNOWLEDGED"));
-  broadcastAlert(alert, "ALERT_ACKNOWLEDGED");
+  await broadcastAlert(alert, "ALERT_ACKNOWLEDGED");
 }
 
 export async function publishAlertCleared(alert: Alert): Promise<void> {
   await publishAlertEvent(toAlertEvent(alert, "ALERT_CLEARED"));
-  broadcastAlert(alert, "ALERT_CLEARED");
+  await broadcastAlert(alert, "ALERT_CLEARED");
 }
 
 export async function acknowledgeAlert(

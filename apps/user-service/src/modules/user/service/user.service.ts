@@ -1,5 +1,7 @@
 import { credentials, db, userRoles, users } from "@repo/database";
-import { ApiError, bcryptHash, transformPhoneNumber } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
+import { transformPhoneNumber } from "@repo/shared/utils/formatter";
+import { bcryptHash } from "@repo/shared/utils/hashing";
 import { and, desc, eq, ilike, inArray, isNull, not, or } from "drizzle-orm";
 import type {
   CreateUserParams,

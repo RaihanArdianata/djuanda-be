@@ -1,31 +1,34 @@
 {
-  "name": "@repo/aerodrome-service",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "dev": "bun --env-file=../../.env run --hot src/index.ts",
-    "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@hono/swagger-ui": "^0.6.1",
-    "@repo/auth-service": "workspace:*",
-    "@repo/config": "workspace:*",
-    "@repo/database": "workspace:*",
-    "@repo/logger": "workspace:*",
-    "@repo/shared": "workspace:*",
-    "@repo/validation": "workspace:*",
-    "@turf/kinks": "^7.3.5",
-    "drizzle-orm": "^0.45.2",
-    "geojson": "^0.5.0",
-    "hono": "^4.12.27",
-    "kafkajs": "^2.2.4",
-    "pg": "^8.22.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/geojson": "^7946.0.16",
-    "@types/pg": "^8.20.0"
-  }
+    "name":  "@repo/aerodrome-service",
+    "version":  "0.0.0",
+    "private":  true,
+    "scripts":  {
+                    "dev":  "bun --env-file=../../.env run --hot src/index.ts",
+                    "start":  "bun run src/index.ts",
+                    "typecheck":  "tsc --noEmit",
+                    "test":  "bun test",
+                    "test:watch":  "bun test --watch",
+                    "test:coverage":  "bun test --coverage --coverage-reporter=text"
+                },
+    "dependencies":  {
+                         "@asteasolutions/zod-to-openapi":  "^8.5.0",
+                         "@hono/swagger-ui":  "^0.6.1",
+                         "@repo/auth":  "workspace:*",
+                         "@repo/config":  "workspace:*",
+                         "@repo/database":  "workspace:*",
+                         "@repo/logger":  "workspace:*",
+                         "@repo/shared":  "workspace:*",
+                         "@repo/validation":  "workspace:*",
+                         "@turf/kinks":  "^7.3.5",
+                         "drizzle-orm":  "^0.45.2",
+                         "geojson":  "^0.5.0",
+                         "hono":  "^4.12.27",
+                         "kafkajs":  "^2.2.4",
+                         "pg":  "^8.22.0",
+                         "zod":  "^4.4.3"
+                     },
+    "devDependencies":  {
+                            "@types/geojson":  "^7946.0.16",
+                            "@types/pg":  "^8.20.0"
+                        }
 }

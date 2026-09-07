@@ -1,6 +1,10 @@
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import { app } from "./app";
+import {
+  startKafkaAlertConsumer,
+  stopKafkaAlertConsumer,
+} from "./messaging/alert-kafka.consumer";
 
 const port: string | number = process.env.NOTIFICATION_SERVICE_PORT || 3004;
 
@@ -11,11 +15,14 @@ const server = Bun.serve({
 
 logger.info(`notification-service listening on http://localhost:${port}`);
 
+void startKafkaAlertConsumer();
+
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(
     `${signal} received, shutting down notification-service gracefully`,
   );
   server.stop();
+  await stopKafkaAlertConsumer();
   await pool.end();
   process.exit(0);
 };

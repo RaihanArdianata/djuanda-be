@@ -1,6 +1,6 @@
 import type { AshtamMessage } from "@repo/database";
 import { logger } from "@repo/logger";
-import { ApiError } from "@repo/shared";
+import ApiError from "@repo/shared/api-error";
 import { env } from "@/config/env";
 // `resolveIncrementalWindow` is a pure windowing helper (latest stored
 // datetime + overlap → [startDate, endDate]) with no AFTN-specific logic.

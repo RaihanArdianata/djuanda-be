@@ -1,5 +1,5 @@
 import { userStatusEnum } from "@repo/database";
-import { passwordSchema } from "@repo/shared";
+import { passwordSchema } from "@repo/shared/utils/formatter";
 import z from "zod";
 
 const statusEnum = userStatusEnum.enumValues.map((status) => z.literal(status));

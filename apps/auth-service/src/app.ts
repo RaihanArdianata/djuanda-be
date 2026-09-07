@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import { errorHandler, metricsHandler, metricsMiddleware } from "@repo/shared";
+import { errorHandler } from "@repo/shared/error-handler";
+import { metricsHandler, metricsMiddleware } from "@repo/shared/metrics";
 import { Hono } from "hono";
 import { serveStatic, websocket } from "hono/bun";
 import { logger } from "hono/logger";

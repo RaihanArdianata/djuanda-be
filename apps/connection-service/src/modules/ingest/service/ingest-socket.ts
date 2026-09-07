@@ -23,6 +23,12 @@ export function handleIngestSocketMessage(
   try {
     parsed = JSON.parse(raw.toString());
   } catch {
+    logger.warn({ raw: raw.toString() }, "ws ingest: invalid JSON");
+    try {
+      socket.send(JSON.stringify({ type: "error", message: "Invalid JSON" }));
+    } catch {
+      /* socket already closing — nothing to notify */
+    }
     return;
   }
 

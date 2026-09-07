@@ -1,7 +1,4 @@
-import {
-  authentication,
-  rbacMiddleware,
-} from "@repo/auth-service/src/middleware/auth.middleware";
+import { authentication, rbacMiddleware } from "@repo/auth";
 import { validate } from "@repo/validation";
 import { Hono } from "hono";
 import { getMovementsController } from "../controller/movement.controller";

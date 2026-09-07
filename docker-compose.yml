@@ -62,10 +62,11 @@ services:
       - --reserve-memory=0M
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092,TUNNEL://0.0.0.0:19093
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092,TUNNEL://${ADVERTISED_KAFKA_HOST}:19093
     ports:
       - "19092:19092"
+      - "19093:19093"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     healthcheck:
@@ -229,7 +230,7 @@ services:
       # Kafka ingest consumer (alternative to http/websocket — see
       # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run
       # without it; the http/websocket ingest paths are unaffected either way.
-      AEROSWARM_INGEST_KAFKA_BROKERS: redpanda:9092
+      AEROSWARM_INGEST_KAFKA_BROKERS: ${AEROSWARM_INGEST_KAFKA_BROKERS:-redpanda:9092}
       AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
       AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
       KAFKA_BROKERS: redpanda:9092
@@ -252,6 +253,12 @@ services:
     # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
     ports:
       - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   worker-service:
     build:
       context: .
@@ -294,7 +301,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      ALERT_SERVICE_PORT: ${ALERT_SERVICE_PORT:-3005}
+      ALERT_SERVICE_PORT: ${ALERT_SERVICE_PORT:-3006}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -312,7 +319,7 @@ services:
           "CMD",
           "bun",
           "-e",
-          "fetch('http://localhost:3005/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch(`http://localhost:$${process.env.ALERT_SERVICE_PORT || 3006}/health`).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 15s
       timeout: 5s
@@ -503,7 +510,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:3001
       NOTIFICATION_SERVICE_URL: http://notification-service:3004
       USER_SERVICE_URL: http://user-service:${USER_SERVICE_PORT:-3002}
-      ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3005}
+      ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3006}
       WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
       ADVISORY_SERVICE_URL: http://advisory-service:${ADVISORY_SERVICE_PORT:-3007}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws

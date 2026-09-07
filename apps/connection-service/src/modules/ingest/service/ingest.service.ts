@@ -17,6 +17,20 @@ const FLUSH_INTERVAL_MS = 500;
 const MAX_BUFFER = 500;
 const INGEST_SECRET: string = process.env.AEROSWARM_INGEST_SECRET || "";
 
+const INGEST_LOG_MAX = 200;
+
+export interface IngestLogEntry {
+  timestamp: string;
+  source: "http" | "kafka";
+  kind: "track" | "alert" | "movement" | "unknown";
+  status: "accepted" | "rejected" | "error";
+  id?: string;
+  airportId?: string;
+  message?: string;
+}
+
+const ingestLog: IngestLogEntry[] = [];
+
 export function isValidIngestSecret(
   secret: string | null | undefined,
 ): boolean {
@@ -140,6 +154,25 @@ export function isMovementEvent(event: unknown): event is MovementEventLike {
   );
 }
 
+export function getIngestEventIdentity(event: unknown): {
+  id?: string;
+  airportId?: string;
+} {
+  if (!event || typeof event !== "object") return {};
+  const e = event as Record<string, unknown>;
+  return {
+    id: (e.trackId as string | undefined) ?? (e.alertId as string | undefined),
+    airportId: e.airportId as string | undefined,
+  };
+}
+
+export function getIngestLogKind(event: unknown): IngestLogEntry["kind"] {
+  if (isTrackEvent(event)) return "track";
+  if (isAlertEvent(event)) return "alert";
+  if (isMovementEvent(event)) return "movement";
+  return "unknown";
+}
+
 export function enqueueTrackEvent(event: FusedTrackEventLike): Promise<void> {
   trackBuffer.push({
     fusedAt: new Date(event.fusedAt),
@@ -183,6 +216,22 @@ export function enqueueMovementEvent(event: MovementEventLike): Promise<void> {
     data: event,
   });
   return scheduleFlush();
+}
+
+export async function enqueueIngestEvent(event: unknown): Promise<void> {
+  const kind = getIngestLogKind(event);
+  if (kind === "track") {
+    await enqueueTrackEvent(event as FusedTrackEventLike);
+    return;
+  }
+  if (kind === "alert") {
+    await enqueueAlertEvent(event as AlertEventLike);
+    return;
+  }
+  if (kind === "movement") {
+    await enqueueMovementEvent(event as MovementEventLike);
+    return;
+  }
 }
 
 function scheduleFlush(): Promise<void> {
@@ -263,4 +312,21 @@ export async function flush(): Promise<void> {
     );
     batch?.reject(error);
   }
+}
+
+export function recordIngestLog(
+  entry: Omit<IngestLogEntry, "timestamp">,
+): void {
+  const item: IngestLogEntry = {
+    ...entry,
+    timestamp: new Date().toISOString(),
+  };
+  ingestLog.unshift(item);
+  while (ingestLog.length > INGEST_LOG_MAX) {
+    ingestLog.pop();
+  }
+}
+
+export function getIngestLog(limit = 100): IngestLogEntry[] {
+  return ingestLog.slice(0, Math.max(1, limit));
 }

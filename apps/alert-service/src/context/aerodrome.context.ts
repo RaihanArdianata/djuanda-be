@@ -84,12 +84,10 @@ async function fetchAerodromeGeometry(
       polygon: f.polygon,
     }));
 
+  // INACTIVE tetap dihitung sebagai zona incursion — sama seperti RESTRICTED,
+  // bedanya hanya "dibatasi" vs "ditutup total".
   const surfaces = processed
-    .filter(
-      (f) =>
-        (f.layer === "TAXIWAY" || f.layer === "APRON") &&
-        f.status !== "INACTIVE",
-    )
+    .filter((f) => f.layer === "TAXIWAY" || f.layer === "APRON")
     .map((f) => ({
       id: f.id,
       name: f.name ?? null,

@@ -113,6 +113,14 @@ services:
           --set retention.ms=3600000 \
           --set retention.bytes=536870912 \
           || true
+        # Service-to-service movement event bus (connection-service ->
+        # statistics-service), durable/replayable, consumer-group based.
+        rpk topic create ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement} \
+          --brokers redpanda:9092 \
+          --partitions 3 \
+          --replicas 1 \
+          --config compression.type=lz4 \
+          || true
         echo "Topic ready."
     restart: "no"
 
@@ -228,6 +236,8 @@ services:
       # Outbound: fused tracks -> asmgcs.tracks untuk alert-service
       AEROSWARM_TRACK_KAFKA_BROKERS: ${AEROSWARM_TRACK_KAFKA_BROKERS:-redpanda:9092}
       AEROSWARM_TRACK_KAFKA_TOPIC: ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks}
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_MOVEMENT_TOPIC: ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
@@ -430,11 +440,19 @@ services:
     environment:
       STATISTICS_SERVICE_PORT: ${STATISTICS_SERVICE_PORT:-3010}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_MOVEMENT_TOPIC: ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement}
     depends_on:
       pgbouncer:
         condition: service_started
       redis:
         condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test:
         [

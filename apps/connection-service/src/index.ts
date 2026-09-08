@@ -20,6 +20,10 @@ import {
   startTrackProducer,
   stopTrackProducer,
 } from "./modules/ingest/service/track.producer";
+import {
+  startMovementProducer,
+  stopMovementProducer,
+} from "./modules/messaging/movement.producer";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
@@ -96,6 +100,12 @@ startTrackProducer().catch((err) => {
     "track producer failed to start — alerts will not receive asmgcs.tracks",
   );
 });
+startMovementProducer().catch((err) => {
+  logger.error(
+    { err },
+    "movement producer failed to start — movement persistence is unaffected, realtime broadcast will be skipped",
+  );
+});
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(
@@ -103,6 +113,7 @@ const shutdown = async (signal: string): Promise<never> => {
   );
   server.stop();
   await stopIngestKafkaConsumer();
+  await stopMovementProducer();
   await flush();
   await stopTrackProducer();
   await pool.end();

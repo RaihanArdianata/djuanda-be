@@ -11,7 +11,6 @@ import { requestId } from "./middleware/request-id";
 import { security } from "./middleware/security";
 import { requestTimeout } from "./middleware/timeout";
 import routes from "./routes";
-import { alertWsHandler } from "./websocket/alert";
 
 // Urutan: RequestID -> Logger -> Security -> CORS -> Compression -> Timeout -> Rate Limit -> (JWT per-route) -> Proxy
 const app = new Hono()
@@ -23,7 +22,6 @@ const app = new Hono()
   .use(requestTimeout)
   .use(metricsMiddleware)
   .get("/metrics", metricsHandler)
-  .get("/ws/alerts", alertWsHandler)
   .use(rateLimit)
   .route("/", routes)
   .notFound(notFound)

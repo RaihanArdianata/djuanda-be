@@ -1,8 +1,10 @@
 import type { ServerWebSocket } from "bun";
 import { upgradeWebSocket } from "hono/bun";
 import type { WSContext } from "hono/ws";
+import { subscribeToTopic } from "../sse/service";
 
 const clients = new Map<ServerWebSocket, Set<string>>();
+const redisUnsubs = new Map<ServerWebSocket, () => Promise<void>>();
 
 export const wsHandler = upgradeWebSocket((c) => {
   const topic = c.req.param("topic");
@@ -18,6 +20,11 @@ export const wsHandler = upgradeWebSocket((c) => {
       }
       clients.get(rawWs)?.add(topic);
       rawWs.subscribe(topic);
+
+      const unsubscribe = subscribeToTopic(topic, (message: string): void => {
+        rawWs.publish(topic, message);
+      });
+      redisUnsubs.set(rawWs, unsubscribe);
     },
     onMessage(evt: MessageEvent, ws: WSContext): void {
       const rawWs = ws.raw as ServerWebSocket;
@@ -37,6 +44,12 @@ export const wsHandler = upgradeWebSocket((c) => {
         for (const topic of topics) {
           rawWs.unsubscribe(topic);
         }
+      }
+
+      const unsubscribe = redisUnsubs.get(rawWs);
+      if (unsubscribe) {
+        void unsubscribe();
+        redisUnsubs.delete(rawWs);
       }
 
       clients.delete(rawWs);

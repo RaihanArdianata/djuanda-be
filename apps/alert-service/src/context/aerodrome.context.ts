@@ -75,15 +75,12 @@ async function fetchAerodromeGeometry(
     .filter((f) => f.polygon.length > 0);
 
   const runways = processed
-    .filter((f) => f.layer === "RUNWAY" && f.status !== "INACTIVE")
+    .filter((f) => f.layer === "RUNWAY")
     .map((f) => ({
       id: f.id,
       name: f.name ?? null,
       status: f.status ?? null,
-      active:
-        f.status != null
-          ? f.status === "ACTIVE"
-          : f.properties.active === true || f.properties.status === "ACTIVE",
+      active: true,
       polygon: f.polygon,
     }));
 
@@ -104,10 +101,9 @@ async function fetchAerodromeGeometry(
   const areas = processed
     .filter(
       (f) =>
-        (f.layer === "RESTRICTED" ||
-          f.status === "RESTRICTED" ||
-          f.properties.restricted === true) &&
-        f.status !== "INACTIVE",
+        f.layer === "RESTRICTED" ||
+        f.status === "RESTRICTED" ||
+        f.properties.restricted === true,
     )
     .map((f) => ({
       id: f.id,

@@ -52,7 +52,7 @@ export const runwayIncursionRule: DetectionRule = {
             runwayStatus: featureStatus,
             active: runway.active,
             callsign,
-            message: `${callsign} entered active runway ${featureName} (${featureStatus})`,
+            message: `${callsign} entered runway ${featureName} (${featureStatus})`,
             latitude: track.latitude,
             longitude: track.longitude,
           },

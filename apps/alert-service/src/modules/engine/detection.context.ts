@@ -1,3 +1,4 @@
+import { logger } from "@repo/logger";
 import {
   getAftnContext,
   getNotamContext,
@@ -12,10 +13,27 @@ export interface BuildDetectionContextInput {
   tracks: MovementTrack[];
 }
 
+function pick<T>(
+  result: PromiseSettledResult<T>,
+  source: string,
+  airportId: string,
+): T | null {
+  if (result.status === "rejected") {
+    logger.warn(
+      { err: result.reason, airportId, source },
+      "alert context source failed — rules needing it are skipped",
+    );
+    return null;
+  }
+  return result.value;
+}
+
+/** Context bersifat opsional per-rule — kegagalan satu sumber (misal
+ *  advisory-service down) tidak boleh mematikan seluruh evaluasi. */
 export async function buildAlertContext(
   input: BuildDetectionContextInput,
 ): Promise<AlertContext> {
-  const [weather, aerodrome, aftn, notam] = await Promise.all([
+  const [weather, aerodrome, aftn, notam] = await Promise.allSettled([
     getWeatherContext(input.airportId),
     getAerodromeContext(input.airportId),
     getAftnContext(input.airportId),
@@ -26,9 +44,9 @@ export async function buildAlertContext(
     airportId: input.airportId,
     timestamp: input.timestamp,
     tracks: input.tracks,
-    weather: weather ?? null,
-    aerodrome: aerodrome ?? null,
-    aftn: aftn ?? null,
-    notam: notam ?? null,
+    weather: pick(weather, "weather", input.airportId),
+    aerodrome: pick(aerodrome, "aerodrome", input.airportId),
+    aftn: pick(aftn, "aftn", input.airportId),
+    notam: pick(notam, "notam", input.airportId),
   };
 }

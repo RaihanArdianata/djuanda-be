@@ -8,6 +8,7 @@ import {
 import { logger } from "@repo/logger";
 import { sql } from "drizzle-orm";
 import { publishMovementRecorded } from "../../messaging/movement.producer";
+import { publishTrackBatch } from "./track.producer";
 
 type TrackRow = typeof aeroswarmTracks.$inferInsert;
 type AlertRow = typeof aeroswarmAlerts.$inferInsert;
@@ -268,8 +269,17 @@ export async function flush(): Promise<void> {
   }
 
   try {
-    if (tracks.length)
+    if (tracks.length) {
       await db.insert(aeroswarmTracks).values(tracks).onConflictDoNothing();
+      try {
+        await publishTrackBatch(tracks.map((row) => row.data));
+      } catch (err) {
+        logger.error(
+          { err, tracks: tracks.length },
+          "track publish to asmgcs.tracks failed — tracks persisted, alert pipeline missed them",
+        );
+      }
+    }
     if (alerts.length)
       await db.insert(aeroswarmAlerts).values(alerts).onConflictDoNothing();
     if (movements.length) {

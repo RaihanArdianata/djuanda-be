@@ -23,10 +23,19 @@ async function fetchAftnMessages(airportId: string): Promise<AftnMessage[]> {
   url.searchParams.set("destination", airportId);
   url.searchParams.set("messageType", "FPL");
   url.searchParams.set("limit", "200");
-  const res = await fetch(url.toString());
-  if (!res.ok) return [];
-  const json = (await res.json()) as { data?: { items: AftnMessage[] } };
-  return json.data?.items ?? [];
+  try {
+    // Fallback cold-start saja — sumber utama AFTN adalah asmgcs.advisory
+    // consumer yang mengisi cache. Timeout pendek supaya satu advisory-service
+    // yang lambat tidak menahan evaluasi semua rule.
+    const res = await fetch(url.toString(), {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { data?: { items: AftnMessage[] } };
+    return json.data?.items ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function cacheAftnMessage(message: AftnMessage): Promise<void> {

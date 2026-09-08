@@ -233,6 +233,9 @@ services:
       AEROSWARM_INGEST_KAFKA_BROKERS: ${AEROSWARM_INGEST_KAFKA_BROKERS:-redpanda:9092}
       AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
       AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
+      # Outbound: fused tracks -> asmgcs.tracks untuk alert-service
+      AEROSWARM_TRACK_KAFKA_BROKERS: ${AEROSWARM_TRACK_KAFKA_BROKERS:-redpanda:9092}
+      AEROSWARM_TRACK_KAFKA_TOPIC: ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks}
       KAFKA_BROKERS: redpanda:9092
       KAFKA_MOVEMENT_TOPIC: ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement}
       REDIS_HOST: redis

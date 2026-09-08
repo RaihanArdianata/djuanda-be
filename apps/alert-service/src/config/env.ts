@@ -27,7 +27,7 @@ export const alertServiceEnv: AlertServiceEnv = {
   advisoryServiceUrl:
     process.env.ADVISORY_SERVICE_URL || "http://advisory-service:3007",
   aerodromeServiceUrl:
-    process.env.AERODROME_SERVICE_URL || "http://aerodrome-service:3006",
+    process.env.AERODROME_SERVICE_URL || "http://aerodrome-service:3009",
   weatherServiceUrl:
     process.env.WEATHER_SERVICE_URL || "http://weather-service:3008",
 };

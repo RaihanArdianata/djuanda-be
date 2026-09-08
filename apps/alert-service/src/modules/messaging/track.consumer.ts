@@ -89,7 +89,10 @@ export async function startTrackConsumer(): Promise<void> {
         await trackUpdated(track);
         await processTrackUpdate(track);
       } catch (err) {
-        logger.warn({ err }, "track consumer: failed to process message");
+        // Throw supaya offset tidak di-commit dan KafkaJS me-retry pesan
+        // (backoff bawaan). Swallow di sini = alert hilang diam-diam.
+        logger.error({ err }, "track consumer: failed to process message");
+        throw err;
       }
     },
   });

@@ -16,6 +16,10 @@ import {
   stopIngestKafkaConsumer,
 } from "./modules/ingest/service/ingest-kafka-consumer";
 import { handleIngestSocketMessage } from "./modules/ingest/service/ingest-socket";
+import {
+  startTrackProducer,
+  stopTrackProducer,
+} from "./modules/ingest/service/track.producer";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
@@ -86,6 +90,13 @@ startIngestKafkaConsumer().catch((err) => {
   );
 });
 
+startTrackProducer().catch((err) => {
+  logger.error(
+    { err },
+    "track producer failed to start — alerts will not receive asmgcs.tracks",
+  );
+});
+
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(
     `${signal} received, shutting down connection-service gracefully`,
@@ -93,6 +104,7 @@ const shutdown = async (signal: string): Promise<never> => {
   server.stop();
   await stopIngestKafkaConsumer();
   await flush();
+  await stopTrackProducer();
   await pool.end();
   process.exit(0);
 };

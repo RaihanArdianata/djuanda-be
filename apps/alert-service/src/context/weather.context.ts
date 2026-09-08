@@ -15,7 +15,10 @@ async function fetchJson<T>(url: string): Promise<{ data?: T } | null> {
     const token = process.env.SERVICE_API_TOKEN;
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(2_000),
+    });
     if (!res.ok) return null;
     return (await res.json()) as { data?: T };
   } catch {

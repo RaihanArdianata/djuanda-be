@@ -8,7 +8,6 @@ import {
 import { logger } from "@repo/logger";
 import { sql } from "drizzle-orm";
 import { publishMovementRecorded } from "../../messaging/movement.producer";
-import { buildMovementId } from "../lib/movement-id";
 import { publishTrackBatch } from "./track.producer";
 
 type TrackRow = typeof aeroswarmTracks.$inferInsert;

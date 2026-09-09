@@ -11,6 +11,7 @@ import { registerAlert } from "../alert/service/alert.service";
 import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
+import { getTrackHistory } from "./track-history";
 import type { AlertCandidate, AlertContext, MovementTrack } from "./types";
 
 export interface DetectionInput {
@@ -76,6 +77,14 @@ async function registerCandidate(
     return null;
   }
 
+  const trackHistory = getTrackHistory(candidate.trackId, 20);
+  const relatedTrackHistory = getTrackHistory(candidate.relatedTrackId, 20);
+  const enrichedData = {
+    ...candidate.data,
+    trackHistory,
+    relatedTrackHistory,
+  };
+
   const stored = await registerAlert({
     ...candidate,
     relatedTrackId: candidate.relatedTrackId ?? null,
@@ -87,7 +96,7 @@ async function registerCandidate(
     acknowledgedBy: null,
     clearedAt: null,
     clearedBy: null,
-    data: candidate.data,
+    data: enrichedData,
   });
 
   await setActiveAlert(airportId, candidate.type, entityKey, stored.alertId);

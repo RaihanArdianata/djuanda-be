@@ -44,6 +44,8 @@ export const stcaRule: DetectionRule = {
           distanceNm < ((config.minimumHorizontalSeparationNm as number) ?? 3)
         ) {
           const alertId = `STCA|${ctx.airportId}|${pairKey}`;
+          const callsignA = a.callsign ?? a.trackId;
+          const callsignB = b.callsign ?? b.trackId;
           candidates.push({
             alertId,
             airportId: ctx.airportId,
@@ -54,6 +56,13 @@ export const stcaRule: DetectionRule = {
             relatedTrackId: b.trackId,
             triggeredAt: ctx.timestamp,
             data: {
+              callsign: callsignA,
+              relatedCallsign: callsignB,
+              message: `${callsignA} and ${callsignB} predicted below minimum separation (${distanceNm.toFixed(2)} NM in ${horizon}s)`,
+              latitude: (a.latitude + b.latitude) / 2,
+              longitude: (a.longitude + b.longitude) / 2,
+              track: trackSnapshot(a),
+              relatedTrack: trackSnapshot(b),
               predictedTimeSeconds: horizon,
               horizontalSeparationNm: distanceNm,
               minimumHorizontalSeparationNm:
@@ -73,6 +82,30 @@ export const stcaRule: DetectionRule = {
   },
   // biome-ignore-end lint/complexity/noExcessiveCognitiveComplexity: STCA logic
 };
+
+function trackSnapshot(track: AlertContext["tracks"][0]): {
+  trackId: string;
+  callsign: string;
+  registration: string | null;
+  latitude: number;
+  longitude: number;
+  altitude: number | null;
+  groundSpeed: number | null;
+  heading: number | null;
+  onGround: boolean | null;
+} {
+  return {
+    trackId: track.trackId,
+    callsign: track.callsign ?? track.trackId,
+    registration: track.registration ?? null,
+    latitude: track.latitude,
+    longitude: track.longitude,
+    altitude: track.altitude ?? null,
+    groundSpeed: track.groundSpeed ?? null,
+    heading: track.heading ?? null,
+    onGround: track.onGround ?? null,
+  };
+}
 
 function predict(
   track: AlertContext["tracks"][0],

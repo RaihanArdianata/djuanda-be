@@ -29,6 +29,7 @@ export interface AlertEvent {
     trackId: string;
     relatedTrackId?: string | null;
     airportId: string;
+    [key: string]: unknown;
   };
 }
 

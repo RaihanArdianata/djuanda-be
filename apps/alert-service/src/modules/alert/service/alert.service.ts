@@ -4,8 +4,11 @@ import {
   clearAlert as lifecycleClearAlert,
 } from "../../engine/alert.lifecycle";
 import {
+  type AlertTrackHistoryPoint,
   findAlertByAlertId,
   findAlertById,
+  getAlertTrackHistory,
+  insertAlertTrackHistory,
   type ListAlertsResult,
   listAlerts,
   upsertAlertByAlertId,
@@ -17,6 +20,7 @@ import type {
 } from "../validator/alert.validator";
 
 export type AlertInput = Omit<Alert, "id" | "createdAt" | "updatedAt">;
+export type { AlertTrackHistoryPoint } from "../repository/alert.repository";
 
 export async function getAllAlerts(
   params: ListAlertsInput,
@@ -38,11 +42,19 @@ export async function registerAlert(values: AlertInput): Promise<Alert> {
   return upsertAlertByAlertId(values);
 }
 
+export async function recordAlertTrackHistory(
+  records: AlertTrackHistoryPoint[],
+): Promise<void> {
+  return insertAlertTrackHistory(records);
+}
+
 export async function findExistingAlert(
   alertId: string,
 ): Promise<Alert | undefined> {
   return findAlertByAlertId(alertId);
 }
+
+export { getAlertTrackHistory };
 
 export async function acknowledgeAlertService(
   id: string,

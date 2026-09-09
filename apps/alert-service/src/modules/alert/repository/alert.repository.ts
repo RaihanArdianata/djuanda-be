@@ -1,4 +1,10 @@
-import { type Alert, alerts, db } from "@repo/database";
+import {
+  type Alert,
+  type AlertTrackHistory,
+  alerts,
+  alertTrackHistory,
+  db,
+} from "@repo/database";
 import {
   and,
   asc,
@@ -162,4 +168,78 @@ export const clearAlertByAlertId = async (
     .where(eq(alerts.alertId, alertId))
     .returning();
   return row;
+};
+
+export const mergeAlertData = async (
+  alertId: string,
+  extra: Record<string, unknown>,
+): Promise<Alert | undefined> => {
+  const existing = await db
+    .select({ data: alerts.data })
+    .from(alerts)
+    .where(eq(alerts.alertId, alertId))
+    .limit(1);
+
+  if (existing.length === 0) return undefined;
+
+  const merged = {
+    ...((existing[0].data as Record<string, unknown> | null) ?? {}),
+    ...extra,
+  };
+
+  const [row] = await db
+    .update(alerts)
+    .set({ data: merged, updatedAt: new Date() })
+    .where(eq(alerts.alertId, alertId))
+    .returning();
+  return row;
+};
+
+export interface AlertTrackHistoryPoint {
+  alertId: string;
+  trackId: string;
+  kind: "main" | "related";
+  targetType?: string | null;
+  callsign?: string | null;
+  registration?: string | null;
+  latitude: number;
+  longitude: number;
+  altitude?: number | null;
+  groundSpeed?: number | null;
+  heading?: number | null;
+  onGround?: boolean | null;
+  timestamp: Date;
+}
+
+export const insertAlertTrackHistory = async (
+  records: AlertTrackHistoryPoint[],
+): Promise<void> => {
+  if (records.length === 0) return;
+  await db.insert(alertTrackHistory).values(records);
+};
+
+export interface AlertTrackHistoryResult {
+  main: AlertTrackHistory[];
+  related: AlertTrackHistory[];
+}
+
+export const getAlertTrackHistory = async (
+  alertId: string,
+): Promise<AlertTrackHistoryResult> => {
+  const rows = await db
+    .select()
+    .from(alertTrackHistory)
+    .where(eq(alertTrackHistory.alertId, alertId))
+    .orderBy(
+      asc(alertTrackHistory.timestamp),
+      asc(alertTrackHistory.createdAt),
+    );
+
+  const main: AlertTrackHistory[] = [];
+  const related: AlertTrackHistory[] = [];
+  for (const row of rows) {
+    if (row.kind === "related") related.push(row);
+    else main.push(row);
+  }
+  return { main, related };
 };

@@ -114,21 +114,50 @@ async function seed(): Promise<void> {
     "Kelola data user",
   );
 
-  await db
-    .insert(rolePermissions)
-    .values({
-      roleId: roleOwner.id,
-      permissionId: permManageUsers.id,
-    })
-    .onConflictDoNothing();
+  // Hapus alert permission lowercase lama (kalau sudah pernah di-seed) supaya
+  // konsisten dengan convention UPPERCASE permission code.
+  const staleAlertCodes = ["alert.view", "alert.create"];
+  for (const code of staleAlertCodes) {
+    const existing = await db
+      .select({ id: permissions.id })
+      .from(permissions)
+      .where(eq(permissions.code, code))
+      .limit(1);
+    if (existing.length > 0) {
+      await db
+        .delete(rolePermissions)
+        .where(eq(rolePermissions.permissionId, existing[0].id));
+      await db.delete(permissions).where(eq(permissions.id, existing[0].id));
+    }
+  }
 
-  await db
-    .insert(rolePermissions)
-    .values({
-      roleId: roleAdmin.id,
-      permissionId: permManageUsers.id,
-    })
-    .onConflictDoNothing();
+  const permAlertView = await getOrCreatePermission(
+    "View Alerts",
+    "ALERT.VIEW",
+    "Lihat daftar & detail alert",
+  );
+
+  const permAlertCreate = await getOrCreatePermission(
+    "Create/Manage Alerts",
+    "ALERT.CREATE",
+    "Deteksi, acknowledge, dan clear alert",
+  );
+
+  const grant = (roleId: number, permissionId: string): Promise<unknown> =>
+    db
+      .insert(rolePermissions)
+      .values({ roleId, permissionId })
+      .onConflictDoNothing();
+
+  for (const role of [roleOwner, roleAdmin]) {
+    await grant(role.id, permManageUsers.id);
+    await grant(role.id, permAlertView.id);
+    await grant(role.id, permAlertCreate.id);
+  }
+
+  // Operator (role USER) minimal perlu lihat + acknowledge/clear alert.
+  await grant(roleUser.id, permAlertView.id);
+  await grant(roleUser.id, permAlertCreate.id);
 
   const superadmin = await upsertUser({
     email: superadminEmail,

@@ -87,6 +87,7 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
   trackId: string;
   callsign: string;
   registration: string | null;
+  targetType: string;
   latitude: number;
   longitude: number;
   altitude: number | null;
@@ -98,6 +99,7 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
     trackId: track.trackId,
     callsign: track.callsign ?? track.trackId,
     registration: track.registration ?? null,
+    targetType: track.targetType ?? "AIRCRAFT",
     latitude: track.latitude,
     longitude: track.longitude,
     altitude: track.altitude ?? null,

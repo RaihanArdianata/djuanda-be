@@ -94,6 +94,7 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
   groundSpeed: number | null;
   heading: number | null;
   onGround: boolean | null;
+  timestamp: string;
 } {
   return {
     trackId: track.trackId,
@@ -106,6 +107,7 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
     groundSpeed: track.groundSpeed ?? null,
     heading: track.heading ?? null,
     onGround: track.onGround ?? null,
+    timestamp: track.timestamp.toISOString(),
   };
 }
 

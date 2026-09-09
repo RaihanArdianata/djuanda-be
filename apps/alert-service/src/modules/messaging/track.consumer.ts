@@ -3,6 +3,7 @@ import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { alertServiceEnv } from "../../config/env";
 import { trackUpdated } from "../../context/surveillance.context";
 import { processTrackUpdate } from "../engine/alert.engine";
+import { pushTrackHistory } from "../engine/track-history";
 import type { MovementTrack } from "../engine/types";
 
 let consumer: Consumer | null = null;
@@ -86,6 +87,7 @@ export async function startTrackConsumer(): Promise<void> {
 
         const event = raw as TrackUpdatedEvent;
         const track = toMovementTrack(event);
+        pushTrackHistory(track);
         await trackUpdated(track);
         await processTrackUpdate(track);
       } catch (err) {

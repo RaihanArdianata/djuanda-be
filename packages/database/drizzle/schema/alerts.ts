@@ -1,6 +1,7 @@
 import type { InferSelectModel } from "drizzle-orm";
 import {
   boolean,
+  doublePrecision,
   index,
   jsonb,
   pgTable,
@@ -71,3 +72,40 @@ export const alertRules = pgTable(
 
 export type Alert = InferSelectModel<typeof alerts>;
 export type AlertRule = InferSelectModel<typeof alertRules>;
+
+export const alertTrackHistory = pgTable(
+  "alert_track_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    alertId: text("alert_id")
+      .notNull()
+      .references(() => alerts.alertId, { onDelete: "cascade" }),
+    trackId: text("track_id").notNull(),
+    kind: text("kind").notNull(), // "main" | "related"
+    targetType: text("target_type"),
+    callsign: text("callsign"),
+    registration: text("registration"),
+    latitude: doublePrecision("latitude").notNull(),
+    longitude: doublePrecision("longitude").notNull(),
+    altitude: doublePrecision("altitude"),
+    groundSpeed: doublePrecision("ground_speed"),
+    heading: doublePrecision("heading"),
+    onGround: boolean("on_ground"),
+    timestamp: timestamp("timestamp", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("alert_track_history_alert_id_idx").on(t.alertId),
+    index("alert_track_history_track_id_idx").on(t.trackId),
+    index("alert_track_history_timestamp_idx").on(t.timestamp),
+    index("alert_track_history_alert_track_idx").on(
+      t.alertId,
+      t.trackId,
+      t.timestamp,
+    ),
+  ],
+);
+
+export type AlertTrackHistory = InferSelectModel<typeof alertTrackHistory>;

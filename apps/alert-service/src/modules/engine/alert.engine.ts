@@ -7,12 +7,39 @@ import {
   setActiveAlert,
 } from "../../cache/alert-state.cache";
 import { getAirportTracks } from "../../context/surveillance.context";
-import { registerAlert } from "../alert/service/alert.service";
+import {
+  type AlertTrackHistoryPoint,
+  recordAlertTrackHistory,
+  registerAlert,
+} from "../alert/service/alert.service";
 import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
+import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
-import { getTrackHistory } from "./track-history";
+import { getTrackHistory, type TrackHistoryRecord } from "./track-history";
 import type { AlertCandidate, AlertContext, MovementTrack } from "./types";
+
+function trackSnapshotToHistoryPoint(
+  alertId: string,
+  kind: "main" | "related",
+  snap: TrackHistoryRecord,
+): AlertTrackHistoryPoint {
+  return {
+    alertId,
+    kind,
+    trackId: snap.trackId,
+    targetType: snap.targetType ?? null,
+    callsign: snap.callsign ?? null,
+    registration: snap.registration ?? null,
+    latitude: snap.latitude,
+    longitude: snap.longitude,
+    altitude: snap.altitude,
+    groundSpeed: snap.groundSpeed,
+    heading: snap.heading,
+    onGround: snap.onGround,
+    timestamp: new Date(snap.timestamp),
+  };
+}
 
 export interface DetectionInput {
   airportId: string;
@@ -99,6 +126,17 @@ async function registerCandidate(
     data: enrichedData,
   });
 
+  // Simpan history track ke tabel terpisah (sumber kebenaran untuk playback).
+  const trackHistoryPoints = [
+    ...trackHistory.map((snap) =>
+      trackSnapshotToHistoryPoint(stored.alertId, "main", snap),
+    ),
+    ...relatedTrackHistory.map((snap) =>
+      trackSnapshotToHistoryPoint(stored.alertId, "related", snap),
+    ),
+  ];
+  await recordAlertTrackHistory(trackHistoryPoints);
+
   await setActiveAlert(airportId, candidate.type, entityKey, stored.alertId);
   await publishAlertCreated(stored);
 
@@ -111,6 +149,19 @@ async function registerCandidate(
       airportId,
     },
     "alert created",
+  );
+
+  // Mulai rekam posisi setelah alert muncul (post-event history).
+  // Seed dengan titik kejadian supaya tidak duplikat saat track update sama masuk.
+  startPostHistory(
+    stored.alertId,
+    stored.trackId,
+    stored.relatedTrackId ?? null,
+  );
+  seedPostHistory(
+    stored.alertId,
+    trackHistory[trackHistory.length - 1],
+    relatedTrackHistory[relatedTrackHistory.length - 1],
   );
 
   return stored;

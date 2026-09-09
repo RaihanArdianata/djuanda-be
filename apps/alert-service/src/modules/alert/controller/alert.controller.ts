@@ -9,6 +9,7 @@ import {
   clearAlertService,
   getActiveAlerts,
   getAlertById,
+  getAlertTrackHistory,
   getAllAlerts,
 } from "../service/alert.service";
 import {
@@ -71,6 +72,14 @@ export const getAlertByIdController = catchAsync(async (c) => {
   }
 
   return success(c, alert, { message: "Alert fetched successfully" });
+});
+
+export const getAlertTrackHistoryController = catchAsync(async (c) => {
+  const { id } = c.req.param();
+  const result = await getAlertTrackHistory(id);
+  return success(c, result, {
+    message: "Alert track history fetched successfully",
+  });
 });
 
 export const acknowledgeAlertController = catchAsync(async (c) => {

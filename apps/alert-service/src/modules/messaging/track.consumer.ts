@@ -2,7 +2,16 @@ import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { alertServiceEnv } from "../../config/env";
 import { trackUpdated } from "../../context/surveillance.context";
+import {
+  type AlertTrackHistoryPoint,
+  recordAlertTrackHistory,
+} from "../alert/service/alert.service";
 import { processTrackUpdate } from "../engine/alert.engine";
+import {
+  appendPostHistory,
+  getActiveAlertIdsForTrack,
+  type PostHistoryAppendResult,
+} from "../engine/alert-post-history";
 import { pushTrackHistory } from "../engine/track-history";
 import type { MovementTrack } from "../engine/types";
 
@@ -26,6 +35,27 @@ export interface TrackUpdatedEvent {
     aircraftType?: string;
     vehicleFleet?: string;
     lifecycle?: string;
+  };
+}
+
+function postHistoryToDbPoint(
+  result: PostHistoryAppendResult,
+): AlertTrackHistoryPoint {
+  const { alertId, kind, record } = result;
+  return {
+    alertId,
+    kind,
+    trackId: record.trackId,
+    targetType: record.targetType ?? null,
+    callsign: record.callsign ?? null,
+    registration: record.registration ?? null,
+    latitude: record.latitude,
+    longitude: record.longitude,
+    altitude: record.altitude,
+    groundSpeed: record.groundSpeed,
+    heading: record.heading,
+    onGround: record.onGround,
+    timestamp: new Date(record.timestamp),
   };
 }
 
@@ -90,6 +120,19 @@ export async function startTrackConsumer(): Promise<void> {
         pushTrackHistory(track);
         await trackUpdated(track);
         await processTrackUpdate(track);
+
+        // Setelah evaluate, tambahkan posisi ini ke post-history alert aktif
+        // dan langsung persist ke tabel alert_track_history.
+        const postHistoryPoints: AlertTrackHistoryPoint[] = [];
+        for (const alertId of getActiveAlertIdsForTrack(track.trackId)) {
+          const result = appendPostHistory(alertId, track);
+          if (result) {
+            postHistoryPoints.push(postHistoryToDbPoint(result));
+          }
+        }
+        if (postHistoryPoints.length > 0) {
+          await recordAlertTrackHistory(postHistoryPoints);
+        }
       } catch (err) {
         // Throw supaya offset tidak di-commit dan KafkaJS me-retry pesan
         // (backoff bawaan). Swallow di sini = alert hilang diam-diam.

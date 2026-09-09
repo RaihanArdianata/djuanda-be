@@ -1,6 +1,7 @@
 import type { Alert } from "@repo/database";
 import { clearActiveAlert } from "../../cache/alert-state.cache";
 import {
+  mergeAlertData,
   acknowledgeAlert as repoAcknowledgeAlert,
   clearAlert as repoClearAlert,
   clearAlertByAlertId as repoClearAlertByAlertId,
@@ -11,12 +12,14 @@ import {
   type AlertEventType,
   publishAlertEvent,
 } from "../messaging/alert.producer";
+import { flushPostHistory } from "./alert-post-history";
 
 function toAlertEvent(alert: Alert, eventType: AlertEventType): AlertEvent {
   return {
     eventType,
     timestamp: new Date().toISOString(),
     data: {
+      ...(alert.data ?? {}),
       alertId: alert.alertId,
       airportId: alert.airportId,
       type: alert.type,
@@ -61,8 +64,14 @@ export async function clearAlert(
   id: string,
   clearedBy?: string,
 ): Promise<Alert | undefined> {
-  const alert = await repoClearAlert(id, clearedBy);
+  let alert = await repoClearAlert(id, clearedBy);
   if (alert) {
+    const { main, related } = flushPostHistory(alert.alertId);
+    alert =
+      (await mergeAlertData(alert.alertId, {
+        postTrackHistory: main,
+        postRelatedTrackHistory: related,
+      })) ?? alert;
     await clearActiveAlertByAlertId(alert.alertId);
     await publishAlertCleared(alert);
   }
@@ -73,8 +82,14 @@ export async function clearAlertByAlertId(
   alertId: string,
   clearedBy?: string,
 ): Promise<Alert | undefined> {
-  const alert = await repoClearAlertByAlertId(alertId, clearedBy);
+  let alert = await repoClearAlertByAlertId(alertId, clearedBy);
   if (alert) {
+    const { main, related } = flushPostHistory(alert.alertId);
+    alert =
+      (await mergeAlertData(alert.alertId, {
+        postTrackHistory: main,
+        postRelatedTrackHistory: related,
+      })) ?? alert;
     await clearActiveAlertByAlertId(alert.alertId);
     await publishAlertCleared(alert);
   }

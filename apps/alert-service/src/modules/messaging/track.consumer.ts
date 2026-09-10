@@ -80,6 +80,45 @@ function toMovementTrack(event: TrackUpdatedEvent): MovementTrack {
   };
 }
 
+function appendAndPersistPostHistory(track: MovementTrack): void {
+  const postHistoryPoints: AlertTrackHistoryPoint[] = [];
+  for (const alertId of getActiveAlertIdsForTrack(track.trackId)) {
+    const result = appendPostHistory(alertId, track);
+    if (result) {
+      postHistoryPoints.push(postHistoryToDbPoint(result));
+    }
+  }
+  if (postHistoryPoints.length > 0) {
+    recordAlertTrackHistory(postHistoryPoints).catch((err) => {
+      // Post-history write boleh gagal tanpa memutus consumer,
+      // karena in-memory post history masih akan tersedia.
+      logger.error(
+        { err, count: postHistoryPoints.length },
+        "track consumer: failed to persist post-history points",
+      );
+    });
+  }
+}
+
+async function handleTrackMessage(
+  message: EachMessagePayload["message"],
+): Promise<void> {
+  if (!message.value) return;
+
+  const raw = JSON.parse(message.value.toString());
+  if (raw.eventType !== "TRACK_UPDATED" || !raw.data) return;
+
+  const event = raw as TrackUpdatedEvent;
+  const track = toMovementTrack(event);
+  pushTrackHistory(track);
+  await trackUpdated(track);
+  await processTrackUpdate(track);
+
+  // Setelah evaluate, tambahkan posisi ini ke post-history alert aktif
+  // dan langsung persist ke tabel alert_track_history.
+  appendAndPersistPostHistory(track);
+}
+
 export async function startTrackConsumer(): Promise<void> {
   if (alertServiceEnv.kafkaBrokers.length === 0) {
     logger.info("Alert Kafka brokers not configured — track consumer disabled");
@@ -110,29 +149,8 @@ export async function startTrackConsumer(): Promise<void> {
 
   await consumer.run({
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
-      if (!message.value) return;
       try {
-        const raw = JSON.parse(message.value.toString());
-        if (raw.eventType !== "TRACK_UPDATED" || !raw.data) return;
-
-        const event = raw as TrackUpdatedEvent;
-        const track = toMovementTrack(event);
-        pushTrackHistory(track);
-        await trackUpdated(track);
-        await processTrackUpdate(track);
-
-        // Setelah evaluate, tambahkan posisi ini ke post-history alert aktif
-        // dan langsung persist ke tabel alert_track_history.
-        const postHistoryPoints: AlertTrackHistoryPoint[] = [];
-        for (const alertId of getActiveAlertIdsForTrack(track.trackId)) {
-          const result = appendPostHistory(alertId, track);
-          if (result) {
-            postHistoryPoints.push(postHistoryToDbPoint(result));
-          }
-        }
-        if (postHistoryPoints.length > 0) {
-          await recordAlertTrackHistory(postHistoryPoints);
-        }
+        await handleTrackMessage(message);
       } catch (err) {
         // Throw supaya offset tidak di-commit dan KafkaJS me-retry pesan
         // (backoff bawaan). Swallow di sini = alert hilang diam-diam.

@@ -126,7 +126,6 @@ async function registerCandidate(
     data: enrichedData,
   });
 
-  // Simpan history track ke tabel terpisah (sumber kebenaran untuk playback).
   const trackHistoryPoints = [
     ...trackHistory.map((snap) =>
       trackSnapshotToHistoryPoint(stored.alertId, "main", snap),
@@ -135,7 +134,6 @@ async function registerCandidate(
       trackSnapshotToHistoryPoint(stored.alertId, "related", snap),
     ),
   ];
-  await recordAlertTrackHistory(trackHistoryPoints);
 
   await setActiveAlert(airportId, candidate.type, entityKey, stored.alertId);
   await publishAlertCreated(stored);
@@ -163,6 +161,17 @@ async function registerCandidate(
     trackHistory[trackHistory.length - 1],
     relatedTrackHistory[relatedTrackHistory.length - 1],
   );
+
+  // Simpan history track ke tabel terpisah. Jangan biarkan error di sini
+  // menggagalkan alert creation, karena alert masih harus aktif & terpublish.
+  try {
+    await recordAlertTrackHistory(trackHistoryPoints);
+  } catch (err) {
+    logger.error(
+      { err, alertId: stored.alertId },
+      "failed to record alert track history",
+    );
+  }
 
   return stored;
 }

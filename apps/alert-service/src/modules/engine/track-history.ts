@@ -17,7 +17,14 @@ export interface TrackHistoryRecord {
 const HISTORY_LIMIT = 20;
 const EXPIRY_MS = 300_000; // 5 menit
 
+// Riwayat dikelompokkan berdasarkan "stable key" (callsign/registration),
+// bukan trackId mentah, karena trackId dari sensor sering berubah tiap update
+// meskipun target fisiknya sama.
 const history = new Map<string, MovementTrack[]>();
+
+// Map dari trackId ke stable key supaya pemanggil yang punya trackId
+// (misal alert-post-history atau getTrackHistory) tetap bisa nemu bucket-nya.
+const trackIdToKey = new Map<string, string>();
 
 function purgeOld(entries: MovementTrack[]): MovementTrack[] {
   const now = Date.now();
@@ -26,8 +33,30 @@ function purgeOld(entries: MovementTrack[]): MovementTrack[] {
   return fresh.slice(-HISTORY_LIMIT);
 }
 
+export function resolveTrackKey(track: MovementTrack): string {
+  const id =
+    track.callsign?.trim() || track.registration?.trim() || track.trackId;
+  return `${track.targetType}:${id}`;
+}
+
+export function resolveTrackHistoryKey(record: TrackHistoryRecord): string {
+  const id =
+    record.callsign?.trim() || record.registration?.trim() || record.trackId;
+  return `${record.targetType}:${id}`;
+}
+
+export function getTrackKey(trackId: string): string | undefined {
+  return trackIdToKey.get(trackId);
+}
+
 export function pushTrackHistory(track: MovementTrack): void {
-  const existing = history.get(track.trackId) ?? [];
+  const key = resolveTrackKey(track);
+  trackIdToKey.set(track.trackId, key);
+
+  // Bila track ini sebelumnya sudah masuk dengan trackId berbeda namun
+  // callsign/registration sama, gabungkan riwayatnya.
+  const existing = history.get(key) ?? [];
+
   // Hindari duplikat berurutan di timestamp sama.
   const last = existing[existing.length - 1];
   if (
@@ -38,8 +67,9 @@ export function pushTrackHistory(track: MovementTrack): void {
   ) {
     return;
   }
+
   const next = purgeOld([...existing, track]);
-  history.set(track.trackId, next);
+  history.set(key, next);
 }
 
 function toHistoryRecord(track: MovementTrack): TrackHistoryRecord {
@@ -63,6 +93,7 @@ export function getTrackHistory(
   limit = HISTORY_LIMIT,
 ): TrackHistoryRecord[] {
   if (!trackId) return [];
-  const entries = (history.get(trackId) ?? []).slice(-limit);
+  const key = trackIdToKey.get(trackId) ?? trackId;
+  const entries = (history.get(key) ?? []).slice(-limit);
   return entries.map(toHistoryRecord);
 }

@@ -35,17 +35,13 @@ function purgeOld(entries: MovementTrack[]): MovementTrack[] {
 
 export function resolveTrackKey(track: MovementTrack): string {
   const id =
-    (track.callsign && track.callsign.trim()) ||
-    (track.registration && track.registration.trim()) ||
-    track.trackId;
+    track.callsign?.trim() || track.registration?.trim() || track.trackId;
   return `${track.targetType}:${id}`;
 }
 
 export function resolveTrackHistoryKey(record: TrackHistoryRecord): string {
   const id =
-    (record.callsign && record.callsign.trim()) ||
-    (record.registration && record.registration.trim()) ||
-    record.trackId;
+    record.callsign?.trim() || record.registration?.trim() || record.trackId;
   return `${record.targetType}:${id}`;
 }
 

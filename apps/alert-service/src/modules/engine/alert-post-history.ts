@@ -1,4 +1,8 @@
-import type { TrackHistoryRecord } from "./track-history";
+import {
+  getTrackKey,
+  resolveTrackKey,
+  type TrackHistoryRecord,
+} from "./track-history";
 import type { MovementTrack } from "./types";
 
 interface AlertTrackRefs {
@@ -27,6 +31,11 @@ function toRecord(track: MovementTrack): TrackHistoryRecord {
   };
 }
 
+function stableKeyFor(trackId?: string | null): string | undefined {
+  if (!trackId) return undefined;
+  return getTrackKey(trackId) ?? trackId;
+}
+
 export function startPostHistory(
   alertId: string,
   mainTrackId?: string | null,
@@ -36,14 +45,14 @@ export function startPostHistory(
   if (relatedTrackId) postHistoryRelated.set(alertId, []);
 
   const refs: AlertTrackRefs = {
-    main: mainTrackId ?? undefined,
-    related: relatedTrackId ?? undefined,
+    main: stableKeyFor(mainTrackId),
+    related: stableKeyFor(relatedTrackId),
   };
   alertTracks.set(alertId, refs);
 
-  for (const trackId of [refs.main, refs.related].filter(Boolean) as string[]) {
-    if (!trackToAlerts.has(trackId)) trackToAlerts.set(trackId, new Set());
-    trackToAlerts.get(trackId)?.add(alertId);
+  for (const key of [refs.main, refs.related].filter(Boolean) as string[]) {
+    if (!trackToAlerts.has(key)) trackToAlerts.set(key, new Set());
+    trackToAlerts.get(key)?.add(alertId);
   }
 }
 
@@ -78,8 +87,9 @@ export function appendPostHistory(
   if (!refs) return undefined;
 
   const record = toRecord(track);
+  const key = resolveTrackKey(track);
 
-  if (track.trackId === refs.main) {
+  if (refs.main && key === refs.main) {
     const list = postHistoryMain.get(alertId);
     if (!list) return undefined;
     const last = list[list.length - 1];
@@ -88,7 +98,7 @@ export function appendPostHistory(
     return { alertId, kind: "main", record };
   }
 
-  if (track.trackId === refs.related) {
+  if (refs.related && key === refs.related) {
     const list = postHistoryRelated.get(alertId);
     if (!list) return undefined;
     const last = list[list.length - 1];
@@ -100,8 +110,11 @@ export function appendPostHistory(
   return undefined;
 }
 
-export function getActiveAlertIdsForTrack(trackId: string): string[] {
-  return [...(trackToAlerts.get(trackId) ?? [])];
+export function getActiveAlertIdsForMovementTrack(
+  track: MovementTrack,
+): string[] {
+  const key = resolveTrackKey(track);
+  return [...(trackToAlerts.get(key) ?? [])];
 }
 
 export function flushPostHistory(alertId: string): {
@@ -116,13 +129,11 @@ export function flushPostHistory(alertId: string): {
 
   const refs = alertTracks.get(alertId);
   if (refs) {
-    for (const trackId of [refs.main, refs.related].filter(
-      Boolean,
-    ) as string[]) {
-      const set = trackToAlerts.get(trackId);
+    for (const key of [refs.main, refs.related].filter(Boolean) as string[]) {
+      const set = trackToAlerts.get(key);
       if (set) {
         set.delete(alertId);
-        if (set.size === 0) trackToAlerts.delete(trackId);
+        if (set.size === 0) trackToAlerts.delete(key);
       }
     }
   }

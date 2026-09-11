@@ -9,7 +9,7 @@ import {
 import { processTrackUpdate } from "../engine/alert.engine";
 import {
   appendPostHistory,
-  getActiveAlertIdsForTrack,
+  getActiveAlertIdsForMovementTrack,
   type PostHistoryAppendResult,
 } from "../engine/alert-post-history";
 import { pushTrackHistory } from "../engine/track-history";
@@ -82,7 +82,7 @@ function toMovementTrack(event: TrackUpdatedEvent): MovementTrack {
 
 function appendAndPersistPostHistory(track: MovementTrack): void {
   const postHistoryPoints: AlertTrackHistoryPoint[] = [];
-  for (const alertId of getActiveAlertIdsForTrack(track.trackId)) {
+  for (const alertId of getActiveAlertIdsForMovementTrack(track)) {
     const result = appendPostHistory(alertId, track);
     if (result) {
       postHistoryPoints.push(postHistoryToDbPoint(result));

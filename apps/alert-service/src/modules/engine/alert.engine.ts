@@ -1,6 +1,12 @@
-import { type Alert, type AlertRule, alertRules, db } from "@repo/database";
+import {
+  type Alert,
+  type AlertRule,
+  alertRules,
+  alerts,
+  db,
+} from "@repo/database";
 import { logger } from "@repo/logger";
-import { and, eq } from "drizzle-orm";
+import { and, eq, lt } from "drizzle-orm";
 import {
   getActiveAlert,
   getActiveAlertRefs,
@@ -16,7 +22,12 @@ import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
 import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
-import { getTrackHistory, type TrackHistoryRecord } from "./track-history";
+import {
+  getTrackHistory,
+  getTrackKey,
+  resolveTrackHistoryKey,
+  type TrackHistoryRecord,
+} from "./track-history";
 import type { AlertCandidate, AlertContext, MovementTrack } from "./types";
 
 function trackSnapshotToHistoryPoint(
@@ -106,6 +117,20 @@ async function registerCandidate(
 
   const trackHistory = getTrackHistory(candidate.trackId, 20);
   const relatedTrackHistory = getTrackHistory(candidate.relatedTrackId, 20);
+
+  // Pakai stable key (callsign/registration) buat post-history supaya
+  // trackId yang berubah tiap update tetap masuk ke bucket yang sama.
+  const mainInfo = trackHistory[trackHistory.length - 1];
+  const relatedInfo = relatedTrackHistory[relatedTrackHistory.length - 1];
+  const mainStableKey = mainInfo
+    ? resolveTrackHistoryKey(mainInfo)
+    : (getTrackKey(candidate.trackId) ?? candidate.trackId);
+  const relatedStableKey = candidate.relatedTrackId
+    ? relatedInfo
+      ? resolveTrackHistoryKey(relatedInfo)
+      : (getTrackKey(candidate.relatedTrackId) ?? candidate.relatedTrackId)
+    : null;
+
   const enrichedData = {
     ...candidate.data,
     trackHistory,
@@ -151,11 +176,7 @@ async function registerCandidate(
 
   // Mulai rekam posisi setelah alert muncul (post-event history).
   // Seed dengan titik kejadian supaya tidak duplikat saat track update sama masuk.
-  startPostHistory(
-    stored.alertId,
-    stored.trackId,
-    stored.relatedTrackId ?? null,
-  );
+  startPostHistory(stored.alertId, mainStableKey, relatedStableKey);
   seedPostHistory(
     stored.alertId,
     trackHistory[trackHistory.length - 1],
@@ -190,6 +211,31 @@ async function clearStaleAlerts(
     if (clearedAlert) cleared.push(clearedAlert);
   }
 
+  return cleared;
+}
+
+async function clearExpiredAlerts(airportId: string): Promise<Alert[]> {
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const expired = await db
+    .select({ alertId: alerts.alertId })
+    .from(alerts)
+    .where(
+      and(
+        eq(alerts.airportId, airportId),
+        eq(alerts.status, "ACTIVE"),
+        lt(alerts.triggeredAt, fiveMinutesAgo),
+      ),
+    );
+
+  const cleared: Alert[] = [];
+  for (const { alertId } of expired) {
+    try {
+      const alert = await clearAlertByAlertId(alertId);
+      if (alert) cleared.push(alert);
+    } catch (err) {
+      logger.warn({ err, alertId }, "failed to clear expired alert");
+    }
+  }
   return cleared;
 }
 
@@ -242,7 +288,9 @@ export const evaluateMovement = async (
     if (stored) created.push(stored);
   }
 
-  const cleared = await clearStaleAlerts(input.airportId, candidates);
+  const staleCleared = await clearStaleAlerts(input.airportId, candidates);
+  const expiredCleared = await clearExpiredAlerts(input.airportId);
+  const cleared = [...staleCleared, ...expiredCleared];
 
   return { created, updated, cleared };
 };

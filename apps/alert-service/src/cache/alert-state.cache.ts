@@ -1,3 +1,4 @@
+import { logger } from "@repo/logger";
 import { redis } from "../redis/client";
 
 export function activeAlertKey(
@@ -15,11 +16,15 @@ export async function setActiveAlert(
   alertId: string,
   ttlSeconds = 300,
 ): Promise<void> {
-  await redis.setex(
-    activeAlertKey(airportId, type, entityKey),
-    ttlSeconds,
-    alertId,
-  );
+  try {
+    await redis.setex(
+      activeAlertKey(airportId, type, entityKey),
+      ttlSeconds,
+      alertId,
+    );
+  } catch (err) {
+    logger.warn({ err, airportId, type, entityKey }, "setActiveAlert failed");
+  }
 }
 
 export async function getActiveAlert(
@@ -27,7 +32,14 @@ export async function getActiveAlert(
   type: string,
   entityKey: string,
 ): Promise<string | null> {
-  return redis.get(activeAlertKey(airportId, type, entityKey));
+  try {
+    return (
+      (await redis.get(activeAlertKey(airportId, type, entityKey))) ?? null
+    );
+  } catch (err) {
+    logger.warn({ err, airportId, type, entityKey }, "getActiveAlert failed");
+    return null;
+  }
 }
 
 export async function clearActiveAlert(
@@ -35,7 +47,11 @@ export async function clearActiveAlert(
   type: string,
   entityKey: string,
 ): Promise<void> {
-  await redis.del(activeAlertKey(airportId, type, entityKey));
+  try {
+    await redis.del(activeAlertKey(airportId, type, entityKey));
+  } catch (err) {
+    logger.warn({ err, airportId, type, entityKey }, "clearActiveAlert failed");
+  }
 }
 
 export interface ActiveAlertRef {
@@ -48,32 +64,37 @@ export interface ActiveAlertRef {
 export async function getActiveAlertRefs(
   airportId: string,
 ): Promise<ActiveAlertRef[]> {
-  const pattern = `alert:active:${airportId}:*`;
-  const keys: string[] = [];
-  let cursor = "0";
-  do {
-    const [next, found] = await redis.scan(
-      cursor,
-      "MATCH",
-      pattern,
-      "COUNT",
-      100,
-    );
-    cursor = next;
-    keys.push(...found);
-  } while (cursor !== "0");
+  try {
+    const pattern = `alert:active:${airportId}:*`;
+    const keys: string[] = [];
+    let cursor = "0";
+    do {
+      const [next, found] = await redis.scan(
+        cursor,
+        "MATCH",
+        pattern,
+        "COUNT",
+        100,
+      );
+      cursor = next;
+      keys.push(...found);
+    } while (cursor !== "0");
 
-  if (keys.length === 0) return [];
-  const values = await redis.mget(...keys);
-  return keys.map((key, i) => {
-    const parts = key.split(":");
-    const type = parts[3] ?? "";
-    const entityKey = parts.slice(4).join(":");
-    return {
-      key,
-      type,
-      entityKey,
-      alertId: (values[i] as string | null) ?? null,
-    };
-  });
+    if (keys.length === 0) return [];
+    const values = await redis.mget(...keys);
+    return keys.map((key, i) => {
+      const parts = key.split(":");
+      const type = parts[3] ?? "";
+      const entityKey = parts.slice(4).join(":");
+      return {
+        key,
+        type,
+        entityKey,
+        alertId: (values[i] as string | null) ?? null,
+      };
+    });
+  } catch (err) {
+    logger.warn({ err, airportId }, "getActiveAlertRefs failed");
+    return [];
+  }
 }

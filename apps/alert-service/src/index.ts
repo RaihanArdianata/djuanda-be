@@ -32,11 +32,23 @@ const server = Bun.serve({
 
 logger.info(`alert-service listening on http://localhost:${port}`);
 
-await startAlertProducer();
-await startAdvisoryConsumer();
-await startWeatherConsumer();
-await startAerodromeConsumer();
-await startTrackConsumer();
+const safeStart = async (
+  name: string,
+  start: () => Promise<void>,
+): Promise<void> => {
+  try {
+    await start();
+    logger.info(`${name} started`);
+  } catch (err) {
+    logger.error({ err }, `failed to start ${name}`);
+  }
+};
+
+await safeStart("alert producer", startAlertProducer);
+await safeStart("advisory consumer", startAdvisoryConsumer);
+await safeStart("weather consumer", startWeatherConsumer);
+await safeStart("aerodrome consumer", startAerodromeConsumer);
+await safeStart("track consumer", startTrackConsumer);
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down alert-service gracefully`);

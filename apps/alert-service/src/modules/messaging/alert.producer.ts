@@ -51,13 +51,20 @@ export async function stopAlertProducer(): Promise<void> {
 
 export async function publishAlertEvent(event: AlertEvent): Promise<void> {
   if (!producer) return;
-  await producer.send({
-    topic: alertServiceEnv.kafkaAlertTopic,
-    messages: [
-      {
-        key: event.data.alertId,
-        value: JSON.stringify(event),
-      },
-    ],
-  });
+  try {
+    await producer.send({
+      topic: alertServiceEnv.kafkaAlertTopic,
+      messages: [
+        {
+          key: event.data.alertId,
+          value: JSON.stringify(event),
+        },
+      ],
+    });
+  } catch (err) {
+    logger.warn(
+      { err, alertId: event.data.alertId, type: event.eventType },
+      "failed to publish alert event to Kafka",
+    );
+  }
 }

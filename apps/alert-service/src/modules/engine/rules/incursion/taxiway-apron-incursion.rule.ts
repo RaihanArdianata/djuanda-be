@@ -5,7 +5,11 @@ import type {
   DetectionRule,
   MovementTrack,
 } from "../../types";
-import { distanceToPolylineMeters, pointInPolygon } from "../geometry/geometry";
+import {
+  distanceToPolylineMeters,
+  haversineMeters,
+  pointInPolygon,
+} from "../geometry/geometry";
 
 interface SurfaceConfig {
   id: string;
@@ -62,6 +66,7 @@ function buildSurfaceCandidate(
   surface: SurfaceConfig,
   ctx: Pick<AlertContext, "airportId" | "timestamp">,
   relatedTrack?: MovementTrack,
+  criticalMeters?: number,
 ): AlertCandidate {
   const callsign = track.callsign ?? track.trackId;
   const relatedCallsign = relatedTrack
@@ -73,11 +78,23 @@ function buildSurfaceCandidate(
     ? ` yang sedang dipakai ${relatedCallsign}`
     : "";
 
+  let severity: "WARNING" | "CRITICAL" = "WARNING";
+  let distanceMeters: number | null = null;
+  if (relatedTrack && criticalMeters !== undefined) {
+    distanceMeters = haversineMeters(
+      [track.latitude, track.longitude],
+      [relatedTrack.latitude, relatedTrack.longitude],
+    );
+    if (distanceMeters <= criticalMeters) {
+      severity = "CRITICAL";
+    }
+  }
+
   return {
     alertId: `TAXIWAY_APRON_INCURSION|${ctx.airportId}|${track.trackId}-${surface.id}`,
     airportId: ctx.airportId,
     type: "TAXIWAY_APRON_INCURSION",
-    severity: "WARNING",
+    severity,
     status: "ACTIVE",
     trackId: track.trackId,
     relatedTrackId: relatedTrack?.trackId,
@@ -93,6 +110,8 @@ function buildSurfaceCandidate(
       surfaceStatus: featureStatus,
       callsign,
       relatedCallsign,
+      distanceMeters,
+      criticalMeters,
       message: `${callsign} memasuki ${featureName}${relatedText}`,
       latitude: track.latitude,
       longitude: track.longitude,
@@ -104,8 +123,11 @@ function evaluateSurfaces(
   surfaces: SurfaceConfig[],
   tracks: MovementTrack[],
   ctx: Pick<AlertContext, "airportId" | "timestamp">,
+  config: Record<string, unknown>,
 ): AlertCandidate[] {
   const candidates: AlertCandidate[] = [];
+  const criticalMeters =
+    (config.criticalSeparationMeters as number | undefined) ?? 50;
 
   for (const surface of surfaces) {
     const inside = tracks.filter(
@@ -135,7 +157,9 @@ function evaluateSurfaces(
 
     for (const intruder of intruders) {
       if (intruder.trackId === occupant.trackId) continue;
-      candidates.push(buildSurfaceCandidate(intruder, surface, ctx, occupant));
+      candidates.push(
+        buildSurfaceCandidate(intruder, surface, ctx, occupant, criticalMeters),
+      );
     }
   }
 
@@ -173,6 +197,6 @@ export const taxiwayApronIncursionRule: DetectionRule = {
       return candidates;
     }
 
-    return evaluateSurfaces(surfaces, ctx.tracks, ctx);
+    return evaluateSurfaces(surfaces, ctx.tracks, ctx, config);
   },
 };

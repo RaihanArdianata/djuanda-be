@@ -1,6 +1,7 @@
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import { app } from "./app";
+import { sweepExpiredAlerts } from "./modules/engine/alert.engine";
 import {
   startAdvisoryConsumer,
   stopAdvisoryConsumer,
@@ -50,8 +51,17 @@ await safeStart("weather consumer", startWeatherConsumer);
 await safeStart("aerodrome consumer", startAerodromeConsumer);
 await safeStart("track consumer", startTrackConsumer);
 
+// Jaring pengaman: expire alert ACTIVE > 5 menit meski airport-nya berhenti
+// menerima track update sama sekali (evaluateMovement per-track tidak akan
+// terpanggil kalau tidak ada trafik Kafka untuk airport itu).
+const SWEEP_INTERVAL_MS = 30_000;
+const sweepTimer = setInterval(() => {
+  void sweepExpiredAlerts();
+}, SWEEP_INTERVAL_MS);
+
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down alert-service gracefully`);
+  clearInterval(sweepTimer);
   server.stop();
   await stopTrackConsumer();
   await stopAerodromeConsumer();

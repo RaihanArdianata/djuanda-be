@@ -35,7 +35,7 @@ export async function buildAlertContext(
 ): Promise<AlertContext> {
   const [weather, aerodrome, aftn, notam] = await Promise.allSettled([
     getWeatherContext(input.airportId),
-    getAerodromeContext(input.airportId),
+    getAerodromeContext(input.airportId, input.tracks),
     getAftnContext(input.airportId),
     getNotamContext(input.airportId),
   ]);

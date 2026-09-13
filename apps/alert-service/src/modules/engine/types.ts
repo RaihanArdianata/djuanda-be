@@ -62,6 +62,7 @@ export interface AerodromeContextData {
     id: string;
     name: string | null;
     status: string | null;
+    active: boolean;
     type: "TAXIWAY" | "APRON";
     polygon: [number, number][];
   }[];

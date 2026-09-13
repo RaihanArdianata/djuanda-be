@@ -9,9 +9,11 @@ import {
   getAerodromeGeometry,
   setAerodromeGeometry,
 } from "@/cache/context.cache";
+import { pointInPolygon } from "../modules/engine/rules/geometry/geometry";
 import type {
   AerodromeContextData,
   AerodromeFeatureContext,
+  MovementTrack,
 } from "../modules/engine/types";
 
 function extractPolygon(
@@ -137,15 +139,59 @@ async function fetchAerodromeGeometry(
   return context;
 }
 
+function markOccupied(
+  point: [number, number],
+  areas: { id: string; polygon: [number, number][] }[],
+  occupiedIds: Set<string>,
+): void {
+  for (const area of areas) {
+    if (occupiedIds.has(area.id)) continue;
+    if (pointInPolygon(point, area.polygon)) {
+      occupiedIds.add(area.id);
+    }
+  }
+}
+
+function computeOccupiedIds(
+  data: AerodromeContextData,
+  tracks: MovementTrack[],
+): { runways: Set<string>; surfaces: Set<string> } {
+  const ground = tracks.filter((t) => t.onGround !== false);
+  const occupiedRunways = new Set<string>();
+  const occupiedSurfaces = new Set<string>();
+
+  for (const track of ground) {
+    const point: [number, number] = [track.latitude, track.longitude];
+    markOccupied(point, data.runways, occupiedRunways);
+    markOccupied(point, data.surfaces, occupiedSurfaces);
+  }
+
+  return { runways: occupiedRunways, surfaces: occupiedSurfaces };
+}
+
 export async function getAerodromeContext(
   airportId: string,
+  tracks?: MovementTrack[],
 ): Promise<AerodromeContextData | null> {
   let data = await getAerodromeGeometry(airportId);
   if (!data) {
     data = await fetchAerodromeGeometry(airportId);
     if (data) await setAerodromeGeometry(airportId, data, 60);
   }
-  return data;
+  if (!data || !tracks || tracks.length === 0) return data;
+
+  const occupied = computeOccupiedIds(data, tracks);
+  return {
+    ...data,
+    runways: data.runways.map((r) => ({
+      ...r,
+      active: r.active || occupied.runways.has(r.id),
+    })),
+    surfaces: data.surfaces.map((s) => ({
+      ...s,
+      active: s.active || occupied.surfaces.has(s.id),
+    })),
+  };
 }
 
 export async function cacheAerodromeGeometry(

@@ -50,7 +50,7 @@ export const stcaRule: DetectionRule = {
             alertId,
             airportId: ctx.airportId,
             type: "STCA",
-            severity: "HIGH",
+            severity: "CRITICAL",
             status: "ACTIVE",
             trackId: a.trackId,
             relatedTrackId: b.trackId,

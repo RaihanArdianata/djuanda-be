@@ -185,11 +185,11 @@ export async function getAerodromeContext(
     ...data,
     runways: data.runways.map((r) => ({
       ...r,
-      active: r.active || occupied.runways.has(r.id),
+      active: occupied.runways.has(r.id),
     })),
     surfaces: data.surfaces.map((s) => ({
       ...s,
-      active: s.active || occupied.surfaces.has(s.id),
+      active: occupied.surfaces.has(s.id),
     })),
   };
 }

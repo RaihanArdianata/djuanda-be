@@ -143,6 +143,12 @@ async function seed(): Promise<void> {
     "Deteksi, acknowledge, dan clear alert",
   );
 
+  const permAlertEdit = await getOrCreatePermission(
+    "Edit Alert Rules",
+    "ALERT.EDIT",
+    "Ubah konfigurasi & aktif/nonaktifkan alert rule",
+  );
+
   const grant = (roleId: number, permissionId: string): Promise<unknown> =>
     db
       .insert(rolePermissions)
@@ -153,6 +159,7 @@ async function seed(): Promise<void> {
     await grant(role.id, permManageUsers.id);
     await grant(role.id, permAlertView.id);
     await grant(role.id, permAlertCreate.id);
+    await grant(role.id, permAlertEdit.id);
   }
 
   // Operator (role USER) minimal perlu lihat + acknowledge/clear alert.

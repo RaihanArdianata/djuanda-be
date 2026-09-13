@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import advisory from "./advisory";
 import aerodrome from "./aerodrome";
 import alert from "./alert";
+import alertRules from "./alert-rules";
 import auth from "./auth";
 import health from "./health";
 import notifications from "./notifications";
@@ -22,6 +23,7 @@ const app = new Hono()
   .route("/ws", ws)
   .route("/events", sse)
   .route("/alert", alert)
+  .route("/alert-rules", alertRules)
   .route("/users", users)
   .route("/advisory", advisory)
   .route("/weather", weather)

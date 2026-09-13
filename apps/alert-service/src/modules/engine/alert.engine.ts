@@ -92,7 +92,17 @@ function collectCandidates(
     }
 
     const config = (rule.configuration as Record<string, unknown>) ?? {};
-    candidates.push(...detector.evaluate(ctx, config));
+    try {
+      candidates.push(...detector.evaluate(ctx, config));
+    } catch (err) {
+      // Bug/config buruk di satu rule (mis. polygon malformed) tidak boleh
+      // menggagalkan seluruh evaluasi — kalau tidak, ini jadi "poison pill"
+      // yang membuat Kafka retry pesan yang sama tanpa henti.
+      logger.error(
+        { err, type: rule.type, airportId: ctx.airportId },
+        "alert rule evaluation threw — rule skipped for this track update",
+      );
+    }
   }
 
   return candidates;
@@ -207,36 +217,62 @@ async function clearStaleAlerts(
 
   for (const ref of activeRefs) {
     if (!ref.alertId || activeAlertIds.has(ref.alertId)) continue;
-    const clearedAlert = await clearAlertByAlertId(ref.alertId);
-    if (clearedAlert) cleared.push(clearedAlert);
+    try {
+      const clearedAlert = await clearAlertByAlertId(ref.alertId);
+      if (clearedAlert) cleared.push(clearedAlert);
+    } catch (err) {
+      // Jangan biarkan kegagalan clear satu alert menghentikan evaluateMovement
+      // — itu akan bikin Kafka retry pesan yang sama terus-menerus.
+      logger.warn({ err, alertId: ref.alertId }, "failed to clear stale alert");
+    }
   }
 
   return cleared;
 }
 
-async function clearExpiredAlerts(airportId: string): Promise<Alert[]> {
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-  const expired = await db
-    .select({ alertId: alerts.alertId })
-    .from(alerts)
-    .where(
-      and(
-        eq(alerts.airportId, airportId),
-        eq(alerts.status, "ACTIVE"),
-        lt(alerts.triggeredAt, fiveMinutesAgo),
-      ),
-    );
+const EXPIRE_CHECK_INTERVAL_MS = 30_000;
+const lastExpireCheck = new Map<string, number>();
 
-  const cleared: Alert[] = [];
-  for (const { alertId } of expired) {
-    try {
-      const alert = await clearAlertByAlertId(alertId);
-      if (alert) cleared.push(alert);
-    } catch (err) {
-      logger.warn({ err, alertId }, "failed to clear expired alert");
+async function clearExpiredAlerts(airportId: string): Promise<Alert[]> {
+  // Throttle: query DB ini nggak perlu jalan di tiap track message —
+  // cukup sekali per interval per airport, supaya nggak jadi beban ekstra
+  // (dan titik kegagalan ekstra) di jalur ingest Kafka yang high-frequency.
+  const last = lastExpireCheck.get(airportId) ?? 0;
+  const now = Date.now();
+  if (now - last < EXPIRE_CHECK_INTERVAL_MS) return [];
+  lastExpireCheck.set(airportId, now);
+
+  // Seluruh fungsi ini best-effort: kegagalan DB di sini TIDAK BOLEH
+  // menggagalkan evaluateMovement, karena itu akan bikin Kafka retry pesan
+  // yang sama terus-menerus dan menyumbat seluruh ingest track (alert baru
+  // jadi tidak pernah diproses lagi).
+  try {
+    const fiveMinutesAgo = new Date(now - 5 * 60 * 1000);
+    const expired = await db
+      .select({ alertId: alerts.alertId })
+      .from(alerts)
+      .where(
+        and(
+          eq(alerts.airportId, airportId),
+          eq(alerts.status, "ACTIVE"),
+          lt(alerts.triggeredAt, fiveMinutesAgo),
+        ),
+      );
+
+    const cleared: Alert[] = [];
+    for (const { alertId } of expired) {
+      try {
+        const alert = await clearAlertByAlertId(alertId);
+        if (alert) cleared.push(alert);
+      } catch (err) {
+        logger.warn({ err, alertId }, "failed to clear expired alert");
+      }
     }
+    return cleared;
+  } catch (err) {
+    logger.warn({ err, airportId }, "failed to query expired alerts");
+    return [];
   }
-  return cleared;
 }
 
 export const evaluateMovement = async (
@@ -284,8 +320,18 @@ export const evaluateMovement = async (
   const updated: Alert[] = [];
 
   for (const candidate of candidates) {
-    const stored = await registerCandidate(candidate, input.airportId);
-    if (stored) created.push(stored);
+    try {
+      const stored = await registerCandidate(candidate, input.airportId);
+      if (stored) created.push(stored);
+    } catch (err) {
+      // Kegagalan registrasi satu candidate (mis. DB insert error) tidak
+      // boleh menggagalkan candidate lain atau seluruh message — kalau
+      // tidak, Kafka akan retry pesan yang sama tanpa henti.
+      logger.error(
+        { err, alertId: candidate.alertId, type: candidate.type },
+        "failed to register alert candidate",
+      );
+    }
   }
 
   const staleCleared = await clearStaleAlerts(input.airportId, candidates);

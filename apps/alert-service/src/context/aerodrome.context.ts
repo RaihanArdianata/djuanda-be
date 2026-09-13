@@ -80,7 +80,9 @@ async function fetchAerodromeGeometry(
       id: f.id,
       name: f.name ?? null,
       status: f.status ?? null,
-      active: true,
+      active:
+        (f.properties as Record<string, unknown>)?.active === true ||
+        f.status === "ACTIVE",
       polygon: f.polygon,
     }));
 
@@ -92,6 +94,9 @@ async function fetchAerodromeGeometry(
       id: f.id,
       name: f.name ?? null,
       status: f.status ?? null,
+      active:
+        (f.properties as Record<string, unknown>)?.active === true ||
+        f.status === "ACTIVE",
       type: f.layer as "TAXIWAY" | "APRON",
       polygon: f.polygon,
     }));

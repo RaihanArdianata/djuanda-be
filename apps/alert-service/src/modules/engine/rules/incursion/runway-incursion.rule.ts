@@ -1,4 +1,10 @@
-import type { AlertCandidate, AlertContext, DetectionRule } from "../../types";
+import { getTrackHistory, type TrackHistoryRecord } from "../../track-history";
+import type {
+  AlertCandidate,
+  AlertContext,
+  DetectionRule,
+  MovementTrack,
+} from "../../types";
 import { pointInPolygon } from "../geometry/geometry";
 
 interface RunwayConfig {
@@ -7,6 +13,100 @@ interface RunwayConfig {
   status?: string | null;
   active: boolean;
   polygon: [number, number][];
+}
+
+/** Cek apakah track baru masuk ke runway (titik sebelumnya di luar polygon). */
+function isTrackEnteringRunway(
+  track: MovementTrack,
+  polygon: [number, number][],
+): boolean {
+  const history = getTrackHistory(track.trackId, 5);
+  if (history.length < 2) return true;
+  const previous = history[history.length - 2] as TrackHistoryRecord;
+  return !pointInPolygon([previous.latitude, previous.longitude], polygon);
+}
+
+function buildRunwayCandidate(
+  intruder: MovementTrack,
+  occupant: MovementTrack,
+  runway: RunwayConfig,
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+): AlertCandidate {
+  const callsign = intruder.callsign ?? intruder.trackId;
+  const occupantCallsign = occupant.callsign ?? occupant.trackId;
+  const featureName = runway.name ?? runway.id;
+  const featureStatus = runway.status ?? "ACTIVE";
+
+  return {
+    alertId: `RUNWAY_INCURSION|${ctx.airportId}|${intruder.trackId}-${runway.id}`,
+    airportId: ctx.airportId,
+    type: "RUNWAY_INCURSION",
+    severity: "CRITICAL",
+    status: "ACTIVE",
+    trackId: intruder.trackId,
+    relatedTrackId: occupant.trackId,
+    aerodromeFeatureId: runway.id,
+    triggeredAt: ctx.timestamp,
+    data: {
+      track: intruder,
+      relatedTrack: occupant,
+      runway,
+      runwayId: runway.id,
+      runwayName: featureName,
+      runwayStatus: featureStatus,
+      active: runway.active,
+      callsign,
+      relatedCallsign: occupantCallsign,
+      message: `${callsign} memasuki runway ${featureName} yang sedang dipakai ${occupantCallsign} (${featureStatus})`,
+      latitude: intruder.latitude,
+      longitude: intruder.longitude,
+    },
+  };
+}
+
+function collectRunwayCandidates(
+  runway: RunwayConfig,
+  tracks: MovementTrack[],
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+): AlertCandidate[] {
+  const inside = tracks.filter(
+    (t) =>
+      t.onGround !== false &&
+      pointInPolygon([t.latitude, t.longitude], runway.polygon),
+  );
+  if (inside.length < 2) return [];
+
+  const entrants = inside.filter((t) =>
+    isTrackEnteringRunway(t, runway.polygon),
+  );
+  const occupants = inside.filter(
+    (t) => !isTrackEnteringRunway(t, runway.polygon),
+  );
+  const occupant = occupants[0] ?? inside[0];
+
+  const intruders =
+    entrants.length > 0
+      ? entrants
+      : inside.filter((t) => t.trackId !== occupant.trackId);
+
+  const candidates: AlertCandidate[] = [];
+  for (const intruder of intruders) {
+    if (intruder.trackId === occupant.trackId) continue;
+    candidates.push(buildRunwayCandidate(intruder, occupant, runway, ctx));
+  }
+  return candidates;
+}
+
+function evaluateRunways(
+  runways: RunwayConfig[],
+  tracks: MovementTrack[],
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+): AlertCandidate[] {
+  const candidates: AlertCandidate[] = [];
+  for (const runway of runways) {
+    candidates.push(...collectRunwayCandidates(runway, tracks, ctx));
+  }
+  return candidates;
 }
 
 export const runwayIncursionRule: DetectionRule = {
@@ -20,47 +120,6 @@ export const runwayIncursionRule: DetectionRule = {
       ctx.aerodrome?.runways ??
       [];
     const activeRunways = runways.filter((r) => r.active);
-    const candidates: AlertCandidate[] = [];
-
-    for (const track of ctx.tracks) {
-      if (track.onGround === false) continue;
-      for (const runway of activeRunways) {
-        if (
-          !pointInPolygon([track.latitude, track.longitude], runway.polygon)
-        ) {
-          continue;
-        }
-
-        const alertId = `RUNWAY_INCURSION|${ctx.airportId}|${track.trackId}-${runway.id}`;
-        const callsign = track.callsign ?? track.trackId;
-        const featureName = runway.name ?? runway.id;
-        const featureStatus = runway.status ?? "ACTIVE";
-
-        candidates.push({
-          alertId,
-          airportId: ctx.airportId,
-          type: "RUNWAY_INCURSION",
-          severity: "CRITICAL",
-          status: "ACTIVE",
-          trackId: track.trackId,
-          aerodromeFeatureId: runway.id,
-          triggeredAt: ctx.timestamp,
-          data: {
-            track,
-            runway,
-            runwayId: runway.id,
-            runwayName: featureName,
-            runwayStatus: featureStatus,
-            active: runway.active,
-            callsign,
-            message: `${callsign} entered runway ${featureName} (${featureStatus})`,
-            latitude: track.latitude,
-            longitude: track.longitude,
-          },
-        });
-      }
-    }
-
-    return candidates;
+    return evaluateRunways(activeRunways, ctx.tracks, ctx);
   },
 };

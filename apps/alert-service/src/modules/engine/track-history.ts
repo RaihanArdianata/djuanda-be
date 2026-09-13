@@ -49,6 +49,29 @@ export function getTrackKey(trackId: string): string | undefined {
   return trackIdToKey.get(trackId);
 }
 
+export interface EntityKeyInput {
+  trackId: string;
+  relatedTrackId?: string | null;
+  aerodromeFeatureId?: string | null;
+}
+
+/** Bangun entity key yang stabil untuk Redis active-alert cache.
+ *  TrackId berubah tiap update, jadi kita pakai stable key (callsign/registration).
+ *  Key format: `targetType:callsign[|related][|aerodromeFeatureId]` */
+export function buildEntityKey(input: EntityKeyInput): string {
+  const main = getTrackKey(input.trackId) ?? input.trackId;
+  const related = input.relatedTrackId
+    ? (getTrackKey(input.relatedTrackId) ?? input.relatedTrackId)
+    : null;
+  if (input.aerodromeFeatureId) {
+    return `${main}|${input.aerodromeFeatureId}`;
+  }
+  if (related) {
+    return `${main}|${related}`;
+  }
+  return main;
+}
+
 export function pushTrackHistory(track: MovementTrack): void {
   const key = resolveTrackKey(track);
   trackIdToKey.set(track.trackId, key);

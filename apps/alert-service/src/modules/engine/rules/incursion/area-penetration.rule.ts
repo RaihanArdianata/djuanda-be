@@ -21,6 +21,7 @@ export const areaPenetrationRule: DetectionRule = {
     const candidates: AlertCandidate[] = [];
 
     for (const track of ctx.tracks) {
+      if (track.onGround === false) continue;
       for (const area of areas) {
         if (!pointInPolygon([track.latitude, track.longitude], area.polygon)) {
           continue;

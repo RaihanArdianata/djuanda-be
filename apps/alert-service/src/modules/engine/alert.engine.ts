@@ -18,6 +18,7 @@ import {
   recordAlertTrackHistory,
   registerAlert,
 } from "../alert/service/alert.service";
+import { broadcastAerodromeStatus } from "./aerodrome-status.service";
 import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
 import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
@@ -329,6 +330,7 @@ export const evaluateMovement = async (
   }
 
   const ctx = await buildAlertContext(input);
+  void broadcastAerodromeStatus(input.airportId, ctx.aerodrome ?? null);
   const candidates = collectCandidates(rules, ctx);
 
   if (candidates.length === 0) {

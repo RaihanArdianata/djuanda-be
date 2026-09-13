@@ -45,6 +45,34 @@ function checkOffRoute(
   };
 }
 
+function evaluateTrack(
+  track: MovementTrack,
+  surfaces: SurfaceConfig[],
+  expectedRoute: [number, number][],
+  maxDistanceMeters: number,
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+): AlertCandidate[] {
+  if (track.onGround === false) return [];
+  if (expectedRoute.length > 0) {
+    const offRoute = checkOffRoute(
+      track,
+      expectedRoute,
+      maxDistanceMeters,
+      ctx,
+    );
+    return offRoute ? [offRoute] : [];
+  }
+
+  const candidates: AlertCandidate[] = [];
+  for (const surface of surfaces) {
+    const surfaceCandidate = checkSurface(track, surface, ctx);
+    if (surfaceCandidate) {
+      candidates.push(surfaceCandidate);
+    }
+  }
+  return candidates;
+}
+
 function checkSurface(
   track: MovementTrack,
   surface: SurfaceConfig,
@@ -102,25 +130,15 @@ export const taxiwayApronIncursionRule: DetectionRule = {
     const candidates: AlertCandidate[] = [];
 
     for (const track of ctx.tracks) {
-      if (expectedRoute.length > 0) {
-        const offRouteCandidate = checkOffRoute(
+      candidates.push(
+        ...evaluateTrack(
           track,
+          surfaces,
           expectedRoute,
           maxDistanceMeters,
           ctx,
-        );
-        if (offRouteCandidate) {
-          candidates.push(offRouteCandidate);
-        }
-        continue;
-      }
-
-      for (const surface of surfaces) {
-        const surfaceCandidate = checkSurface(track, surface, ctx);
-        if (surfaceCandidate) {
-          candidates.push(surfaceCandidate);
-        }
-      }
+        ),
+      );
     }
 
     return candidates;

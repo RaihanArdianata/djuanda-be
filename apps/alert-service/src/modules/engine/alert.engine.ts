@@ -23,8 +23,8 @@ import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
 import {
+  buildEntityKey,
   getTrackHistory,
-  getTrackKey,
   resolveTrackHistoryKey,
   type TrackHistoryRecord,
 } from "./track-history";
@@ -112,16 +112,12 @@ async function registerCandidate(
   candidate: AlertCandidate,
   airportId: string,
 ): Promise<Alert | null> {
-  const entityKey = candidate.alertId.replace(/^[^|]+\|/, "");
+  const entityKey = buildEntityKey(candidate);
   const activeId = await getActiveAlert(airportId, candidate.type, entityKey);
 
   if (activeId) {
-    await setActiveAlert(
-      airportId,
-      candidate.type,
-      entityKey,
-      candidate.alertId,
-    );
+    // Refresh TTL, jangan overwrite dengan candidate.alertId (bukan DB alertId).
+    await setActiveAlert(airportId, candidate.type, entityKey, activeId);
     return null;
   }
 
@@ -134,15 +130,16 @@ async function registerCandidate(
   const relatedInfo = relatedTrackHistory[relatedTrackHistory.length - 1];
   const mainStableKey = mainInfo
     ? resolveTrackHistoryKey(mainInfo)
-    : (getTrackKey(candidate.trackId) ?? candidate.trackId);
+    : buildEntityKey({ trackId: candidate.trackId });
   const relatedStableKey = candidate.relatedTrackId
     ? relatedInfo
       ? resolveTrackHistoryKey(relatedInfo)
-      : (getTrackKey(candidate.relatedTrackId) ?? candidate.relatedTrackId)
+      : buildEntityKey({ trackId: candidate.relatedTrackId })
     : null;
 
   const enrichedData = {
     ...candidate.data,
+    entityKey,
     trackHistory,
     relatedTrackHistory,
   };
@@ -212,11 +209,12 @@ async function clearStaleAlerts(
   candidates: AlertCandidate[],
 ): Promise<Alert[]> {
   const cleared: Alert[] = [];
-  const activeAlertIds = new Set(candidates.map((c) => c.alertId));
+  const activeEntityKeys = new Set(candidates.map(buildEntityKey));
   const activeRefs = await getActiveAlertRefs(airportId);
 
   for (const ref of activeRefs) {
-    if (!ref.alertId || activeAlertIds.has(ref.alertId)) continue;
+    if (!ref.entityKey || activeEntityKeys.has(ref.entityKey)) continue;
+    if (!ref.alertId) continue;
     try {
       const clearedAlert = await clearAlertByAlertId(ref.alertId);
       if (clearedAlert) cleared.push(clearedAlert);

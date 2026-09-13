@@ -23,6 +23,7 @@ export const runwayIncursionRule: DetectionRule = {
     const candidates: AlertCandidate[] = [];
 
     for (const track of ctx.tracks) {
+      if (track.onGround === false) continue;
       for (const runway of activeRunways) {
         if (
           !pointInPolygon([track.latitude, track.longitude], runway.polygon)

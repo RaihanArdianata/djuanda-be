@@ -13,6 +13,7 @@ import {
   publishAlertEvent,
 } from "../messaging/alert.producer";
 import { flushPostHistory } from "./alert-post-history";
+import { buildEntityKey } from "./track-history";
 
 function toAlertEvent(alert: Alert, eventType: AlertEventType): AlertEvent {
   return {
@@ -72,7 +73,7 @@ export async function clearAlert(
         postTrackHistory: main,
         postRelatedTrackHistory: related,
       })) ?? alert;
-    await clearActiveAlertByAlertId(alert.alertId);
+    await clearActiveAlertForAlert(alert);
     await publishAlertCleared(alert);
   }
   return alert;
@@ -90,18 +91,21 @@ export async function clearAlertByAlertId(
         postTrackHistory: main,
         postRelatedTrackHistory: related,
       })) ?? alert;
-    await clearActiveAlertByAlertId(alert.alertId);
+    await clearActiveAlertForAlert(alert);
     await publishAlertCleared(alert);
   }
   return alert;
 }
 
-async function clearActiveAlertByAlertId(alertId: string): Promise<void> {
-  const parts = alertId.split("|");
-  if (parts.length < 3) return;
-  const type = parts[0] as string;
-  const rest = parts.slice(1);
-  const airportId = rest[0] as string;
-  const entityKey = rest.join("|");
-  await clearActiveAlert(airportId, type, entityKey);
+async function clearActiveAlertForAlert(alert: Alert): Promise<void> {
+  const data = alert.data as Record<string, unknown> | null | undefined;
+  const entityKey =
+    typeof data?.entityKey === "string"
+      ? data.entityKey
+      : buildEntityKey({
+          trackId: alert.trackId,
+          relatedTrackId: alert.relatedTrackId,
+          aerodromeFeatureId: alert.aerodromeFeatureId,
+        });
+  await clearActiveAlert(alert.airportId, alert.type, entityKey);
 }

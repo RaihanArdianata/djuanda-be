@@ -9,6 +9,37 @@ export function activeAlertKey(
   return `alert:active:${airportId}:${type}:${entityKey}`;
 }
 
+/**
+ * Klaim entity secara atomic (SET ... NX) sebelum membuat alert baru.
+ * Mencegah race condition: dua track update yang datang berdekatan untuk
+ * entity yang sama bisa lolos berdua kalau pengecekan "apa sudah ada alert
+ * aktif" dan penulisan "sekarang ada alert aktif" dilakukan terpisah
+ * (check-then-act) dengan proses DB insert yang lama di antaranya.
+ * Return true kalau klaim berhasil (pemanggil ini yang berhak lanjut buat
+ * alert baru), false kalau entity sudah diklaim pemanggil lain.
+ */
+export async function claimActiveAlert(
+  airportId: string,
+  type: string,
+  entityKey: string,
+  placeholder: string,
+  ttlSeconds = 300,
+): Promise<boolean> {
+  try {
+    const result = await redis.set(
+      activeAlertKey(airportId, type, entityKey),
+      placeholder,
+      "EX",
+      ttlSeconds,
+      "NX",
+    );
+    return result === "OK";
+  } catch (err) {
+    logger.warn({ err, airportId, type, entityKey }, "claimActiveAlert failed");
+    return false;
+  }
+}
+
 export async function setActiveAlert(
   airportId: string,
   type: string,

@@ -8,6 +8,7 @@ import {
 import { logger } from "@repo/logger";
 import { and, eq, lt } from "drizzle-orm";
 import {
+  claimActiveAlert,
   getActiveAlert,
   getActiveAlertRefs,
   setActiveAlert,
@@ -109,16 +110,30 @@ function collectCandidates(
   return candidates;
 }
 
+const PENDING_CLAIM_VALUE = "__pending__";
+
 async function registerCandidate(
   candidate: AlertCandidate,
   airportId: string,
 ): Promise<Alert | null> {
   const entityKey = buildEntityKey(candidate);
-  const activeId = await getActiveAlert(airportId, candidate.type, entityKey);
 
-  if (activeId) {
-    // Refresh TTL, jangan overwrite dengan candidate.alertId (bukan DB alertId).
-    await setActiveAlert(airportId, candidate.type, entityKey, activeId);
+  // Klaim entity secara atomic (SET NX) SEBELUM proses DB insert yang lama —
+  // mencegah 2 track update berdekatan untuk entity yang sama lolos
+  // pengecekan berdua dan bikin alert duplikat (lihat claimActiveAlert).
+  const claimed = await claimActiveAlert(
+    airportId,
+    candidate.type,
+    entityKey,
+    PENDING_CLAIM_VALUE,
+  );
+
+  if (!claimed) {
+    const activeId = await getActiveAlert(airportId, candidate.type, entityKey);
+    if (activeId && activeId !== PENDING_CLAIM_VALUE) {
+      // Refresh TTL, jangan overwrite dengan candidate.alertId (bukan DB alertId).
+      await setActiveAlert(airportId, candidate.type, entityKey, activeId);
+    }
     return null;
   }
 

@@ -7,8 +7,10 @@ import { fetchNotamMessages } from "../../provider/notam.provider";
 import type { NotamSourceItem } from "../parser/common";
 import {
   findLatestNotamDatetime,
+  findNotamByIdentity,
   upsertNotamMessage,
 } from "../repository/notam.repository";
+import { broadcastNotam } from "./notam-broadcast.service";
 
 const NOTAM_HISTORY_SIZE = 2000;
 const NOTAM_PROVIDER_SOURCE = "advisory-provider-notam";
@@ -57,6 +59,19 @@ const persistNotamItem = async (
       source: NOTAM_PROVIDER_SOURCE,
     });
     result[outcome] += 1;
+
+    if (outcome === "created" || outcome === "updated") {
+      const persisted = await findNotamByIdentity(
+        NOTAM_PROVIDER_SOURCE,
+        parsed.message.series,
+        parsed.message.number,
+        parsed.message.year,
+      );
+
+      if (persisted) {
+        await broadcastNotam(persisted, outcome);
+      }
+    }
   } catch (err) {
     result.failed += 1;
     logger.error(

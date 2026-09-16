@@ -1,13 +1,16 @@
-import { aeroswarmAlerts, aeroswarmMovements, db } from "@repo/database";
+import { aeroswarmMovements, alerts, db } from "@repo/database";
 import { and, eq, gte, lt, type SQL, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
   computePeriodBuckets,
-  enumerateDaysInclusive,
   exclusiveEndBoundaryJakarta,
   startOfDayJakarta,
 } from "../lib/period";
 import type { GetOperationalStatisticsParams } from "../validator/statistics.validator";
+export interface AircraftMovementBreakdown {
+  aircraft: string;
+  count: number;
+}
 
 export interface OperationalTrendPoint {
   period: string;
@@ -18,16 +21,25 @@ export interface OperationalTrendPoint {
   landing: number;
   totalMovement: number;
   alerts: number;
+  takeoffAircraftCount: number;
+  landingAircraftCount: number;
+  takeoffAircraft: AircraftMovementBreakdown[];
+  landingAircraft: AircraftMovementBreakdown[];
 }
 
 export interface OperationalStatisticsResult {
   period: GetOperationalStatisticsParams["period"];
   startDate: string;
   endDate: string;
+  startTime?: string;
+  endTime?: string;
   traffic: {
     totalAircraft: number;
     totalGroundVehicle: number;
     totalTraffic: number;
+    averageTrafficPerHour: number;
+    peakTrafficMovement: number;
+    peakTrafficHour: string | null;
   };
   movement: {
     totalTakeoff: number;
@@ -36,27 +48,23 @@ export interface OperationalStatisticsResult {
     peakHourMovement: number;
     peakHour: string | null;
   };
-  alerts: {
-    stca: number;
-    apa: number;
-    da: number;
-    ria: number;
-    taia: number;
-    total: number;
-  };
+  alerts: AlertTotals;
   trend: OperationalTrendPoint[];
 }
 
 type MovementType = "takeoff" | "landing";
-type MovementAggGroup = "period" | "hour" | "total";
+type MovementAggGroup = "total" | "hour_track" | "hour_aircraft";
+
 interface MovementAggQueryRow {
   grp: MovementAggGroup;
-  period_bucket: string | null;
   hour_bucket: string | null;
   track_id: string | null;
   aircraft: number | null;
   takeoff: number;
   landing: number;
+  movement_type: MovementType | null;
+  aircraft_label: string | null;
+  event_count: number | null;
   [column: string]: string | number | null;
 }
 
@@ -66,10 +74,15 @@ interface MovementTotals {
   landing: number;
 }
 
-interface DayMovementEntry {
+interface HourMovementEntry {
   trackIds: Set<string>;
   takeoff: number;
   landing: number;
+}
+
+interface HourAircraftEntry {
+  takeoff: Map<string, number>;
+  landing: Map<string, number>;
 }
 
 interface PeakHour {
@@ -79,7 +92,8 @@ interface PeakHour {
 
 interface ParsedMovementAgg {
   totals: MovementTotals;
-  dayMovementMap: Map<string, DayMovementEntry>;
+  hourMovementMap: Map<string, HourMovementEntry>;
+  hourAircraftMap: Map<string, HourAircraftEntry>;
   peakHour: PeakHour | null;
 }
 
@@ -89,87 +103,156 @@ function applyTotalRow(totals: MovementTotals, row: MovementAggQueryRow): void {
   totals.landing = row.landing;
 }
 
-function applyPeriodRow(
-  dayMovementMap: Map<string, DayMovementEntry>,
+function applyHourTrackRow(
+  hourMovementMap: Map<string, HourMovementEntry>,
   row: MovementAggQueryRow,
 ): void {
-  if (!(row.period_bucket && row.track_id)) return;
+  if (!(row.hour_bucket && row.track_id)) return;
 
-  let entry = dayMovementMap.get(row.period_bucket);
+  let entry = hourMovementMap.get(row.hour_bucket);
   if (!entry) {
     entry = { trackIds: new Set<string>(), takeoff: 0, landing: 0 };
-    dayMovementMap.set(row.period_bucket, entry);
+    hourMovementMap.set(row.hour_bucket, entry);
   }
   entry.trackIds.add(row.track_id);
   entry.takeoff += row.takeoff;
   entry.landing += row.landing;
 }
 
-function applyHourRow(
-  currentPeak: PeakHour | null,
+function applyHourAircraftRow(
+  hourAircraftMap: Map<string, HourAircraftEntry>,
   row: MovementAggQueryRow,
-): PeakHour | null {
-  if (!row.hour_bucket) return currentPeak;
+): void {
+  if (!(row.hour_bucket && row.movement_type && row.aircraft_label)) return;
 
-  const movement = row.takeoff + row.landing;
-  if (!currentPeak || movement > currentPeak.movement) {
-    return { hour: row.hour_bucket, movement };
+  let entry = hourAircraftMap.get(row.hour_bucket);
+  if (!entry) {
+    entry = {
+      takeoff: new Map<string, number>(),
+      landing: new Map<string, number>(),
+    };
+    hourAircraftMap.set(row.hour_bucket, entry);
   }
-  return currentPeak;
+  entry[row.movement_type].set(row.aircraft_label, row.event_count ?? 0);
 }
 
-function parseMovementAggRows(rows: MovementAggQueryRow[]): ParsedMovementAgg {
+function computePeakHour(
+  hourMovementMap: Map<string, HourMovementEntry>,
+): PeakHour | null {
+  let peak: PeakHour | null = null;
+  for (const [hour, entry] of hourMovementMap) {
+    const movement = entry.takeoff + entry.landing;
+    if (!peak || movement > peak.movement) {
+      peak = { hour, movement };
+    }
+  }
+  return peak;
+}
+function computePeakTrafficHour(
+  hourMovementMap: Map<string, HourMovementEntry>,
+): PeakHour | null {
+  let peak: PeakHour | null = null;
+  for (const [hour, entry] of hourMovementMap) {
+    const aircraftCount = entry.trackIds.size;
+    if (!peak || aircraftCount > peak.movement) {
+      peak = { hour, movement: aircraftCount };
+    }
+  }
+  return peak;
+}
+
+interface TrafficMetrics {
+  averageTrafficPerHour: number;
+  peakTrafficMovement: number;
+  peakTrafficHour: string | null;
+}
+function computeTrafficMetrics(
+  hourMovementMap: Map<string, HourMovementEntry>,
+  rangeHours: number,
+): TrafficMetrics {
+  let sumHourlyAircraft = 0;
+  for (const entry of hourMovementMap.values()) {
+    sumHourlyAircraft += entry.trackIds.size;
+  }
+
+  const peak = computePeakTrafficHour(hourMovementMap);
+
+  return {
+    averageTrafficPerHour:
+      Math.round((sumHourlyAircraft / rangeHours) * 100) / 100,
+    peakTrafficMovement: peak?.movement ?? 0,
+    peakTrafficHour: peak?.hour ?? null,
+  };
+}
+
+export function parseMovementAggRows(
+  rows: MovementAggQueryRow[],
+): ParsedMovementAgg {
   const totals: MovementTotals = { aircraft: 0, takeoff: 0, landing: 0 };
-  const dayMovementMap = new Map<string, DayMovementEntry>();
-  let peakHour: PeakHour | null = null;
+  const hourMovementMap = new Map<string, HourMovementEntry>();
+  const hourAircraftMap = new Map<string, HourAircraftEntry>();
 
   for (const row of rows) {
     switch (row.grp) {
       case "total":
         applyTotalRow(totals, row);
         break;
-      case "period":
-        applyPeriodRow(dayMovementMap, row);
+      case "hour_track":
+        applyHourTrackRow(hourMovementMap, row);
         break;
-      case "hour":
-        peakHour = applyHourRow(peakHour, row);
+      case "hour_aircraft":
+        applyHourAircraftRow(hourAircraftMap, row);
         break;
     }
   }
 
-  return { totals, dayMovementMap, peakHour };
+  return {
+    totals,
+    hourMovementMap,
+    hourAircraftMap,
+    peakHour: computePeakHour(hourMovementMap),
+  };
 }
+
 interface AlertTrendRow {
   bucket: string;
   total: number;
+  runwayIncursion: number;
+  areaPenetration: number;
+  deviation: number;
+  taxiwayApronIncursion: number;
+  stca: number;
+}
+export interface AlertTotals {
   stca: number;
   apa: number;
   da: number;
   ria: number;
   taia: number;
-}
-
-interface AlertTotals {
   total: number;
-  stca: number;
-  apa: number;
-  da: number;
-  ria: number;
-  taia: number;
 }
 
-function sumAlertTotals(alertTrendRows: AlertTrendRow[]): AlertTotals {
-  return alertTrendRows.reduce(
+export function sumAlertTotals(alertTrendRows: AlertTrendRow[]): AlertTotals {
+  return alertTrendRows.reduce<AlertTotals>(
     (acc, row) => ({
-      total: acc.total + row.total,
       stca: acc.stca + row.stca,
-      apa: acc.apa + row.apa,
-      da: acc.da + row.da,
-      ria: acc.ria + row.ria,
-      taia: acc.taia + row.taia,
+      apa: acc.apa + row.areaPenetration,
+      da: acc.da + row.deviation,
+      ria: acc.ria + row.runwayIncursion,
+      taia: acc.taia + row.taxiwayApronIncursion,
+      total: acc.total + row.total,
     }),
-    { total: 0, stca: 0, apa: 0, da: 0, ria: 0, taia: 0 },
+    { stca: 0, apa: 0, da: 0, ria: 0, taia: 0, total: 0 },
   );
+}
+export function timeOfDayWhere(
+  timeColumn: PgColumn,
+  startTime: string | undefined,
+  endTime: string | undefined,
+): SQL | undefined {
+  if (!startTime || !endTime) return undefined;
+  return sql`(${timeColumn} AT TIME ZONE 'Asia/Jakarta')::time >= ${startTime}::time
+    AND (${timeColumn} AT TIME ZONE 'Asia/Jakarta')::time < ${endTime}::time`;
 }
 
 function timeRangeWhere(
@@ -178,6 +261,7 @@ function timeRangeWhere(
   rangeStart: Date,
   rangeEndExclusive: Date,
   airportId: string | undefined,
+  timeOfDay: SQL | undefined,
 ): SQL | undefined {
   const conditions: SQL[] = [
     gte(timeColumn, rangeStart),
@@ -186,33 +270,66 @@ function timeRangeWhere(
   if (airportId) {
     conditions.push(eq(airportColumn, airportId));
   }
+  if (timeOfDay) {
+    conditions.push(timeOfDay);
+  }
   return and(...conditions);
 }
-function buildTrend(
+
+function mergeAircraftCounts(
+  target: Map<string, number>,
+  source: Map<string, number>,
+): void {
+  for (const [aircraft, count] of source) {
+    target.set(aircraft, (target.get(aircraft) ?? 0) + count);
+  }
+}
+
+function toAircraftBreakdown(
+  counts: Map<string, number>,
+): AircraftMovementBreakdown[] {
+  return Array.from(counts, ([aircraft, count]) => ({ aircraft, count })).sort(
+    (a, b) => b.count - a.count || a.aircraft.localeCompare(b.aircraft),
+  );
+}
+
+export function buildTrend(
   params: GetOperationalStatisticsParams,
-  dayMovementMap: Map<string, DayMovementEntry>,
-  dayAlertMap: Map<string, number>,
+  hourMovementMap: Map<string, HourMovementEntry>,
+  hourAlertMap: Map<string, number>,
+  hourAircraftMap: Map<string, HourAircraftEntry>,
 ): OperationalTrendPoint[] {
   const buckets = computePeriodBuckets(
     params.period,
     params.startDate,
     params.endDate,
+    params.startTime,
+    params.endTime,
   );
 
-  return buckets.map(({ period, periodStart, periodEnd }) => {
+  return buckets.map(({ period, periodStart, periodEnd, hourKeys }) => {
     const trackIds = new Set<string>();
+    const takeoffAircraftCounts = new Map<string, number>();
+    const landingAircraftCounts = new Map<string, number>();
     let takeoff = 0;
     let landing = 0;
-    let alerts = 0;
+    let alertCount = 0;
 
-    for (const day of enumerateDaysInclusive(periodStart, periodEnd)) {
-      const movement = dayMovementMap.get(day);
+    for (const hourKey of hourKeys) {
+      const movement = hourMovementMap.get(hourKey);
       if (movement) {
         for (const trackId of movement.trackIds) trackIds.add(trackId);
         takeoff += movement.takeoff;
         landing += movement.landing;
       }
-      alerts += dayAlertMap.get(day) ?? 0;
+
+      alertCount += hourAlertMap.get(hourKey) ?? 0;
+
+      const aircraftEntry = hourAircraftMap.get(hourKey);
+      if (aircraftEntry) {
+        mergeAircraftCounts(takeoffAircraftCounts, aircraftEntry.takeoff);
+        mergeAircraftCounts(landingAircraftCounts, aircraftEntry.landing);
+      }
     }
 
     const point: OperationalTrendPoint = {
@@ -222,7 +339,11 @@ function buildTrend(
       takeoff,
       landing,
       totalMovement: takeoff + landing,
-      alerts,
+      alerts: alertCount,
+      takeoffAircraftCount: takeoffAircraftCounts.size,
+      landingAircraftCount: landingAircraftCounts.size,
+      takeoffAircraft: toAircraftBreakdown(takeoffAircraftCounts),
+      landingAircraft: toAircraftBreakdown(landingAircraftCounts),
     };
     if (params.period !== "daily") {
       point.periodRange = `${periodStart} - ${periodEnd}`;
@@ -238,11 +359,12 @@ export async function getOperationalStatistics(
   const rangeEndExclusive = exclusiveEndBoundaryJakarta(params.endDate);
 
   const alertWhereClause = timeRangeWhere(
-    aeroswarmAlerts.triggeredAt,
-    aeroswarmAlerts.airportId,
+    alerts.triggeredAt,
+    alerts.airportId,
     rangeStart,
     rangeEndExclusive,
     params.airportId,
+    timeOfDayWhere(alerts.triggeredAt, params.startTime, params.endTime),
   );
 
   const movementWhereClause = timeRangeWhere(
@@ -251,13 +373,12 @@ export async function getOperationalStatistics(
     rangeStart,
     rangeEndExclusive,
     params.airportId,
+    timeOfDayWhere(aeroswarmMovements.at, params.startTime, params.endTime),
   );
-  const alertBucketExpr = sql<string>`to_char(date_trunc('day', ${aeroswarmAlerts.triggeredAt} at time zone 'Asia/Jakarta'), 'YYYY-MM-DD')`;
-  const categoryFilter = (category: string): SQL<number> =>
-    sql<number>`count(*) filter (where upper(${aeroswarmAlerts.type}) = ${category})::int`;
+  const alertBucketExpr = sql<string>`to_char(date_trunc('hour', ${alerts.triggeredAt} at time zone 'Asia/Jakarta'), 'YYYY-MM-DD"T"HH24:00')`;
+  const typeFilter = (alertType: string): SQL<number> =>
+    sql<number>`count(*) filter (where upper(${alerts.type}) = ${alertType})::int`;
 
-  const movementTypeFilter = (type: MovementType): SQL<number> =>
-    sql<number>`count(*) filter (where ${aeroswarmMovements.type} = ${type})::int`;
   const [alertTrendRows, movementAggResult] = await db.transaction(
     async (tx) => {
       await tx.execute(sql`SET LOCAL work_mem = '128MB'`);
@@ -268,84 +389,93 @@ export async function getOperationalStatistics(
           .select({
             bucket: alertBucketExpr,
             total: sql<number>`count(*)::int`,
-            stca: categoryFilter("STCA"),
-            apa: categoryFilter("APA"),
-            da: categoryFilter("DA"),
-            ria: categoryFilter("RIA"),
-            taia: categoryFilter("TAIA"),
+            runwayIncursion: typeFilter("RUNWAY_INCURSION"),
+            areaPenetration: typeFilter("AREA_PENETRATION"),
+            deviation: typeFilter("DEVIATION"),
+            taxiwayApronIncursion: typeFilter("TAXIWAY_APRON_INCURSION"),
+            stca: typeFilter("STCA"),
           })
-          .from(aeroswarmAlerts)
+          .from(alerts)
           .where(alertWhereClause)
           .groupBy(sql`1`),
         tx.execute<MovementAggQueryRow>(sql`
-        WITH movement_agg AS MATERIALIZED (
+        WITH movement_base AS MATERIALIZED (
           SELECT
             ${aeroswarmMovements.trackId} AS track_id,
-            date_trunc('day', ${aeroswarmMovements.at} AT TIME ZONE 'Asia/Jakarta') AS day_raw,
+            ${aeroswarmMovements.type} AS type,
             date_trunc('hour', ${aeroswarmMovements.at} AT TIME ZONE 'Asia/Jakarta') AS hour_raw,
-            ${movementTypeFilter("takeoff")} AS takeoff,
-            ${movementTypeFilter("landing")} AS landing
+            COALESCE(
+              NULLIF(${aeroswarmMovements.callsign}, ''),
+              ${aeroswarmMovements.icao24},
+              ${aeroswarmMovements.trackId}
+            ) AS aircraft_label
           FROM ${aeroswarmMovements}
           WHERE ${movementWhereClause}
-          GROUP BY track_id, day_raw, hour_raw
         ),
-        per_track_day AS (
+        track_hour_agg AS MATERIALIZED (
           SELECT
             track_id,
-            day_raw,
-            sum(takeoff)::int AS takeoff,
-            sum(landing)::int AS landing
-          FROM movement_agg
-          GROUP BY track_id, day_raw
-        ),
-        per_hour AS (
-          SELECT
             hour_raw,
-            sum(takeoff)::int AS takeoff,
-            sum(landing)::int AS landing
-          FROM movement_agg
-          GROUP BY hour_raw
+            count(*) FILTER (WHERE type = 'takeoff')::int AS takeoff,
+            count(*) FILTER (WHERE type = 'landing')::int AS landing
+          FROM movement_base
+          GROUP BY track_id, hour_raw
         ),
         grand_total AS (
           SELECT
             count(DISTINCT track_id)::int AS aircraft,
             sum(takeoff)::int AS takeoff,
             sum(landing)::int AS landing
-          FROM movement_agg
+          FROM track_hour_agg
+        ),
+        hour_type_aircraft AS (
+          SELECT
+            hour_raw,
+            type,
+            aircraft_label,
+            count(*)::int AS event_count
+          FROM movement_base
+          GROUP BY hour_raw, type, aircraft_label
         )
         SELECT
-          'period' AS grp,
-          to_char(day_raw, 'YYYY-MM-DD') AS period_bucket,
-          NULL::text AS hour_bucket,
+          'hour_track' AS grp,
+          to_char(hour_raw, 'YYYY-MM-DD"T"HH24:00') AS hour_bucket,
           track_id::text AS track_id,
           NULL::int AS aircraft,
           takeoff,
-          landing
-        FROM per_track_day
-
-        UNION ALL
-
-        SELECT
-          'hour' AS grp,
-          NULL::text AS period_bucket,
-          to_char(hour_raw, 'YYYY-MM-DD"T"HH24:00') AS hour_bucket,
-          NULL::text AS track_id,
-          NULL::int AS aircraft,
-          takeoff,
-          landing
-        FROM per_hour
+          landing,
+          NULL::text AS movement_type,
+          NULL::text AS aircraft_label,
+          NULL::int AS event_count
+        FROM track_hour_agg
 
         UNION ALL
 
         SELECT
           'total' AS grp,
-          NULL::text AS period_bucket,
           NULL::text AS hour_bucket,
           NULL::text AS track_id,
           aircraft,
           takeoff,
-          landing
+          landing,
+          NULL::text AS movement_type,
+          NULL::text AS aircraft_label,
+          NULL::int AS event_count
         FROM grand_total
+
+        UNION ALL
+
+        SELECT
+          'hour_aircraft' AS grp,
+          to_char(hour_raw, 'YYYY-MM-DD"T"HH24:00') AS hour_bucket,
+          NULL::text AS track_id,
+          NULL::int AS aircraft,
+          0 AS takeoff,
+          0 AS landing,
+          type AS movement_type,
+          aircraft_label,
+          event_count
+        FROM hour_type_aircraft
       `),
       ]);
     },
@@ -354,17 +484,14 @@ export async function getOperationalStatistics(
     .rows;
   const {
     totals: movementTotals,
-    dayMovementMap,
+    hourMovementMap,
+    hourAircraftMap,
     peakHour: peakHourRow,
   } = parseMovementAggRows(movementAggRows);
-
-  // ---------- Alerts aggregation ----------
-  const dayAlertMap = new Map(
+  const hourAlertMap = new Map(
     alertTrendRows.map((row) => [row.bucket, row.total]),
   );
   const alertTotals = sumAlertTotals(alertTrendRows);
-
-  // ---------- Traffic & Movement aggregation ----------
   const totalAircraft = movementTotals.aircraft;
   const totalTakeoff = movementTotals.takeoff;
   const totalLanding = movementTotals.landing;
@@ -378,16 +505,30 @@ export async function getOperationalStatistics(
   const averageMovementPerHour =
     Math.round((totalMovement / rangeHours) * 100) / 100;
 
-  const trend = buildTrend(params, dayMovementMap, dayAlertMap);
+  const { averageTrafficPerHour, peakTrafficMovement, peakTrafficHour } =
+    computeTrafficMetrics(hourMovementMap, rangeHours);
+
+  const trend = buildTrend(
+    params,
+    hourMovementMap,
+    hourAlertMap,
+    hourAircraftMap,
+  );
 
   return {
     period: params.period,
     startDate: params.startDate,
     endDate: params.endDate,
+    ...(params.startTime && params.endTime
+      ? { startTime: params.startTime, endTime: params.endTime }
+      : {}),
     traffic: {
       totalAircraft,
       totalGroundVehicle,
       totalTraffic: totalAircraft + totalGroundVehicle,
+      averageTrafficPerHour,
+      peakTrafficMovement,
+      peakTrafficHour,
     },
     movement: {
       totalTakeoff,
@@ -396,14 +537,7 @@ export async function getOperationalStatistics(
       peakHourMovement: peakHourRow?.movement ?? 0,
       peakHour: peakHourRow?.hour ?? null,
     },
-    alerts: {
-      stca: alertTotals.stca,
-      apa: alertTotals.apa,
-      da: alertTotals.da,
-      ria: alertTotals.ria,
-      taia: alertTotals.taia,
-      total: alertTotals.total,
-    },
+    alerts: alertTotals,
     trend,
   };
 }

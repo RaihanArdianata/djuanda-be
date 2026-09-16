@@ -10,6 +10,7 @@ import type { GetOperationalStatisticsParams } from "../validator/statistics.val
 export interface AircraftMovementBreakdown {
   aircraft: string;
   count: number;
+  at: string | null;
 }
 
 export interface OperationalTrendPoint {
@@ -65,6 +66,7 @@ interface MovementAggQueryRow {
   movement_type: MovementType | null;
   aircraft_label: string | null;
   event_count: number | null;
+  aircraft_last_at: string | null;
   [column: string]: string | number | null;
 }
 
@@ -80,9 +82,14 @@ interface HourMovementEntry {
   landing: number;
 }
 
+interface AircraftStat {
+  count: number;
+  at: string | null;
+}
+
 interface HourAircraftEntry {
-  takeoff: Map<string, number>;
-  landing: Map<string, number>;
+  takeoff: Map<string, AircraftStat>;
+  landing: Map<string, AircraftStat>;
 }
 
 interface PeakHour {
@@ -128,12 +135,15 @@ function applyHourAircraftRow(
   let entry = hourAircraftMap.get(row.hour_bucket);
   if (!entry) {
     entry = {
-      takeoff: new Map<string, number>(),
-      landing: new Map<string, number>(),
+      takeoff: new Map<string, AircraftStat>(),
+      landing: new Map<string, AircraftStat>(),
     };
     hourAircraftMap.set(row.hour_bucket, entry);
   }
-  entry[row.movement_type].set(row.aircraft_label, row.event_count ?? 0);
+  entry[row.movement_type].set(row.aircraft_label, {
+    count: row.event_count ?? 0,
+    at: row.aircraft_last_at ?? null,
+  });
 }
 
 function computePeakHour(
@@ -276,21 +286,33 @@ function timeRangeWhere(
   return and(...conditions);
 }
 
+function latestAt(a: string | null, b: string | null): string | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
+
 function mergeAircraftCounts(
-  target: Map<string, number>,
-  source: Map<string, number>,
+  target: Map<string, AircraftStat>,
+  source: Map<string, AircraftStat>,
 ): void {
-  for (const [aircraft, count] of source) {
-    target.set(aircraft, (target.get(aircraft) ?? 0) + count);
+  for (const [aircraft, stat] of source) {
+    const existing = target.get(aircraft);
+    target.set(aircraft, {
+      count: (existing?.count ?? 0) + stat.count,
+      at: latestAt(existing?.at ?? null, stat.at),
+    });
   }
 }
 
 function toAircraftBreakdown(
-  counts: Map<string, number>,
+  counts: Map<string, AircraftStat>,
 ): AircraftMovementBreakdown[] {
-  return Array.from(counts, ([aircraft, count]) => ({ aircraft, count })).sort(
-    (a, b) => b.count - a.count || a.aircraft.localeCompare(b.aircraft),
-  );
+  return Array.from(counts, ([aircraft, stat]) => ({
+    aircraft,
+    count: stat.count,
+    at: stat.at,
+  })).sort((a, b) => b.count - a.count || a.aircraft.localeCompare(b.aircraft));
 }
 
 export function buildTrend(
@@ -309,8 +331,8 @@ export function buildTrend(
 
   return buckets.map(({ period, periodStart, periodEnd, hourKeys }) => {
     const trackIds = new Set<string>();
-    const takeoffAircraftCounts = new Map<string, number>();
-    const landingAircraftCounts = new Map<string, number>();
+    const takeoffAircraftCounts = new Map<string, AircraftStat>();
+    const landingAircraftCounts = new Map<string, AircraftStat>();
     let takeoff = 0;
     let landing = 0;
     let alertCount = 0;
@@ -403,6 +425,7 @@ export async function getOperationalStatistics(
           SELECT
             ${aeroswarmMovements.trackId} AS track_id,
             ${aeroswarmMovements.type} AS type,
+            ${aeroswarmMovements.at} AS at,
             date_trunc('hour', ${aeroswarmMovements.at} AT TIME ZONE 'Asia/Jakarta') AS hour_raw,
             COALESCE(
               NULLIF(${aeroswarmMovements.callsign}, ''),
@@ -433,7 +456,8 @@ export async function getOperationalStatistics(
             hour_raw,
             type,
             aircraft_label,
-            count(*)::int AS event_count
+            count(*)::int AS event_count,
+            max(at) AS last_at
           FROM movement_base
           GROUP BY hour_raw, type, aircraft_label
         )
@@ -446,7 +470,8 @@ export async function getOperationalStatistics(
           landing,
           NULL::text AS movement_type,
           NULL::text AS aircraft_label,
-          NULL::int AS event_count
+          NULL::int AS event_count,
+          NULL::text AS aircraft_last_at
         FROM track_hour_agg
 
         UNION ALL
@@ -460,7 +485,8 @@ export async function getOperationalStatistics(
           landing,
           NULL::text AS movement_type,
           NULL::text AS aircraft_label,
-          NULL::int AS event_count
+          NULL::int AS event_count,
+          NULL::text AS aircraft_last_at
         FROM grand_total
 
         UNION ALL
@@ -474,7 +500,8 @@ export async function getOperationalStatistics(
           0 AS landing,
           type AS movement_type,
           aircraft_label,
-          event_count
+          event_count,
+          to_char(last_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') AS aircraft_last_at
         FROM hour_type_aircraft
       `),
       ]);

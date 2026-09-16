@@ -101,6 +101,12 @@ const operationalStatisticsResponse = z.object({
             count: z
               .number()
               .describe("Takeoff events by this aircraft in the bucket"),
+            at: z
+              .string()
+              .nullable()
+              .describe(
+                "Timestamp (Asia/Jakarta, YYYY-MM-DDTHH:mm:ss) of this aircraft's most recent takeoff in the bucket",
+              ),
           }),
         ),
         landingAircraft: z.array(
@@ -109,6 +115,12 @@ const operationalStatisticsResponse = z.object({
             count: z
               .number()
               .describe("Landing events by this aircraft in the bucket"),
+            at: z
+              .string()
+              .nullable()
+              .describe(
+                "Timestamp (Asia/Jakarta, YYYY-MM-DDTHH:mm:ss) of this aircraft's most recent landing in the bucket",
+              ),
           }),
         ),
       }),

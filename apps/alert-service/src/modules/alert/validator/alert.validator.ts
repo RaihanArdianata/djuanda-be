@@ -66,3 +66,22 @@ export type ListAlertsInput = z.infer<typeof listAlertInputSchema>;
 export type AcknowledgeAlertInput = z.infer<typeof acknowledgeAlertSchema>;
 export type ClearAlertInput = z.infer<typeof clearAlertSchema>;
 export type DetectInput = z.infer<typeof detectSchema>;
+
+export const exportAlertSchema = z
+  .object({
+    format: z.enum(["csv", "xlsx"]),
+    startDateTime: z.coerce.date(),
+    endDateTime: z.coerce.date(),
+    airportId: z.string().optional(),
+    alertType: z.string().optional(),
+    type: z.string().optional(),
+    severity: z.string().optional(),
+    status: z.string().optional(),
+    trackId: z.string().optional(),
+  })
+  .refine((data) => data.startDateTime < data.endDateTime, {
+    message: "Start date must be before end date",
+    path: ["startDateTime"],
+  });
+
+export type ExportAlertInput = z.infer<typeof exportAlertSchema>;

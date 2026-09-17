@@ -1,3 +1,4 @@
+import ApiError from "@repo/shared/api-error";
 import { failure, success } from "@repo/shared/api-response";
 import { catchAsync } from "@repo/shared/catch-async";
 import {
@@ -7,6 +8,7 @@ import {
 import {
   acknowledgeAlertService,
   clearAlertService,
+  exportAlertsService,
   getActiveAlerts,
   getAlertById,
   getAlertTrackHistory,
@@ -16,6 +18,7 @@ import {
   acknowledgeAlertSchema,
   clearAlertSchema,
   detectSchema,
+  exportAlertSchema,
   listAlertInputSchema,
 } from "../validator/alert.validator";
 
@@ -121,4 +124,55 @@ export const detectAlertController = catchAsync(async (c) => {
   });
 
   return success(c, result, { message: "Detection processed successfully" });
+});
+
+export const exportAlertsController = catchAsync(async (c) => {
+  const query = c.req.query();
+  const format = query.format?.toLowerCase();
+
+  if (format !== "csv" && format !== "xlsx") {
+    throw new ApiError("BAD_REQUEST", {
+      message: "Invalid format. Supported formats are 'csv' or 'xlsx'",
+    });
+  }
+
+  const startRaw = query.startDateTime ?? query.startDate;
+  const endRaw = query.endDateTime ?? query.endDate;
+
+  if (!startRaw || !endRaw) {
+    throw new ApiError("BAD_REQUEST", {
+      message: "startDateTime and endDateTime are required",
+    });
+  }
+
+  const startDateTime = new Date(startRaw);
+  const endDateTime = new Date(endRaw);
+
+  if (
+    Number.isNaN(startDateTime.getTime()) ||
+    Number.isNaN(endDateTime.getTime()) ||
+    startDateTime >= endDateTime
+  ) {
+    throw new ApiError("INVALID_DATE_RANGE", {
+      message: "Start date must be before end date",
+    });
+  }
+
+  const parsed = exportAlertSchema.parse({
+    ...query,
+    format,
+    startDateTime,
+    endDateTime,
+  });
+
+  const { filename, data, contentType } = await exportAlertsService(parsed);
+  const body = typeof data === "string" ? data : new Uint8Array(data);
+
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
 });

@@ -312,7 +312,15 @@ function toAircraftBreakdown(
     aircraft,
     count: stat.count,
     at: stat.at,
-  })).sort((a, b) => b.count - a.count || a.aircraft.localeCompare(b.aircraft));
+  })).sort((a, b) => {
+    // urutkan berdasarkan `at` desc (terbaru -> terlama); null ditaruh paling akhir
+    if (a.at && b.at) {
+      if (a.at !== b.at) return b.at.localeCompare(a.at);
+    } else if (a.at || b.at) {
+      return a.at ? -1 : 1;
+    }
+    return b.count - a.count || a.aircraft.localeCompare(b.aircraft);
+  });
 }
 
 export function buildTrend(

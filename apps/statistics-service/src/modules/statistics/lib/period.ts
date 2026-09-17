@@ -1,9 +1,10 @@
-export const PERIOD_VALUES = ["daily", "weekly", "monthly"] as const;
+export const PERIOD_VALUES = ["hourly", "daily", "weekly", "monthly"] as const;
 export type PeriodType = (typeof PERIOD_VALUES)[number];
 
 export const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const JAKARTA_OFFSET = "+07:00";
+const HOURS_PER_DAY = 24;
 
 export function isValidCalendarDate(value: string): boolean {
   if (!DATE_ONLY_PATTERN.test(value)) return false;
@@ -27,6 +28,9 @@ function toUtcDateOnly(dateOnly: string): Date {
 
 function formatDateOnly(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
 function addDaysUtc(date: Date, days: number): Date {
@@ -64,22 +68,75 @@ export function enumerateDaysInclusive(
   return days;
 }
 
+export function hourKeysForDayRange(
+  startDay: string,
+  endDayInclusive: string,
+): string[] {
+  const days = enumerateDaysInclusive(startDay, endDayInclusive);
+  const keys: string[] = [];
+  for (const day of days) {
+    for (let hour = 0; hour < HOURS_PER_DAY; hour++) {
+      keys.push(`${day}T${pad2(hour)}:00`);
+    }
+  }
+  return keys;
+}
+function parseTimeOfDayMinutes(time: string): number {
+  const [hourStr, minuteStr] = time.split(":");
+  const hour = Number(hourStr);
+  const minute = Number(minuteStr ?? "0");
+  return hour * 60 + minute;
+}
+function hourWithinTimeOfDay(
+  hour: number,
+  startTime: string | undefined,
+  endTime: string | undefined,
+): boolean {
+  if (!startTime || !endTime) return true;
+  const hourStartMinute = hour * 60;
+  const startMinute = parseTimeOfDayMinutes(startTime);
+  const endMinute = parseTimeOfDayMinutes(endTime);
+  return hourStartMinute >= startMinute && hourStartMinute < endMinute;
+}
+
 export interface PeriodBucket {
   period: string;
   periodStart: string;
   periodEnd: string;
+  hourKeys: string[];
 }
-
 export function computePeriodBuckets(
   period: PeriodType,
   startDate: string,
   endDate: string,
+  startTime?: string,
+  endTime?: string,
 ): PeriodBucket[] {
+  if (period === "hourly") {
+    const days = enumerateDaysInclusive(startDate, endDate);
+    const buckets: PeriodBucket[] = [];
+    for (const day of days) {
+      for (let hour = 0; hour < HOURS_PER_DAY; hour++) {
+        if (!hourWithinTimeOfDay(hour, startTime, endTime)) continue;
+        const hh = pad2(hour);
+        const label = `${day}T${hh}:00`;
+        buckets.push({
+          period: label,
+          periodStart: `${day}T${hh}:00:00`,
+          periodEnd: `${day}T${hh}:59:59`,
+          hourKeys: [label],
+        });
+      }
+    }
+    return buckets;
+  }
+
   if (period === "daily") {
     return enumerateDaysInclusive(startDate, endDate).map((day) => ({
       period: day,
       periodStart: day,
       periodEnd: day,
+      hourKeys: hourKeysForDayRange(day, day),
     }));
   }
 
@@ -93,7 +150,12 @@ export function computePeriodBuckets(
     const chunkEnd = minDate(endOfChunk(cursor), end);
     const periodStart = formatDateOnly(cursor);
     const periodEnd = formatDateOnly(chunkEnd);
-    buckets.push({ period: periodStart, periodStart, periodEnd });
+    buckets.push({
+      period: periodStart,
+      periodStart,
+      periodEnd,
+      hourKeys: hourKeysForDayRange(periodStart, periodEnd),
+    });
     cursor = addDaysUtc(chunkEnd, 1);
   }
   return buckets;

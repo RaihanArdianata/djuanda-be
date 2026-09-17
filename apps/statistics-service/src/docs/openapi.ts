@@ -39,9 +39,21 @@ const errorResponse = (
 
 const operationalStatisticsResponse = z.object({
   data: z.object({
-    period: z.enum(["daily", "weekly", "monthly"]),
+    period: z.enum(["hourly", "daily", "weekly", "monthly"]),
     startDate: z.string(),
     endDate: z.string(),
+    startTime: z
+      .string()
+      .optional()
+      .describe(
+        "Echoed back only when a startTime/endTime window was requested",
+      ),
+    endTime: z
+      .string()
+      .optional()
+      .describe(
+        "Echoed back only when a startTime/endTime window was requested",
+      ),
     traffic: z.object({
       totalAircraft: z.number().nullable(),
       totalGroundVehicle: z.number().nullable(),
@@ -69,7 +81,7 @@ const operationalStatisticsResponse = z.object({
           .string()
           .optional()
           .describe(
-            "'periodStart - periodEnd', only present for weekly/monthly buckets",
+            "'periodStart - periodEnd', present for every bucket granularity except daily",
           ),
         aircraft: z.number().nullable(),
         groundVehicle: z.number().nullable(),
@@ -77,6 +89,40 @@ const operationalStatisticsResponse = z.object({
         landing: z.number().nullable(),
         totalMovement: z.number().nullable(),
         alerts: z.number(),
+        takeoffAircraftCount: z
+          .number()
+          .describe("Number of distinct aircraft identifiers that took off"),
+        landingAircraftCount: z
+          .number()
+          .describe("Number of distinct aircraft identifiers that landed"),
+        takeoffAircraft: z.array(
+          z.object({
+            aircraft: z.string(),
+            count: z
+              .number()
+              .describe("Takeoff events by this aircraft in the bucket"),
+            at: z
+              .string()
+              .nullable()
+              .describe(
+                "Timestamp (Asia/Jakarta, YYYY-MM-DDTHH:mm:ss) of this aircraft's most recent takeoff in the bucket",
+              ),
+          }),
+        ),
+        landingAircraft: z.array(
+          z.object({
+            aircraft: z.string(),
+            count: z
+              .number()
+              .describe("Landing events by this aircraft in the bucket"),
+            at: z
+              .string()
+              .nullable()
+              .describe(
+                "Timestamp (Asia/Jakarta, YYYY-MM-DDTHH:mm:ss) of this aircraft's most recent landing in the bucket",
+              ),
+          }),
+        ),
       }),
     ),
     warnings: z.array(z.string()),
@@ -95,7 +141,7 @@ registry.registerPath({
   tags: ["Statistics"],
   summary: "Get operational statistics",
   description:
-    "Mengambil statistik operasional traffic, movement, alert, dan trend berdasarkan periode dan rentang tanggal.",
+    "Mengambil statistik operasional traffic, movement, alert, dan trend berdasarkan periode dan rentang tanggal. startTime/endTime opsional untuk membatasi ke jendela jam tertentu (HH:mm, exclusive-end) di setiap hari pada rentang tersebut.",
   security: [{ [bearerAuth.name]: [] }],
   request: {
     query: getOperationalStatisticsSchema,

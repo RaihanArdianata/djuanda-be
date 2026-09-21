@@ -21,6 +21,7 @@ export const getOperationalStatisticsSchema = z
     startDate: dateOnlySchema,
     endDate: dateOnlySchema,
     airportId: z.string().min(1).optional(),
+    severity: z.string().trim().min(1).optional(),
     startTime: timeOnlySchema.optional(),
     endTime: timeOnlySchema.optional(),
   })

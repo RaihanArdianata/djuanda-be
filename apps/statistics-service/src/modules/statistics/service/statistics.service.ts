@@ -2,6 +2,13 @@ import { aeroswarmMovements, alerts, db } from "@repo/database";
 import { and, eq, gte, lt, type SQL, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
+  type AlertDetail,
+  type AlertDetailRow,
+  type AlertDetailsByCategory,
+  groupAlertDetails,
+  KNOWN_ALERT_TYPES,
+} from "../lib/alert-detail";
+import {
   computePeriodBuckets,
   exclusiveEndBoundaryJakarta,
   startOfDayJakarta,
@@ -13,10 +20,16 @@ export interface AircraftMovementBreakdown {
   at: string | null;
 }
 
+export interface AircraftListItem {
+  aircraft: string;
+  count: number;
+}
+
 export interface OperationalTrendPoint {
   period: string;
   periodRange?: string;
   aircraft: number;
+  aircraftList: AircraftListItem[];
   groundVehicle: number;
   takeoff: number;
   landing: number;
@@ -49,7 +62,7 @@ export interface OperationalStatisticsResult {
     peakHourMovement: number;
     peakHour: string | null;
   };
-  alerts: AlertTotals;
+  alerts: AlertSummary;
   trend: OperationalTrendPoint[];
 }
 
@@ -78,6 +91,7 @@ interface MovementTotals {
 
 interface HourMovementEntry {
   trackIds: Set<string>;
+  trackLabels: Map<string, string>;
   takeoff: number;
   landing: number;
 }
@@ -118,10 +132,16 @@ function applyHourTrackRow(
 
   let entry = hourMovementMap.get(row.hour_bucket);
   if (!entry) {
-    entry = { trackIds: new Set<string>(), takeoff: 0, landing: 0 };
+    entry = {
+      trackIds: new Set<string>(),
+      trackLabels: new Map<string, string>(),
+      takeoff: 0,
+      landing: 0,
+    };
     hourMovementMap.set(row.hour_bucket, entry);
   }
   entry.trackIds.add(row.track_id);
+  entry.trackLabels.set(row.track_id, row.aircraft_label ?? row.track_id);
   entry.takeoff += row.takeoff;
   entry.landing += row.landing;
 }
@@ -242,6 +262,39 @@ export interface AlertTotals {
   total: number;
 }
 
+export interface AlertCategorySummary {
+  count: number;
+  details: AlertDetail[];
+}
+
+export interface AlertSummary {
+  stca: AlertCategorySummary;
+  apa: AlertCategorySummary;
+  da: AlertCategorySummary;
+  ria: AlertCategorySummary;
+  taia: AlertCategorySummary;
+  total: number;
+}
+
+export function buildAlertSummary(
+  totals: AlertTotals,
+  details: AlertDetailsByCategory,
+): AlertSummary {
+  return {
+    stca: { count: totals.stca, details: details.stca },
+    apa: { count: totals.apa, details: details.apa },
+    da: { count: totals.da, details: details.da },
+    ria: { count: totals.ria, details: details.ria },
+    taia: { count: totals.taia, details: details.taia },
+    total: totals.total,
+  };
+}
+
+export function severityWhere(severity: string | undefined): SQL | undefined {
+  if (!severity) return undefined;
+  return sql`upper(${alerts.severity}) = ${severity.trim().toUpperCase()}`;
+}
+
 export function sumAlertTotals(alertTrendRows: AlertTrendRow[]): AlertTotals {
   return alertTrendRows.reduce<AlertTotals>(
     (acc, row) => ({
@@ -323,6 +376,27 @@ function toAircraftBreakdown(
   });
 }
 
+/** Kelompokkan track per label pesawat; `count` = jumlah track unik (jumlah semua count = `aircraft`). */
+function toAircraftList(trackLabels: Map<string, string>): AircraftListItem[] {
+  const counts = new Map<string, number>();
+  for (const label of trackLabels.values()) {
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts, ([aircraft, count]) => ({ aircraft, count })).sort(
+    (a, b) => a.aircraft.localeCompare(b.aircraft),
+  );
+}
+
+/** Gabungkan label per track; label yang lebih dulu tercatat dipertahankan. */
+function mergeTrackLabels(
+  target: Map<string, string>,
+  source: Map<string, string>,
+): void {
+  for (const [trackId, label] of source) {
+    if (!target.has(trackId)) target.set(trackId, label);
+  }
+}
+
 export function buildTrend(
   params: GetOperationalStatisticsParams,
   hourMovementMap: Map<string, HourMovementEntry>,
@@ -339,6 +413,7 @@ export function buildTrend(
 
   return buckets.map(({ period, periodStart, periodEnd, hourKeys }) => {
     const trackIds = new Set<string>();
+    const trackLabels = new Map<string, string>();
     const takeoffAircraftCounts = new Map<string, AircraftStat>();
     const landingAircraftCounts = new Map<string, AircraftStat>();
     let takeoff = 0;
@@ -349,6 +424,7 @@ export function buildTrend(
       const movement = hourMovementMap.get(hourKey);
       if (movement) {
         for (const trackId of movement.trackIds) trackIds.add(trackId);
+        mergeTrackLabels(trackLabels, movement.trackLabels);
         takeoff += movement.takeoff;
         landing += movement.landing;
       }
@@ -365,6 +441,7 @@ export function buildTrend(
     const point: OperationalTrendPoint = {
       period,
       aircraft: trackIds.size,
+      aircraftList: toAircraftList(trackLabels),
       groundVehicle: 0,
       takeoff,
       landing,
@@ -388,13 +465,16 @@ export async function getOperationalStatistics(
   const rangeStart = startOfDayJakarta(params.startDate);
   const rangeEndExclusive = exclusiveEndBoundaryJakarta(params.endDate);
 
-  const alertWhereClause = timeRangeWhere(
-    alerts.triggeredAt,
-    alerts.airportId,
-    rangeStart,
-    rangeEndExclusive,
-    params.airportId,
-    timeOfDayWhere(alerts.triggeredAt, params.startTime, params.endTime),
+  const alertWhereClause = and(
+    timeRangeWhere(
+      alerts.triggeredAt,
+      alerts.airportId,
+      rangeStart,
+      rangeEndExclusive,
+      params.airportId,
+      timeOfDayWhere(alerts.triggeredAt, params.startTime, params.endTime),
+    ),
+    severityWhere(params.severity),
   );
 
   const movementWhereClause = timeRangeWhere(
@@ -409,8 +489,8 @@ export async function getOperationalStatistics(
   const typeFilter = (alertType: string): SQL<number> =>
     sql<number>`count(*) filter (where upper(${alerts.type}) = ${alertType})::int`;
 
-  const [alertTrendRows, movementAggResult] = await db.transaction(
-    async (tx) => {
+  const [alertTrendRows, alertDetailResult, movementAggResult] =
+    await db.transaction(async (tx) => {
       await tx.execute(sql`SET LOCAL work_mem = '128MB'`);
       await tx.execute(sql`SET LOCAL max_parallel_workers_per_gather = 4`);
 
@@ -428,6 +508,45 @@ export async function getOperationalStatistics(
           .from(alerts)
           .where(alertWhereClause)
           .groupBy(sql`1`),
+        tx.execute<AlertDetailRow>(sql`
+          SELECT
+            ${alerts.airportId} AS airport_id,
+            ${alerts.type} AS type,
+            ${alerts.severity} AS severity,
+            ${alerts.relatedTrackId} AS related_track_id,
+            to_char(${alerts.triggeredAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS time,
+            jsonb_build_object(
+              'callsign', ${alerts.data} -> 'callsign',
+              'areaName', ${alerts.data} -> 'areaName',
+              'areaType', ${alerts.data} -> 'areaType',
+              'areaStatus', ${alerts.data} -> 'areaStatus',
+              'surfaceName', ${alerts.data} -> 'surfaceName',
+              'surfaceType', ${alerts.data} -> 'surfaceType',
+              'surfaceId', ${alerts.data} -> 'surfaceId',
+              'track', jsonb_build_object(
+                'callsign', ${alerts.data} #> '{track,callsign}'
+              ),
+              'area', jsonb_build_object(
+                'id', ${alerts.data} #> '{area,id}',
+                'name', ${alerts.data} #> '{area,name}',
+                'type', ${alerts.data} #> '{area,type}',
+                'status', ${alerts.data} #> '{area,status}'
+              ),
+              'surface', jsonb_build_object(
+                'id', ${alerts.data} #> '{surface,id}',
+                'name', ${alerts.data} #> '{surface,name}',
+                'type', ${alerts.data} #> '{surface,type}',
+                'status', ${alerts.data} #> '{surface,status}'
+              )
+            ) AS detail_data
+          FROM ${alerts}
+          WHERE ${alertWhereClause}
+            AND upper(${alerts.type}) IN (${sql.join(
+              KNOWN_ALERT_TYPES.map((type) => sql`${type}`),
+              sql`, `,
+            )})
+          ORDER BY ${alerts.triggeredAt} DESC, ${alerts.id} DESC
+        `),
         tx.execute<MovementAggQueryRow>(sql`
         WITH movement_base AS MATERIALIZED (
           SELECT
@@ -448,7 +567,8 @@ export async function getOperationalStatistics(
             track_id,
             hour_raw,
             count(*) FILTER (WHERE type = 'takeoff')::int AS takeoff,
-            count(*) FILTER (WHERE type = 'landing')::int AS landing
+            count(*) FILTER (WHERE type = 'landing')::int AS landing,
+            max(aircraft_label) AS aircraft_label
           FROM movement_base
           GROUP BY track_id, hour_raw
         ),
@@ -477,7 +597,7 @@ export async function getOperationalStatistics(
           takeoff,
           landing,
           NULL::text AS movement_type,
-          NULL::text AS aircraft_label,
+          aircraft_label,
           NULL::int AS event_count,
           NULL::text AS aircraft_last_at
         FROM track_hour_agg
@@ -513,8 +633,7 @@ export async function getOperationalStatistics(
         FROM hour_type_aircraft
       `),
       ]);
-    },
-  );
+    });
   const movementAggRows = (movementAggResult as { rows: MovementAggQueryRow[] })
     .rows;
   const {
@@ -526,7 +645,10 @@ export async function getOperationalStatistics(
   const hourAlertMap = new Map(
     alertTrendRows.map((row) => [row.bucket, row.total]),
   );
-  const alertTotals = sumAlertTotals(alertTrendRows);
+  const alertTotals = buildAlertSummary(
+    sumAlertTotals(alertTrendRows),
+    groupAlertDetails((alertDetailResult as { rows: AlertDetailRow[] }).rows),
+  );
   const totalAircraft = movementTotals.aircraft;
   const totalTakeoff = movementTotals.takeoff;
   const totalLanding = movementTotals.landing;

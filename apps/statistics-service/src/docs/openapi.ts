@@ -37,6 +37,37 @@ const errorResponse = (
   },
 });
 
+const alertDetail = z.object({
+  alertId: z.string(),
+  type: z.string(),
+  callsign: z.string().nullable(),
+  airportId: z.string(),
+  time: z
+    .string()
+    .describe("Waktu alert dipicu (Asia/Jakarta, YYYY-MM-DDTHH:mm:ss+07:00)"),
+  severity: z.string(),
+  status: z.string(),
+  trackId: z.string().nullable(),
+  relatedTrackId: z.string().nullable(),
+  description: z.string().describe("Narasi siap tampil untuk FE"),
+  areaName: z.string().nullable(),
+  areaType: z.string().nullable(),
+  areaStatus: z.string().nullable(),
+  surfaceName: z.string().nullable(),
+  surfaceType: z.string().nullable(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  groundSpeed: z.number().nullable(),
+  heading: z.number().nullable(),
+});
+
+const alertCategorySummary = z.object({
+  count: z.number(),
+  details: z
+    .array(alertDetail)
+    .describe("Alert terbaru pada kategori ini (maks. 50), terbaru lebih dulu"),
+});
+
 const operationalStatisticsResponse = z.object({
   data: z.object({
     period: z.enum(["hourly", "daily", "weekly", "monthly"]),
@@ -67,11 +98,11 @@ const operationalStatisticsResponse = z.object({
       peakHour: z.string().nullable(),
     }),
     alerts: z.object({
-      stca: z.number(),
-      apa: z.number(),
-      da: z.number(),
-      ria: z.number(),
-      taia: z.number(),
+      stca: alertCategorySummary,
+      apa: alertCategorySummary,
+      da: alertCategorySummary,
+      ria: alertCategorySummary,
+      taia: alertCategorySummary,
       total: z.number(),
     }),
     trend: z.array(

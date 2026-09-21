@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
-import { subscribeToTopic } from "./service";
+import { subscribeToAll, subscribeToTopic } from "./service";
 
 const HEARTBEAT_INTERVAL_MS = 15_000;
 
@@ -14,15 +14,31 @@ export const sseHandler = (c: Context): Response => {
     let eventId = 0;
     let closed = false;
 
-    const unsubscribe = subscribeToTopic(topic, async (message) => {
-      if (closed) return;
-      eventId += 1;
-      await stream.writeSSE({
-        id: String(eventId),
-        event: "message",
-        data: message,
+    const isAll = topic === "all";
+    let unsubscribe: (() => Promise<void>) | undefined;
+
+    if (isAll) {
+      unsubscribe = subscribeToAll(async (message, eventTopic) => {
+        if (closed) return;
+        eventId += 1;
+        await stream.writeSSE({
+          id: String(eventId),
+          event: eventTopic,
+          data: message,
+        });
       });
-    });
+    } else {
+      const u = subscribeToTopic(topic, async (message) => {
+        if (closed) return;
+        eventId += 1;
+        await stream.writeSSE({
+          id: String(eventId),
+          event: "message",
+          data: message,
+        });
+      });
+      unsubscribe = u;
+    }
 
     const heartbeat = setInterval(() => {
       if (closed) return;
@@ -33,7 +49,7 @@ export const sseHandler = (c: Context): Response => {
       stream.onAbort(async () => {
         closed = true;
         clearInterval(heartbeat);
-        await unsubscribe();
+        if (unsubscribe) await unsubscribe();
         resolve();
       });
     });

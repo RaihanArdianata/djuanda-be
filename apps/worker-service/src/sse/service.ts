@@ -49,3 +49,43 @@ export function subscribeToTopic(
     }
   };
 }
+
+export function subscribeToAll(
+  onMessage: (message: string, topic: string) => void | Promise<void>,
+): () => Promise<void> {
+  const sub = createSubscriber();
+  const pattern = "events:*";
+  let closed = false;
+
+  sub.on("error", (err) => {
+    logger.error({ err }, `[SSE Redis] all-subscriber error on ${pattern}`);
+  });
+
+  sub.psubscribe(pattern, (err) => {
+    if (err) {
+      logger.error({ err }, `[SSE Redis] failed to psubscribe to ${pattern}`);
+    }
+  });
+
+  sub.on("pmessage", (_pattern, channel, message) => {
+    if (closed) return;
+    const topic = channel.replace(/^events:/, "");
+    void onMessage(message, topic);
+  });
+
+  return async function unsubscribe(): Promise<void> {
+    if (closed) return;
+    closed = true;
+    sub.removeAllListeners("pmessage");
+    try {
+      await sub.punsubscribe(pattern);
+    } catch {
+      // already unsubscribed/disconnected — fine
+    }
+    try {
+      await sub.quit();
+    } catch {
+      // already closed — fine
+    }
+  };
+}

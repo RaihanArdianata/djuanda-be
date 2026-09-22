@@ -9,6 +9,9 @@ import {
   generateExcelExport,
 } from "./alert-export.service";
 
+// Store original fetch
+const originalFetch = global.fetch;
+
 const mockAlert = (overrides: Partial<Alert> = {}): Alert =>
   ({
     id: "uuid-1",
@@ -137,13 +140,70 @@ describe("Alert Export Service", () => {
   });
 
   describe("generateExcelExport", () => {
-    it("should create an Excel workbook with Alerts and Summary sheets", async () => {
+    it("should create an Excel workbook with 6 sheets matching the template", async () => {
+      // Mock the fetch function to return sample statistics data
+      global.fetch = (() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              data: {
+                period: "monthly",
+                startDate: "2026-08-01",
+                endDate: "2026-09-30",
+                traffic: {
+                  totalAircraft: 500,
+                  totalGroundVehicle: 0,
+                  totalTraffic: 500,
+                },
+                movement: {
+                  totalTakeoff: 300,
+                  totalLanding: 200,
+                  averageMovementPerHour: 15.5,
+                  peakHourMovement: 25,
+                  peakHour: "2026-08-15T09:00",
+                },
+                alerts: {
+                  stca: 1,
+                  apa: 0,
+                  da: 0,
+                  ria: 0,
+                  taia: 0,
+                  total: 1,
+                },
+                trend: [
+                  {
+                    period: "2026-08-01",
+                    aircraft: 250,
+                    groundVehicle: 0,
+                    takeoff: 150,
+                    landing: 100,
+                    totalMovement: 250,
+                    alerts: 1,
+                  },
+                  {
+                    period: "2026-09-01",
+                    aircraft: 250,
+                    groundVehicle: 0,
+                    takeoff: 150,
+                    landing: 100,
+                    totalMovement: 250,
+                    alerts: 0,
+                  },
+                ],
+              },
+            }),
+        }) as unknown as Response) as unknown as typeof fetch;
+
       const alerts: Alert[] = [
         mockAlert({
           alertId: "alert_001",
           type: "RUNWAY_INCURSION",
           trackId: "track_001",
-          data: { callsign: "BTK6526", icao24: "8a0515" },
+          severity: "HIGH",
+          status: "ACTIVE",
+          triggeredAt: new Date("2026-08-31T23:53:40.000Z"),
+          data: { callsign: "MAS872", icao24: "8a0515" },
         }),
       ];
       const summary: AlertExportSummary = {
@@ -155,7 +215,11 @@ describe("Alert Export Service", () => {
         taxiwayAlert: 0,
       };
 
-      const buffer = await generateExcelExport(alerts, summary);
+      const buffer = await generateExcelExport(alerts, summary, {
+        startDateTime: new Date("2026-08-01T00:00:00.000Z"),
+        endDateTime: new Date("2026-08-31T23:59:59.000Z"),
+        airportId: "WARR",
+      });
       expect(buffer).toBeInstanceOf(Buffer);
       expect(buffer.length).toBeGreaterThan(0);
 
@@ -163,13 +227,65 @@ describe("Alert Export Service", () => {
       const workbook = new ExcelJs.Workbook();
       await workbook.xlsx.load(buffer as unknown as ExcelJs.Buffer);
 
-      const alertsSheet = workbook.getWorksheet("Alerts");
-      expect(alertsSheet).toBeDefined();
-      expect(alertsSheet?.rowCount).toBe(2); // 1 header + 1 data row
+      const expectedSheets = [
+        "Executive Summary",
+        "Monthly Trend",
+        "Ground Traffic",
+        "Alert Summary",
+        "Detail Log",
+        "Legend & Notes",
+      ];
 
-      const summarySheet = workbook.getWorksheet("Summary");
-      expect(summarySheet).toBeDefined();
-      expect(summarySheet?.rowCount).toBe(7); // 1 header + 6 summary rows
+      expect(workbook.worksheets.map((ws) => ws.name)).toEqual(expectedSheets);
+
+      // Check Executive Summary
+      const execSheet = workbook.getWorksheet("Executive Summary");
+      expect(execSheet).toBeDefined();
+      expect(execSheet?.getCell("B2").value).toBe(
+        "LAPORAN STATISTIK AKTIVITAS BANDARA",
+      );
+      expect(
+        (execSheet?.getCell("B8").value as { formula?: string })?.formula,
+      ).toContain("Monthly Trend");
+
+      // Check Monthly Trend
+      const trendSheet = workbook.getWorksheet("Monthly Trend");
+      expect(trendSheet).toBeDefined();
+      expect(trendSheet?.getCell("B18").value).toBe("TOTAL");
+
+      // Check Ground Traffic
+      const groundSheet = workbook.getWorksheet("Ground Traffic");
+      expect(groundSheet).toBeDefined();
+      expect(groundSheet?.getCell("B5").value).toBe("Metrik");
+
+      // Check Alert Summary
+      const alertSummarySheet = workbook.getWorksheet("Alert Summary");
+      expect(alertSummarySheet).toBeDefined();
+      expect(alertSummarySheet?.getCell("B5").value).toBe("Kategori");
+      expect(alertSummarySheet?.getCell("B6").value).toBe("Runway Incursion");
+      expect(alertSummarySheet?.getCell("C6").value).toBe(1);
+      expect(alertSummarySheet?.getCell("B11").value).toBe("TOTAL");
+      expect(
+        (alertSummarySheet?.getCell("C11").value as { formula?: string })
+          ?.formula,
+      ).toBe("SUM(C6:C10)");
+
+      // Check Detail Log
+      const detailSheet = workbook.getWorksheet("Detail Log");
+      expect(detailSheet).toBeDefined();
+      expect(detailSheet?.getCell("B5").value).toBe("Tanggal");
+      expect(detailSheet?.getCell("D6").value).toBe("MAS872");
+      expect(detailSheet?.getCell("E6").value).toBe("RUNWAY_INCURSION");
+
+      // Check Legend & Notes
+      const legendSheet = workbook.getWorksheet("Legend & Notes");
+      expect(legendSheet).toBeDefined();
+      expect(legendSheet?.getCell("B2").value).toBe(
+        "LEGENDA & CATATAN PENGGUNAAN",
+      );
+
+      // Restore original fetch
+      global.fetch = originalFetch;
     });
   });
 });

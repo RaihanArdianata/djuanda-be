@@ -80,7 +80,10 @@ export async function clearAlertService(
 
 export * from "./alert-export.service";
 
-export async function exportAlertsService(params: ExportAlertInput): Promise<{
+export async function exportAlertsService(
+  params: ExportAlertInput,
+  authToken?: string,
+): Promise<{
   filename: string;
   data: string | Buffer;
   contentType: string;
@@ -112,7 +115,16 @@ export async function exportAlertsService(params: ExportAlertInput): Promise<{
   }
 
   const summary = calculateAlertSummary(alertsList);
-  const excelBuffer = await generateExcelExport(alertsList, summary);
+  const excelBuffer = await generateExcelExport(
+    alertsList,
+    summary,
+    {
+      startDateTime: params.startDateTime,
+      endDateTime: params.endDateTime,
+      airportId: params.airportId,
+    },
+    authToken,
+  );
   return {
     filename,
     data: excelBuffer,

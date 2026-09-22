@@ -165,7 +165,14 @@ export const exportAlertsController = catchAsync(async (c) => {
     endDateTime,
   });
 
-  const { filename, data, contentType } = await exportAlertsService(parsed);
+  // Extract auth token from request
+  const authHeader = c.req.header("Authorization");
+  const authToken = authHeader?.replace("Bearer ", "");
+
+  const { filename, data, contentType } = await exportAlertsService(
+    parsed,
+    authToken,
+  );
   const body = typeof data === "string" ? data : new Uint8Array(data);
 
   return new Response(body, {

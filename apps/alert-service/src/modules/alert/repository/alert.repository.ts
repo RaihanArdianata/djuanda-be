@@ -90,6 +90,43 @@ export const listAlerts = async (
   return { items, total: totalRow[0]?.count ?? 0 };
 };
 
+export interface ExportAlertFilterParams {
+  airportId?: string;
+  type?: string;
+  alertType?: string;
+  severity?: string;
+  status?: string;
+  trackId?: string;
+  startDateTime: Date;
+  endDateTime: Date;
+}
+
+export const getAlertsForExport = async (
+  params: ExportAlertFilterParams,
+): Promise<Alert[]> => {
+  const typeFilter = params.alertType ?? params.type;
+  const filters: (SQL | undefined)[] = [
+    params.airportId ? eq(alerts.airportId, params.airportId) : undefined,
+    typeFilter ? eq(alerts.type, typeFilter) : undefined,
+    params.severity ? eq(alerts.severity, params.severity) : undefined,
+    params.status ? eq(alerts.status, params.status) : undefined,
+    params.trackId ? eq(alerts.trackId, params.trackId) : undefined,
+    gte(alerts.triggeredAt, params.startDateTime),
+    lte(alerts.triggeredAt, params.endDateTime),
+  ];
+
+  const active = filters.filter(
+    (filter): filter is SQL => filter !== undefined,
+  );
+  const where = active.length === 1 ? active[0] : and(...active);
+
+  return db
+    .select()
+    .from(alerts)
+    .where(where)
+    .orderBy(desc(alerts.triggeredAt));
+};
+
 export const findAlertById = async (id: string): Promise<Alert | undefined> =>
   await db.query.alerts.findFirst({ where: eq(alerts.id, id) });
 

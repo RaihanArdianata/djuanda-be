@@ -311,6 +311,7 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       ALERT_KAFKA_BROKERS: redpanda:9092
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
+      STATISTICS_SERVICE_URL: http://gateway:8080
     depends_on:
       pgbouncer:
         condition: service_started
@@ -519,7 +520,7 @@ services:
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
-      STATISTICS_SERVICE_URL: http://statistics-service:${STATISTICS_SERVICE_PORT:-3010}
+      STATISTICS_SERVICE_URL: http://gateway:8080
       PLAYBACK_SERVICE_URL: http://playback-service:${PLAYBACK_SERVICE_PORT:-3011}
     ports:
       - "8080:8080"

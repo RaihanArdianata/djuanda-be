@@ -7,6 +7,7 @@ import {
   type AlertTrackHistoryPoint,
   findAlertByAlertId,
   findAlertById,
+  getAlertsForExport,
   getAlertTrackHistory,
   insertAlertTrackHistory,
   type ListAlertsResult,
@@ -16,8 +17,15 @@ import {
 import type {
   AcknowledgeAlertInput,
   ClearAlertInput,
+  ExportAlertInput,
   ListAlertsInput,
 } from "../validator/alert.validator";
+import {
+  calculateAlertSummary,
+  formatExportFilename,
+  generateCsvExport,
+  generateExcelExport,
+} from "./alert-export.service";
 
 export type AlertInput = Omit<Alert, "id" | "createdAt" | "updatedAt">;
 export type { AlertTrackHistoryPoint } from "../repository/alert.repository";
@@ -68,4 +76,59 @@ export async function clearAlertService(
   input: ClearAlertInput,
 ): Promise<Alert | undefined> {
   return lifecycleClearAlert(id, input.clearedBy);
+}
+
+export * from "./alert-export.service";
+
+export async function exportAlertsService(
+  params: ExportAlertInput,
+  authToken?: string,
+): Promise<{
+  filename: string;
+  data: string | Buffer;
+  contentType: string;
+}> {
+  const alertsList = await getAlertsForExport({
+    airportId: params.airportId,
+    type: params.type,
+    alertType: params.alertType,
+    severity: params.severity,
+    status: params.status,
+    trackId: params.trackId,
+    startDateTime: params.startDateTime,
+    endDateTime: params.endDateTime,
+  });
+
+  const filename = formatExportFilename(
+    params.startDateTime,
+    params.endDateTime,
+    params.format,
+  );
+
+  if (params.format === "csv") {
+    const csvContent = generateCsvExport(alertsList);
+    return {
+      filename,
+      data: csvContent,
+      contentType: "text/csv; charset=utf-8",
+    };
+  }
+
+  const summary = calculateAlertSummary(alertsList);
+  const excelBuffer = await generateExcelExport(
+    alertsList,
+    summary,
+    {
+      startDateTime: params.startDateTime,
+      endDateTime: params.endDateTime,
+      airportId: params.airportId,
+    },
+    authToken,
+  );
+  return {
+    filename,
+    data: excelBuffer,
+    contentType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
 }

@@ -9,6 +9,7 @@ interface AlertServiceEnv {
   advisoryServiceUrl: string;
   aerodromeServiceUrl: string;
   weatherServiceUrl: string;
+  statisticsServiceUrl: string;
 }
 
 export const alertServiceEnv: AlertServiceEnv = {
@@ -30,4 +31,6 @@ export const alertServiceEnv: AlertServiceEnv = {
     process.env.AERODROME_SERVICE_URL || "http://aerodrome-service:3009",
   weatherServiceUrl:
     process.env.WEATHER_SERVICE_URL || "http://weather-service:3008",
+  statisticsServiceUrl:
+    process.env.STATISTICS_SERVICE_URL || "http://gateway:8080",
 };

@@ -12,6 +12,7 @@ import {
   eq,
   gte,
   ilike,
+  inArray,
   lte,
   type SQL,
   sql,
@@ -33,7 +34,15 @@ const buildFilters = (params: ListAlertsInput): SQL | undefined => {
   const filters: (SQL | undefined)[] = [
     params.airportId ? eq(alerts.airportId, params.airportId) : undefined,
     params.type ? eq(alerts.type, params.type) : undefined,
-    params.severity ? eq(alerts.severity, params.severity) : undefined,
+    params.severity
+      ? ((): SQL | undefined => {
+          const list = params.severity
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          return list.length > 0 ? inArray(alerts.severity, list) : undefined;
+        })()
+      : undefined,
     params.status ? eq(alerts.status, params.status) : undefined,
     params.trackId ? eq(alerts.trackId, params.trackId) : undefined,
     params.relatedTrackId

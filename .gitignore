@@ -6,4 +6,7 @@ public/
 .env
 .env.development
 
+# Office application lock files
+.~lock.*
+
 # /docs/ -- dikecualikan via .git/info/exclude (lokal saja), jangan di-uncomment di sini

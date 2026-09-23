@@ -173,10 +173,24 @@ export async function getAerodromeContext(
   airportId: string,
   tracks?: MovementTrack[],
 ): Promise<AerodromeContextData | null> {
-  let data = await getAerodromeGeometry(airportId);
+  let data: AerodromeContextData | null = null;
+  try {
+    data = await getAerodromeGeometry(airportId);
+  } catch (err) {
+    logger.warn({ err, airportId }, "aerodrome geometry cache read failed");
+  }
   if (!data) {
     data = await fetchAerodromeGeometry(airportId);
-    if (data) await setAerodromeGeometry(airportId, data, 60);
+    if (data) {
+      try {
+        await setAerodromeGeometry(airportId, data, 60);
+      } catch (err) {
+        logger.warn(
+          { err, airportId },
+          "aerodrome geometry cache write failed",
+        );
+      }
+    }
   }
   if (!data || !tracks || tracks.length === 0) return data;
 

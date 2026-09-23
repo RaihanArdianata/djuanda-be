@@ -1,2 +1,2 @@
 export const REQUEST_ID_HEADER = "X-Request-Id";
-export const DEFAULT_TIMEOUT_MS = 30000;
+export const DEFAULT_TIMEOUT_MS = 60000;

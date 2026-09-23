@@ -42,6 +42,7 @@ export const alerts = pgTable(
   },
   (t) => [
     index("alerts_airport_status_idx").on(t.airportId, t.status, t.triggeredAt),
+    index("alerts_airport_triggered_idx").on(t.airportId, t.triggeredAt),
     index("alerts_type_idx").on(t.type, t.triggeredAt),
     index("alerts_track_idx").on(t.trackId, t.triggeredAt),
   ],

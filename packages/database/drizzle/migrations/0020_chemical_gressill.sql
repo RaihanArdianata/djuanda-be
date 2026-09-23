@@ -1,0 +1,1 @@
+CREATE INDEX "alerts_airport_triggered_idx" ON "alerts" USING btree ("airport_id","triggered_at");

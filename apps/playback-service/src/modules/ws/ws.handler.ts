@@ -1,8 +1,12 @@
+import { logger } from "@repo/logger";
 import { upgradeWebSocket } from "hono/bun";
 import type { WSContext } from "hono/ws";
 import { redisSub, streamChannel } from "../../redis/client";
 import type { PlaybackControlRequest } from "../schema/playback.schema";
-import { applyControl } from "../services/playback-engine.service";
+import {
+  applyControl,
+  ensureEngine,
+} from "../services/playback-engine.service";
 import { getSessionRecord } from "../services/playback-session.service";
 
 // One Redis subscription per open websocket connection, keyed by session id
@@ -39,6 +43,15 @@ export const playbackWsHandlers = upgradeWebSocket((c) => {
       redisSub.on("message", listener);
 
       ws.send(JSON.stringify({ type: "session_state", data: session }));
+
+      // Pre-warm the timeline in the background so an immediate `play`
+      // doesn't wait on a full loadTimeline scan.
+      ensureEngine(
+        sessionId,
+        session.airportId,
+        new Date(session.from),
+        new Date(session.to),
+      ).catch((err) => logger.error("playback engine prime failed", err));
     },
 
     onMessage: async (evt: MessageEvent, ws: WSContext) => {

@@ -17,14 +17,6 @@ mock.module("ioredis", () => ({
 // The engine owns the in-memory tick loop + Redis stream publishing, and the
 // session service owns Redis persistence -- mock both so these tests exercise
 // only routing/validation/controller logic, with no Redis or DB access.
-const primeEngine = mock(
-  async (
-    _sessionId: string,
-    _airportId: string,
-    _from: Date,
-    _to: Date,
-  ): Promise<number> => 0,
-);
 const applyControl = mock(
   async (
     _sessionId: string,
@@ -34,7 +26,6 @@ const applyControl = mock(
 const disposeEngine = mock((_sessionId: string): void => {});
 
 mock.module("../services/playback-engine.service", () => ({
-  primeEngine,
   applyControl,
   disposeEngine,
 }));
@@ -96,7 +87,6 @@ const postJson = (path: string, body: unknown): Promise<Response> =>
   );
 
 beforeEach(() => {
-  primeEngine.mockReset();
   applyControl.mockReset();
   disposeEngine.mockReset();
   createSessionRecord.mockReset();
@@ -104,7 +94,6 @@ beforeEach(() => {
   saveSessionRecord.mockReset();
   deleteSessionRecord.mockReset();
 
-  primeEngine.mockResolvedValue(3);
   createSessionRecord.mockResolvedValue(sampleSession);
 });
 
@@ -118,11 +107,10 @@ describe("POST /sessions", () => {
     expect(body.meta.code).toBe(201);
     expect(body.error).toBeNull();
     expect(body.data.session.id).toBe("sess-1");
-    expect(body.data.eventCount).toBe(3);
     expect(body.data.wsPath).toBe("/api/worker/ws/playback/sess-1");
   });
 
-  it("forwards the parsed body to createSessionRecord and primes the engine", async () => {
+  it("forwards the parsed body to createSessionRecord", async () => {
     await postJson("/sessions", validCreateBody);
 
     expect(createSessionRecord).toHaveBeenCalledTimes(1);
@@ -131,13 +119,6 @@ describe("POST /sessions", () => {
     expect(params.speed).toBe(2);
     expect(params.from).toEqual(new Date(validCreateBody.from));
     expect(params.to).toEqual(new Date(validCreateBody.to));
-
-    expect(primeEngine).toHaveBeenCalledWith(
-      "sess-1",
-      "WARR",
-      new Date(validCreateBody.from),
-      new Date(validCreateBody.to),
-    );
   });
 
   it("returns 400 VALIDATION_ERROR when the body fails the schema", async () => {

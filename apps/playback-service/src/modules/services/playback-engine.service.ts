@@ -25,16 +25,32 @@ interface EngineState {
 // Running multiple instances would need the tick loop pinned to one
 // instance per session (e.g. via a Redis lock) — out of scope for now.
 const engines = new Map<string, EngineState>();
+const enginePromises = new Map<string, Promise<EngineState>>();
 
-export async function primeEngine(
+export function ensureEngine(
   sessionId: string,
   airportId: string,
   from: Date,
   to: Date,
-): Promise<number> {
-  const timeline = await loadTimeline(airportId, from, to);
-  engines.set(sessionId, { timeline, cursorIndex: 0 });
-  return timeline.length;
+): Promise<EngineState> {
+  const existing = engines.get(sessionId);
+  if (existing) return Promise.resolve(existing);
+
+  let pending = enginePromises.get(sessionId);
+  if (!pending) {
+    pending = (async (): Promise<EngineState> => {
+      try {
+        const timeline = await loadTimeline(airportId, from, to);
+        const engine: EngineState = { timeline, cursorIndex: 0 };
+        engines.set(sessionId, engine);
+        return engine;
+      } finally {
+        enginePromises.delete(sessionId);
+      }
+    })();
+    enginePromises.set(sessionId, pending);
+  }
+  return pending;
 }
 
 export async function applyControl(
@@ -48,17 +64,12 @@ export async function applyControl(
       statusCode: 200,
     });
 
-  let engine = engines.get(sessionId);
-  if (!engine) {
-    // Engine state was lost (e.g. process restart) — rebuild it from the range in Redis.
-    const timeline = await loadTimeline(
-      session.airportId,
-      new Date(session.from),
-      new Date(session.to),
-    );
-    engine = { timeline, cursorIndex: 0 };
-    engines.set(sessionId, engine);
-  }
+  const engine = await ensureEngine(
+    sessionId,
+    session.airportId,
+    new Date(session.from),
+    new Date(session.to),
+  );
 
   switch (control.action) {
     case "play": {
@@ -133,6 +144,7 @@ async function tick(sessionId: string): Promise<void> {
   const session = await getSessionRecord(sessionId);
   if (!engine || !session || session.status !== "playing") {
     stopTicking(sessionId);
+    if (!session) engines.delete(sessionId);
     return;
   }
 
@@ -154,6 +166,11 @@ async function tick(sessionId: string): Promise<void> {
 
   session.cursor = nextCursor;
   await saveSessionRecord(session);
+
+  await redis.publish(
+    streamChannel(sessionId),
+    JSON.stringify({ type: "session_state", data: session }),
+  );
 
   if (nextCursor >= toMs) {
     session.status = "finished";

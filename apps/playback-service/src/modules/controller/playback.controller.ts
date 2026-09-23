@@ -8,7 +8,6 @@ import type {
 import {
   applyControl,
   disposeEngine,
-  primeEngine,
 } from "../services/playback-engine.service";
 import {
   createSessionRecord,
@@ -31,11 +30,14 @@ export const createPlaybackSession = catchAsync(async (c) => {
     to,
     speed: body.speed,
   });
-  const eventCount = await primeEngine(session.id, session.airportId, from, to);
+  // The timeline is loaded lazily by ensureEngine() when the websocket
+  // connects/plays — priming here would block the create response on a
+  // full loadTimeline scan and the in-memory engine wouldn't even live in
+  // the same process that serves the websocket.
 
   return success(
     c,
-    { session, eventCount, wsPath: `/api/worker/ws/playback/${session.id}` },
+    { session, wsPath: `/api/worker/ws/playback/${session.id}` },
     {
       message: "Playback session created successfully",
       code: 201,

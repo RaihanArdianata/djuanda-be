@@ -6,9 +6,9 @@ import health from "./health";
 
 const app = new Hono()
   .route("/", docs)
+  .route("/health", health)
   .use("/*", authentication)
   .use("/*", rbacMiddleware)
-  .route("/health", health)
   .route("/playback", playbackRoute);
 
 export default app;

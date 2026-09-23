@@ -5,7 +5,11 @@ import {
 } from "../../context/advisory.context";
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getWeatherContext } from "../../context/weather.context";
-import type { AlertContext, MovementTrack } from "./types";
+import type {
+  AerodromeContextData,
+  AlertContext,
+  MovementTrack,
+} from "./types";
 
 export interface BuildDetectionContextInput {
   airportId: string;
@@ -32,10 +36,11 @@ function pick<T>(
  *  advisory-service down) tidak boleh mematikan seluruh evaluasi. */
 export async function buildAlertContext(
   input: BuildDetectionContextInput,
+  aerodromePromise?: Promise<AerodromeContextData | null>,
 ): Promise<AlertContext> {
   const [weather, aerodrome, aftn, notam] = await Promise.allSettled([
     getWeatherContext(input.airportId),
-    getAerodromeContext(input.airportId, input.tracks),
+    aerodromePromise ?? getAerodromeContext(input.airportId, input.tracks),
     getAftnContext(input.airportId),
     getNotamContext(input.airportId),
   ]);

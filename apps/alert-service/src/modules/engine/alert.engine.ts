@@ -13,6 +13,7 @@ import {
   getActiveAlertRefs,
   setActiveAlert,
 } from "../../cache/alert-state.cache";
+import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getAirportTracks } from "../../context/surveillance.context";
 import {
   type AlertTrackHistoryPoint,
@@ -326,6 +327,24 @@ export async function sweepExpiredAlerts(): Promise<void> {
 export const evaluateMovement = async (
   input: DetectionInput,
 ): Promise<DetectionResult> => {
+  // Occupancy dibroadcast secepat mungkin — terpisah dari query rules dan
+  // context HTTP lain (weather/advisory bisa timeout detik-an dan menahan
+  // broadcast kalau ditunggu). Promise yang sama dipakai ulang oleh
+  // buildAlertContext supaya geometry tidak di-fetch dua kali.
+  const aerodromePromise = getAerodromeContext(
+    input.airportId,
+    input.tracks,
+  ).catch((err) => {
+    logger.warn(
+      { err, airportId: input.airportId, source: "aerodrome" },
+      "alert context source failed — rules needing it are skipped",
+    );
+    return null;
+  });
+  void aerodromePromise.then((aerodrome) =>
+    broadcastAerodromeStatus(input.airportId, aerodrome),
+  );
+
   const rules = await db
     .select()
     .from(alertRules)
@@ -344,8 +363,7 @@ export const evaluateMovement = async (
     return { created: [], updated: [], cleared: [] };
   }
 
-  const ctx = await buildAlertContext(input);
-  void broadcastAerodromeStatus(input.airportId, ctx.aerodrome ?? null);
+  const ctx = await buildAlertContext(input, aerodromePromise);
   const candidates = collectCandidates(rules, ctx);
 
   if (candidates.length === 0) {

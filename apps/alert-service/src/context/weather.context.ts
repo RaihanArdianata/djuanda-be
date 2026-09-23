@@ -32,12 +32,14 @@ export async function getWeatherContext(
 ): Promise<WeatherContextData | null> {
   let data = await getWeather(airportId);
   if (!data) {
-    const currentRes = await fetchJson<WeatherContextData["current"]>(
-      weatherApiUrl("/weather/current", { station }),
-    );
-    const forecastRes = await fetchJson<WeatherContextData["forecast"]>(
-      weatherApiUrl("/weather/forecast", { station }),
-    );
+    const [currentRes, forecastRes] = await Promise.all([
+      fetchJson<WeatherContextData["current"]>(
+        weatherApiUrl("/weather/current", { station }),
+      ),
+      fetchJson<WeatherContextData["forecast"]>(
+        weatherApiUrl("/weather/forecast", { station }),
+      ),
+    ]);
     const current = currentRes?.data ?? null;
     const forecast = forecastRes?.data ?? null;
     if (!current && !forecast) return null;

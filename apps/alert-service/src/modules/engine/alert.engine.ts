@@ -67,6 +67,27 @@ export interface DetectionResult {
   cleared: Alert[];
 }
 
+const RULES_CACHE_TTL_MS = 30_000;
+const rulesCache = new Map<string, { rules: AlertRule[]; expiresAt: number }>();
+
+/** Rules jarang berubah — query DB tiap track message cuma menambah latency
+ *  per pesan dan memperparah consumer lag. Cache pendek per airport. */
+async function getEnabledRules(airportId: string): Promise<AlertRule[]> {
+  const cached = rulesCache.get(airportId);
+  if (cached && cached.expiresAt > Date.now()) return cached.rules;
+  const rules = await db
+    .select()
+    .from(alertRules)
+    .where(
+      and(eq(alertRules.airportId, airportId), eq(alertRules.enabled, true)),
+    );
+  rulesCache.set(airportId, {
+    rules,
+    expiresAt: Date.now() + RULES_CACHE_TTL_MS,
+  });
+  return rules;
+}
+
 export async function processTrackUpdate(track: MovementTrack): Promise<void> {
   const input: DetectionInput = {
     airportId: track.airportId,
@@ -345,15 +366,7 @@ export const evaluateMovement = async (
     broadcastAerodromeStatus(input.airportId, aerodrome),
   );
 
-  const rules = await db
-    .select()
-    .from(alertRules)
-    .where(
-      and(
-        eq(alertRules.airportId, input.airportId),
-        eq(alertRules.enabled, true),
-      ),
-    );
+  const rules = await getEnabledRules(input.airportId);
 
   if (rules.length === 0) {
     logger.warn(

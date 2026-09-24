@@ -148,6 +148,9 @@ export async function startTrackConsumer(): Promise<void> {
   });
 
   await consumer.run({
+    // Default 1 = satu partisi diproses per waktu secara bergiliran — track
+    // update rate tinggi bikin queue numpuk dan occupancy/SSE telat.
+    partitionsConsumedConcurrently: 3,
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
       try {
         await handleTrackMessage(message);

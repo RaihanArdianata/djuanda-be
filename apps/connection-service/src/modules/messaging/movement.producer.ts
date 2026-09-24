@@ -1,5 +1,6 @@
 import type { AeroswarmMovement } from "@repo/database";
 import { logger } from "@repo/logger";
+import { publishToTopic } from "@repo/shared/sse/publisher";
 import { Kafka, type Producer } from "kafkajs";
 import { buildMovementId } from "../ingest/lib/movement-id";
 
@@ -122,6 +123,23 @@ export async function publishMovementRecorded(
     );
     return;
   }
+  // SSE broadcast (events:movement.takeoff / events:movement.landing) so the
+  // frontend movement history updates live — independent of the Kafka topic.
+  const sseTopic = `movement.${row.type}`;
+  try {
+    await publishToTopic(sseTopic, {
+      id: event.data.id,
+      type: sseTopic,
+      timestamp: event.timestamp,
+      data: event.data,
+    });
+  } catch (err) {
+    logger.warn(
+      { err, trackId: row.trackId, type: row.type },
+      "movement SSE publish failed",
+    );
+  }
+
   if (!producer) {
     logger.info(
       { trackId: row.trackId },

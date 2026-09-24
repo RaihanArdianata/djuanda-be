@@ -72,10 +72,13 @@ async function parseMessageValue(raw: Buffer | null): Promise<void> {
     throw err;
   }
 
-  // Await the enqueue/flush so KafkaJS does not commit the offset for an event
-  // that has not been durably persisted, and errors are not silently lost.
+  // Buffer-only enqueue (awaitFlush: false) — awaiting the timed flush per
+  // message throttles the consumer to ~1 batch per 500ms, which cannot keep
+  // up with the simulator feed rate. applyBackpressure still pauses the
+  // consumer when the buffer is full, and the offset is only committed for
+  // events at most MAX_BUFFER behind the durable flush.
   try {
-    await enqueueIngestEvent(event);
+    await enqueueIngestEvent(event, { awaitFlush: false });
     recordIngestLog({
       source: "kafka",
       kind,
@@ -133,6 +136,7 @@ export async function startIngestKafkaConsumer(): Promise<void> {
   await consumer.connect();
   await consumer.subscribe({ topic, fromBeginning: false });
   await consumer.run({
+    partitionsConsumedConcurrently: 3,
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
       await parseMessageValue(message.value);
     },

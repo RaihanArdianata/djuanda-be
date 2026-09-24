@@ -174,7 +174,17 @@ export function getIngestLogKind(event: unknown): IngestLogEntry["kind"] {
   return "unknown";
 }
 
-export function enqueueTrackEvent(event: FusedTrackEventLike): Promise<void> {
+interface EnqueueOptions {
+  /** Await the flush that persists this event (HTTP callers want durable
+   *  confirmation). Kafka consumers should pass false — awaiting per-message
+   *  throttles ingest to ~1 batch per FLUSH_INTERVAL_MS. */
+  awaitFlush?: boolean;
+}
+
+export function enqueueTrackEvent(
+  event: FusedTrackEventLike,
+  opts?: EnqueueOptions,
+): Promise<void> {
   trackBuffer.push({
     fusedAt: new Date(event.fusedAt),
     trackId: event.trackId,
@@ -187,10 +197,13 @@ export function enqueueTrackEvent(event: FusedTrackEventLike): Promise<void> {
     onGround: event.position?.onGround ?? null,
     data: event,
   });
-  return scheduleFlush();
+  return opts?.awaitFlush === false ? applyBackpressure() : scheduleFlush();
 }
 
-export function enqueueAlertEvent(event: AlertEventLike): Promise<void> {
+export function enqueueAlertEvent(
+  event: AlertEventLike,
+  opts?: EnqueueOptions,
+): Promise<void> {
   alertBuffer.push({
     triggeredAt: new Date(event.triggeredAt),
     alertId: event.alertId,
@@ -200,10 +213,13 @@ export function enqueueAlertEvent(event: AlertEventLike): Promise<void> {
     trackId: event.trackId ?? null,
     data: event,
   });
-  return scheduleFlush();
+  return opts?.awaitFlush === false ? applyBackpressure() : scheduleFlush();
 }
 
-export function enqueueMovementEvent(event: MovementEventLike): Promise<void> {
+export function enqueueMovementEvent(
+  event: MovementEventLike,
+  opts?: EnqueueOptions,
+): Promise<void> {
   movementBuffer.push({
     id: (event.id as string | undefined) ?? null,
     airportId: event.airportId ?? null,
@@ -216,38 +232,58 @@ export function enqueueMovementEvent(event: MovementEventLike): Promise<void> {
     at: new Date(event.at),
     data: event,
   });
-  return scheduleFlush();
+  return opts?.awaitFlush === false ? applyBackpressure() : scheduleFlush();
 }
 
-export async function enqueueIngestEvent(event: unknown): Promise<void> {
+export async function enqueueIngestEvent(
+  event: unknown,
+  opts?: EnqueueOptions,
+): Promise<void> {
   const kind = getIngestLogKind(event);
   if (kind === "track") {
-    await enqueueTrackEvent(event as FusedTrackEventLike);
+    await enqueueTrackEvent(event as FusedTrackEventLike, opts);
     return;
   }
   if (kind === "alert") {
-    await enqueueAlertEvent(event as AlertEventLike);
+    await enqueueAlertEvent(event as AlertEventLike, opts);
     return;
   }
   if (kind === "movement") {
-    await enqueueMovementEvent(event as MovementEventLike);
+    await enqueueMovementEvent(event as MovementEventLike, opts);
     return;
   }
+}
+
+function bufferedCount(): number {
+  return trackBuffer.length + alertBuffer.length + movementBuffer.length;
+}
+
+function ensureFlushTimer(): void {
+  if (!flushTimer) {
+    flushTimer = setTimeout(() => {
+      void flush();
+    }, FLUSH_INTERVAL_MS);
+  }
+}
+
+/** Fast path for high-volume callers: events sit in the buffer until the
+ *  interval flush. Only blocks when the buffer is full (backpressure so a
+ *  slow DB cannot grow memory unbounded). */
+function applyBackpressure(): Promise<void> {
+  ensureFlushTimer();
+  if (bufferedCount() >= MAX_BUFFER) {
+    return flush();
+  }
+  return Promise.resolve();
 }
 
 function scheduleFlush(): Promise<void> {
   const batch = getOrCreateBatch();
-  if (
-    trackBuffer.length + alertBuffer.length + movementBuffer.length >=
-    MAX_BUFFER
-  ) {
+  if (bufferedCount() >= MAX_BUFFER) {
     void flush();
     return batch.promise;
   }
-  if (flushTimer) return batch.promise;
-  flushTimer = setTimeout(() => {
-    void flush();
-  }, FLUSH_INTERVAL_MS);
+  ensureFlushTimer();
   return batch.promise;
 }
 

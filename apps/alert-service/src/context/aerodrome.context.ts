@@ -14,7 +14,24 @@ import type {
   AerodromeContextData,
   AerodromeFeatureContext,
   MovementTrack,
+  PolygonOccupancy,
 } from "../modules/engine/types";
+
+function polygonBbox(
+  polygon: [number, number][],
+): [number, number, number, number] {
+  let minLat = Number.POSITIVE_INFINITY;
+  let minLon = Number.POSITIVE_INFINITY;
+  let maxLat = Number.NEGATIVE_INFINITY;
+  let maxLon = Number.NEGATIVE_INFINITY;
+  for (const [lat, lon] of polygon) {
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lon < minLon) minLon = lon;
+    if (lon > maxLon) maxLon = lon;
+  }
+  return [minLat, minLon, maxLat, maxLon];
+}
 
 function extractPolygon(
   geometry: unknown,
@@ -62,18 +79,22 @@ async function fetchAerodromeGeometry(
   const all = await fetchFeatures();
   const filtered = filterByAirport(all, airportId);
   const processed: AerodromeFeatureContext[] = filtered
-    .map((f) => ({
-      id: f.id,
-      layer: f.layer,
-      status: f.status,
-      name: f.name,
-      polygon: extractPolygon(
+    .map((f) => {
+      const polygon = extractPolygon(
         f.geometry,
         f.layer,
         f.properties as Record<string, unknown>,
-      ),
-      properties: f.properties as Record<string, unknown>,
-    }))
+      );
+      return {
+        id: f.id,
+        layer: f.layer,
+        status: f.status,
+        name: f.name,
+        polygon,
+        bbox: polygon.length > 0 ? polygonBbox(polygon) : undefined,
+        properties: f.properties as Record<string, unknown>,
+      };
+    })
     .filter((f) => f.polygon.length > 0);
 
   const runways = processed
@@ -139,41 +160,52 @@ async function fetchAerodromeGeometry(
   return context;
 }
 
-function markOccupied(
-  point: [number, number],
-  areas: { id: string; polygon: [number, number][] }[],
-  occupiedIds: Set<string>,
-): void {
-  for (const area of areas) {
-    if (occupiedIds.has(area.id)) continue;
-    if (pointInPolygon(point, area.polygon)) {
-      occupiedIds.add(area.id);
-    }
-  }
-}
-
 const TRACK_FRESHNESS_MS = 60_000;
 
-function computeOccupiedIds(
+/** Occupancy generic untuk semua polygon feature: sebuah polygon OCCUPIED
+ *  selama minimal satu track (ground, posisi masih segar) berada di dalamnya.
+ *  Tidak ada per-cabang per tipe layer — semua polygon dicek sama. */
+function computeOccupancy(
   data: AerodromeContextData,
   tracks: MovementTrack[],
-): { runways: Set<string>; surfaces: Set<string> } {
+): PolygonOccupancy[] {
   const now = Date.now();
   const ground = tracks.filter(
     (t) =>
       t.onGround !== false &&
       now - new Date(t.timestamp).getTime() <= TRACK_FRESHNESS_MS,
   );
-  const occupiedRunways = new Set<string>();
-  const occupiedSurfaces = new Set<string>();
 
+  const occupants = new Map<string, string[]>();
   for (const track of ground) {
     const point: [number, number] = [track.latitude, track.longitude];
-    markOccupied(point, data.runways, occupiedRunways);
-    markOccupied(point, data.surfaces, occupiedSurfaces);
+    for (const f of data.features) {
+      if (
+        f.bbox &&
+        (point[0] < f.bbox[0] ||
+          point[0] > f.bbox[2] ||
+          point[1] < f.bbox[1] ||
+          point[1] > f.bbox[3])
+      ) {
+        continue;
+      }
+      if (!pointInPolygon(point, f.polygon)) continue;
+      const list = occupants.get(f.id);
+      if (list) list.push(track.trackId);
+      else occupants.set(f.id, [track.trackId]);
+    }
   }
 
-  return { runways: occupiedRunways, surfaces: occupiedSurfaces };
+  return data.features.map((f) => {
+    const aircraftIds = occupants.get(f.id) ?? [];
+    return {
+      polygonId: f.id,
+      type: f.layer,
+      status: aircraftIds.length > 0 ? "OCCUPIED" : "AVAILABLE",
+      aircraftIds,
+      aircraftCount: aircraftIds.length,
+    };
+  });
 }
 
 export async function getAerodromeContext(
@@ -199,18 +231,19 @@ export async function getAerodromeContext(
       }
     }
   }
-  if (!data || !tracks || tracks.length === 0) return data;
+  if (!data) return null;
 
-  const occupied = computeOccupiedIds(data, tracks);
+  const occupancy = computeOccupancy(data, tracks ?? []);
+  const occupiedIds = new Set(
+    occupancy.filter((o) => o.status === "OCCUPIED").map((o) => o.polygonId),
+  );
   return {
     ...data,
-    runways: data.runways.map((r) => ({
-      ...r,
-      active: occupied.runways.has(r.id),
-    })),
+    occupancy,
+    runways: data.runways.map((r) => ({ ...r, active: occupiedIds.has(r.id) })),
     surfaces: data.surfaces.map((s) => ({
       ...s,
-      active: occupied.surfaces.has(s.id),
+      active: occupiedIds.has(s.id),
     })),
   };
 }

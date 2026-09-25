@@ -6,15 +6,13 @@ const HEARTBEAT_MS = 15_000;
 const lastBroadcast = new Map<string, { key: string; at: number }>();
 
 function activeIdsKey(aerodrome: AerodromeContextData): string {
-  const runwayIds = aerodrome.runways
-    .filter((r) => r.active)
-    .map((r) => r.id)
-    .sort();
-  const surfaceIds = aerodrome.surfaces
-    .filter((s) => s.active)
-    .map((s) => s.id)
-    .sort();
-  return JSON.stringify({ runwayIds, surfaceIds });
+  // Key mencakup aircraftIds — pergantian penghuni polygon (A keluar, B masuk)
+  // juga dianggap perubahan state yang layak di-broadcast.
+  return JSON.stringify(
+    (aerodrome.occupancy ?? [])
+      .filter((o) => o.status === "OCCUPIED")
+      .map((o) => [o.polygonId, o.aircraftIds.sort()]),
+  );
 }
 
 /**
@@ -37,6 +35,18 @@ export async function broadcastAerodromeStatus(
     eventType: "AERODROME_STATUS_UPDATED",
     timestamp: new Date().toISOString(),
     airportId,
+    // Generic occupancy untuk semua polygon aerodrome (runway, taxiway,
+    // apron, dan layer polygon lainnya) — FE hanya consume, tidak menghitung
+    // geometry sendiri.
+    features: (aerodrome.occupancy ?? []).map((o) => ({
+      id: o.polygonId,
+      type: o.type,
+      status: o.status,
+      active: o.status === "OCCUPIED",
+      aircraftIds: o.aircraftIds,
+      aircraftCount: o.aircraftCount,
+    })),
+    // Legacy shape — tetap dikirim untuk kompatibilitas consumer lama.
     runways: aerodrome.runways.map((r) => ({ id: r.id, active: r.active })),
     surfaces: aerodrome.surfaces.map((s) => ({ id: s.id, active: s.active })),
   };

@@ -46,11 +46,26 @@ export interface AerodromeFeatureContext {
   status: string | null;
   name?: string | null;
   polygon: [number, number][];
+  /** [minLat, minLon, maxLat, maxLon] — precomputed at load so occupancy
+   *  checks can skip point-in-polygon for polygons far from the track. */
+  bbox?: [number, number, number, number];
   properties: Record<string, unknown>;
+}
+
+export interface PolygonOccupancy {
+  polygonId: string;
+  type: string;
+  status: "AVAILABLE" | "OCCUPIED";
+  aircraftIds: string[];
+  aircraftCount: number;
 }
 
 export interface AerodromeContextData {
   features: AerodromeFeatureContext[];
+  /** Occupancy generic untuk SEMUA polygon feature (runway, taxiway, apron,
+   *  dan layer polygon lainnya) — dihitung dari posisi track terkini, bukan
+   *  event masuk. */
+  occupancy?: PolygonOccupancy[];
   runways: {
     id: string;
     name: string | null;

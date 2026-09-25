@@ -152,11 +152,18 @@ function markOccupied(
   }
 }
 
+const TRACK_FRESHNESS_MS = 60_000;
+
 function computeOccupiedIds(
   data: AerodromeContextData,
   tracks: MovementTrack[],
 ): { runways: Set<string>; surfaces: Set<string> } {
-  const ground = tracks.filter((t) => t.onGround !== false);
+  const now = Date.now();
+  const ground = tracks.filter(
+    (t) =>
+      t.onGround !== false &&
+      now - new Date(t.timestamp).getTime() <= TRACK_FRESHNESS_MS,
+  );
   const occupiedRunways = new Set<string>();
   const occupiedSurfaces = new Set<string>();
 

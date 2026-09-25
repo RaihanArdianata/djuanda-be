@@ -2,9 +2,8 @@ import { logger } from "@repo/logger";
 import { publishToTopic } from "@repo/shared/sse/publisher";
 import type { AerodromeContextData } from "./types";
 
-/** State terakhir yang sudah dibroadcast per airport, supaya kita hanya
- *  publish saat ada perubahan (bukan setiap track update). */
-const lastActiveIds = new Map<string, string>();
+const HEARTBEAT_MS = 15_000;
+const lastBroadcast = new Map<string, { key: string; at: number }>();
 
 function activeIdsKey(aerodrome: AerodromeContextData): string {
   const runwayIds = aerodrome.runways
@@ -29,8 +28,10 @@ export async function broadcastAerodromeStatus(
   if (!aerodrome) return;
 
   const key = activeIdsKey(aerodrome);
-  if (lastActiveIds.get(airportId) === key) return;
-  lastActiveIds.set(airportId, key);
+  const last = lastBroadcast.get(airportId);
+  const now = Date.now();
+  if (last && last.key === key && now - last.at < HEARTBEAT_MS) return;
+  lastBroadcast.set(airportId, { key, at: now });
 
   const payload = {
     eventType: "AERODROME_STATUS_UPDATED",

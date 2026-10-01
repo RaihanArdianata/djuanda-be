@@ -15,6 +15,9 @@ import {
 import { flushPostHistory } from "./alert-post-history";
 import { buildEntityKey } from "./track-history";
 
+// Urutan penting: broadcast SSE (Redis) dulu, baru Kafka. producer.send bisa
+// menggantung lama (retry/backoff kafkajs) saat broker bermasalah — kalau
+// ditunggu duluan, event live ke FE ikut tertahan.
 function toAlertEvent(alert: Alert, eventType: AlertEventType): AlertEvent {
   return {
     eventType,
@@ -33,23 +36,23 @@ function toAlertEvent(alert: Alert, eventType: AlertEventType): AlertEvent {
 }
 
 export async function publishAlertCreated(alert: Alert): Promise<void> {
-  await publishAlertEvent(toAlertEvent(alert, "ALERT_CREATED"));
   await broadcastAlert(alert, "ALERT_CREATED");
+  await publishAlertEvent(toAlertEvent(alert, "ALERT_CREATED"));
 }
 
 export async function publishAlertUpdated(alert: Alert): Promise<void> {
-  await publishAlertEvent(toAlertEvent(alert, "ALERT_UPDATED"));
   await broadcastAlert(alert, "ALERT_UPDATED");
+  await publishAlertEvent(toAlertEvent(alert, "ALERT_UPDATED"));
 }
 
 export async function publishAlertAcknowledged(alert: Alert): Promise<void> {
-  await publishAlertEvent(toAlertEvent(alert, "ALERT_ACKNOWLEDGED"));
   await broadcastAlert(alert, "ALERT_ACKNOWLEDGED");
+  await publishAlertEvent(toAlertEvent(alert, "ALERT_ACKNOWLEDGED"));
 }
 
 export async function publishAlertCleared(alert: Alert): Promise<void> {
-  await publishAlertEvent(toAlertEvent(alert, "ALERT_CLEARED"));
   await broadcastAlert(alert, "ALERT_CLEARED");
+  await publishAlertEvent(toAlertEvent(alert, "ALERT_CLEARED"));
 }
 
 export async function acknowledgeAlert(

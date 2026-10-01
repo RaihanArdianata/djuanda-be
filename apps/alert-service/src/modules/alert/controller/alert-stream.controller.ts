@@ -2,6 +2,9 @@ import type { Alert } from "@repo/database";
 import { catchAsync } from "@repo/shared/catch-async";
 import { subscribeToTopic } from "@repo/shared/sse/publisher";
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const RECONNECT_DELAY_MS = 3_000;
+
 interface AlertBroadcastMessage {
   eventType: string;
   timestamp: string;
@@ -18,6 +21,12 @@ export const alertStreamController = catchAsync(async (c) => {
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller: ReadableStreamDefaultController<Uint8Array>): void {
+      // Flush header + set delay reconnect klien, supaya EventSource langsung
+      // "open" walau belum ada alert.
+      controller.enqueue(
+        encoder.encode(`retry: ${RECONNECT_DELAY_MS}\n\n: connected\n\n`),
+      );
+
       const onMessage = (message: string): void => {
         try {
           const parsed = JSON.parse(message) as AlertBroadcastMessage;
@@ -41,11 +50,15 @@ export const alertStreamController = catchAsync(async (c) => {
         } catch {
           cleanup();
         }
-      }, 30000);
+      }, HEARTBEAT_INTERVAL_MS);
 
+      // Idempoten: dipanggil dari heartbeat gagal DAN cancel() saat disconnect.
+      let closed = false;
       cleanup = () => {
+        if (closed) return;
+        closed = true;
         clearInterval(heartbeat);
-        void remove();
+        Promise.resolve(remove()).catch(() => {});
       };
     },
     cancel(): void {
@@ -57,8 +70,10 @@ export const alertStreamController = catchAsync(async (c) => {
     status: 200,
     headers: {
       "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-transform",
       connection: "keep-alive",
+      // Cegah reverse proxy (nginx) mem-buffer stream.
+      "X-Accel-Buffering": "no",
     },
   });
 });

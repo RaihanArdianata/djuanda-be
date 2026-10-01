@@ -29,6 +29,9 @@ const port: string | number = process.env.ALERT_SERVICE_PORT || 3006;
 const server = Bun.serve({
   port,
   fetch: app.fetch,
+  // Default Bun 10 detik — lebih pendek dari heartbeat SSE (30 detik), jadi
+  // koneksi /alerts/stream diputus terus. Harus > interval heartbeat.
+  idleTimeout: 120,
 });
 
 logger.info(`alert-service listening on http://localhost:${port}`);

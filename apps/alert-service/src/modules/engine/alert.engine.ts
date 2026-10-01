@@ -9,6 +9,7 @@ import { logger } from "@repo/logger";
 import { and, eq, lt } from "drizzle-orm";
 import {
   claimActiveAlert,
+  clearActiveAlert,
   getActiveAlert,
   getActiveAlertRefs,
   setActiveAlert,
@@ -182,19 +183,27 @@ async function registerCandidate(
     relatedTrackHistory,
   };
 
-  const stored = await registerAlert({
-    ...candidate,
-    relatedTrackId: candidate.relatedTrackId ?? null,
-    notamId: null,
-    ashtamId: null,
-    aftnMessageId: null,
-    aerodromeFeatureId: candidate.aerodromeFeatureId ?? null,
-    acknowledgedAt: null,
-    acknowledgedBy: null,
-    clearedAt: null,
-    clearedBy: null,
-    data: enrichedData,
-  });
+  let stored: Alert;
+  try {
+    stored = await registerAlert({
+      ...candidate,
+      relatedTrackId: candidate.relatedTrackId ?? null,
+      notamId: null,
+      ashtamId: null,
+      aftnMessageId: null,
+      aerodromeFeatureId: candidate.aerodromeFeatureId ?? null,
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      clearedAt: null,
+      clearedBy: null,
+      data: enrichedData,
+    });
+  } catch (err) {
+    // Lepas klaim __pending__, kalau tidak entity ini tidak bisa membuat
+    // alert lagi sampai TTL klaim (5 menit) habis — alert valid hilang.
+    await clearActiveAlert(airportId, candidate.type, entityKey);
+    throw err;
+  }
 
   const trackHistoryPoints = [
     ...trackHistory.map((snap) =>
@@ -252,7 +261,7 @@ async function clearStaleAlerts(
 
   for (const ref of activeRefs) {
     if (!ref.entityKey || activeEntityKeys.has(ref.entityKey)) continue;
-    if (!ref.alertId) continue;
+    if (!ref.alertId || ref.alertId === PENDING_CLAIM_VALUE) continue;
     try {
       const clearedAlert = await clearAlertByAlertId(ref.alertId);
       if (clearedAlert) cleared.push(clearedAlert);

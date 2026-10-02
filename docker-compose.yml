@@ -100,28 +100,60 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        rpk topic create ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} \
-          --brokers redpanda:9092 \
-          --partitions 3 \
-          --replicas 1 \
-          --config retention.ms=3600000 \
-          --config retention.bytes=536870912 \
-          --config compression.type=lz4 \
-          || true
-        rpk topic alter-config ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} \
-          --brokers redpanda:9092 \
-          --set retention.ms=3600000 \
-          --set retention.bytes=536870912 \
-          || true
+        # Converge every topic to bounded retention — size AND time — so the
+        # 40GB root disk can't fill up. Anything that persists to Postgres
+        # (tracks, alerts, movements) doesn't need long Kafka retention;
+        # consumers are near-realtime. Worst-case Kafka footprint here is
+        # ~3.3GB.
+        converge() {
+          topic=$$1; retention_ms=$$2; retention_bytes=$$3
+          rpk topic create "$$topic" \
+            --brokers redpanda:9092 \
+            --partitions 3 \
+            --replicas 1 \
+            --config retention.ms=$$retention_ms \
+            --config retention.bytes=$$retention_bytes \
+            --config compression.type=lz4 \
+            || true
+          # Topic may already exist from a prior deploy with stale (default
+          # 7-day, unbounded) retention — force-converge every startup.
+          rpk topic alter-config "$$topic" \
+            --brokers redpanda:9092 \
+            --set retention.ms=$$retention_ms \
+            --set retention.bytes=$$retention_bytes \
+            --set compression.type=lz4 \
+            || true
+        }
+
+        # Raw ingest firehose — transient buffer, replay not needed.
+        converge ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} 3600000 536870912
+        converge aeroswarm.ingest.example 3600000 268435456
+
+        # Track updates -> alert-service live pipeline (playback reads
+        # aeroswarm_tracks in Postgres, not this topic).
+        converge ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks} 86400000 1073741824
+
+        # Alert lifecycle -> notification-service; alerts also persist to
+        # the alerts table, so 3d Kafka history is ample for replay/debug.
+        converge ${ALERT_KAFKA_ALERT_TOPIC:-asmgcs.alerts} 259200000 1073741824
+
         # Service-to-service movement event bus (connection-service ->
         # statistics-service), durable/replayable, consumer-group based.
-        rpk topic create ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement} \
-          --brokers redpanda:9092 \
-          --partitions 3 \
-          --replicas 1 \
-          --config compression.type=lz4 \
-          || true
-        echo "Topic ready."
+        converge ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement} 259200000 268435456
+
+        # Latest-state / low-volume event feeds for alert-service context
+        # consumers — a day of history is already generous.
+        converge ${ALERT_KAFKA_WEATHER_TOPIC:-asmgcs.weather} 86400000 67108864
+        converge ${ALERT_KAFKA_ADVISORY_TOPIC:-asmgcs.advisory} 86400000 67108864
+        converge ${ALERT_KAFKA_AERODROME_TOPIC:-asmgcs.aerodrome} 86400000 67108864
+
+        # Cluster-level fallback — any topic auto-created later (missed by the
+        # list above) still inherits bounded retention instead of Redpanda's
+        # unlimited default. Topic-level configs above win where set.
+        rpk cluster config set log_retention_ms 86400000 --brokers redpanda:9092 || true
+        rpk cluster config set retention_bytes 1073741824 --brokers redpanda:9092 || true
+
+        echo "Topics created/converged."
     restart: "no"
 
   auth-service:

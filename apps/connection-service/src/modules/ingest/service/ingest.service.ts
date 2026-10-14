@@ -92,7 +92,7 @@ function getOrCreateBatch(): Batch {
   return currentBatch;
 }
 
-interface FusedTrackEventLike {
+export interface FusedTrackEventLike {
   trackId: string;
   airportId?: string;
   lifecycle?: string;

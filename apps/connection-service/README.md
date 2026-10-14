@@ -14,9 +14,9 @@ Port default: `3005` (`CONNECTION_SERVICE_PORT`). Diakses **langsung** (bukan le
 AeroSwarm POST ingest ke sini, dan browser dashboard connect ke sini untuk replay — karena itu
 CORS ditangani di service ini sendiri.
 
-## Ingest — tiga transport, pilih sesuai kebutuhan volume
+## Ingest — empat transport, pilih sesuai kebutuhan volume
 
-Ketiganya menulis ke tabel yang sama (`ingest.service.ts`, micro-batch 500ms/500 baris) —
+Keempatnya menulis ke tabel yang sama (`ingest.service.ts`, micro-batch 500ms/500 baris) —
 bedanya cuma cara event sampai ke sini. Perbandingan lengkap:
 `aeroswarm-project/docs/development/federation/006-*.md`.
 
@@ -25,6 +25,24 @@ bedanya cuma cara event sampai ke sini. Perbandingan lengkap:
 | `http` webhook | `POST /aero/ingest` | header `x-aero-ingest-secret` | Gap-free — AeroSwarm retry + DLQ |
 | `websocket` | `WS /aero/ingest/ws?secret=...` | query `secret` (ws sink tidak bisa kirim header) | **Drop** event selama disconnect |
 | `kafka` (Redpanda) | consumer, bukan endpoint HTTP | jaringan (broker reachability) | Gap-free selama masih dalam retensi topic (default 1 jam — lihat `docker-compose.yml`) |
+| `udp` direct ASTERIX | socket UDP lokal, bukan endpoint HTTP | jaringan (siapa pun yang bisa kirim ke port) | **Drop** datagram selama down — UDP memang fire-and-forget |
+
+### UDP direct ASTERIX feed
+
+`udp-feed.ts` men-decode datagram ASTERIX langsung di process ini via `@aeroswarm/codec`
+(tanpa AeroSwarm processing layer) — berguna saat backend ini menerima feed radar/MLAT
+langsung dari sensor, bukan dari AeroSwarm. Nonaktif default; aktif dengan
+`AEROSWARM_FEED_UDP_PORT`. Event distamp `airportId` dari `AEROSWARM_AIRPORT_ID`.
+
+| Variable | Fungsi |
+|---|---|
+| `AEROSWARM_FEED_UDP_PORT` | Port UDP untuk listen datagram ASTERIX — **kosong = feed nonaktif** |
+| `AEROSWARM_FEED_UDP_HOST` | Bind address (default `0.0.0.0`) |
+| `AEROSWARM_FEED_SOURCE_ID` | Label sumber di event (default `asterix-udp`) |
+| `ASTERIX_ALLOWED_CATS` | Kategori yang di-forward (default `10,11,20,21,48,62`) — CAT23/34/63/19/247 selalu di-skip (service messages, bukan track) |
+| `ASTERIX_FORCED_EDITIONS` | Paksa edition per kategori, format `21:2.4,48:1.21` — untuk feed yang edition-nya tidak auto-detect |
+| `RADAR_SITE_LAT` / `RADAR_SITE_LON` | Koordinat radar — **wajib untuk CAT048** (posisi Cartesian/polar relatif ke site; tanpa ini record CAT048 di-skip) |
+| `AEROSWARM_FEED_MULTICAST_GROUP` / `AEROSWARM_FEED_MULTICAST_IFACE` | Join multicast group (contoh feed radar `224.0.0.1`) — iface opsional |
 
 ## Endpoint HTTP/WS
 
@@ -77,7 +95,5 @@ menampilkan blok `.env` siap tempel. Detail: `aeroswarm-project/docs/development
 
 ## Catatan dependency
 
-`@aeroswarm/replay-server` diambil dari registry Verdaccio LAN kantor
-(`http://192.168.2.237:4873/`) — lihat `.npmrc` root repo (`@aeroswarm:registry=...`).
-Kalau build dijalankan dari luar LAN itu (mis. VPS di internet publik yang tidak bisa hairpin
-ke IP LAN), fallback tervendorkan tersedia — lihat komentar di root `Dockerfile`.
+`@aeroswarm/codec` dan `@aeroswarm/replay-server` diambil dari npmjs publik (org
+`aeroswarm`) — tidak ada scope redirect di `.npmrc`, resolve seperti package biasa.

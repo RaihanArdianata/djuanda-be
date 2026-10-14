@@ -2,6 +2,7 @@ import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
 import { app } from "./app";
+import { startUdpFeed, stopUdpFeed } from "./modules/feed/udp-feed";
 import { isValidMonitorToken } from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
@@ -87,6 +88,8 @@ const server = Bun.serve<SocketData>({
 
 logger.info(`connection-service listening on http://localhost:${port}`);
 
+startUdpFeed();
+
 startIngestKafkaConsumer().catch((err) => {
   logger.error(
     { err },
@@ -112,6 +115,7 @@ const shutdown = async (signal: string): Promise<never> => {
     `${signal} received, shutting down connection-service gracefully`,
   );
   server.stop();
+  stopUdpFeed();
   await stopIngestKafkaConsumer();
   await stopMovementProducer();
   await flush();

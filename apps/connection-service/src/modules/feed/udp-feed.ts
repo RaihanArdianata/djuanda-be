@@ -236,10 +236,15 @@ export class AsterixUdpFeed {
     const isSurface = category === 10 || category === 11;
 
     // Identity key: real icao24 when present; otherwise a synthetic id from the
-    // sensor-recycled track-number namespace (v = surface, t = CAT62 system).
+    // sensor-recycled track-number namespace (v = surface, t = CAT62 system,
+    // r = CAT048 radar track — SSR plots often carry no Mode-S address).
     let key = f.icao24;
-    if (!key && (isSurface || category === 62) && f.trackNumber !== undefined) {
-      const prefix = isSurface ? "v" : "t";
+    if (
+      !key &&
+      (isSurface || category === 62 || category === 48) &&
+      f.trackNumber !== undefined
+    ) {
+      const prefix = isSurface ? "v" : category === 62 ? "t" : "r";
       key = `${prefix}${f.dataSource?.sac ?? 0}-${f.dataSource?.sic ?? 0}-${f.trackNumber}`;
     }
     if (!key) return null;
@@ -251,7 +256,10 @@ export class AsterixUdpFeed {
     let prev = this.trackMap.get(key);
     // Synthetic track-number ids recycle fast — if the implied jump is too
     // fast for that target class, treat it as a new physical target.
-    if ((key.startsWith("v") || key.startsWith("t")) && prev?.lastPos) {
+    if (
+      (key.startsWith("v") || key.startsWith("t") || key.startsWith("r")) &&
+      prev?.lastPos
+    ) {
       const dtS = (now - prev.lastPos.at) / 1000;
       if (dtS > 0.2) {
         const kx = 111320 * Math.cos((pos.lat * Math.PI) / 180);

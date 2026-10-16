@@ -156,6 +156,56 @@ services:
         echo "Topics created/converged."
     restart: "no"
 
+  # Object storage for generated playback files (.pbk). playback-service keeps
+  # only metadata in Postgres; the blobs live in the PLAYBACK_BUCKET bucket.
+  # Port 9000 stays exposed because presigned upload/download URLs are opened
+  # directly by the dashboard — front it with the TLS proxy (MINIO_PUBLIC_
+  # ENDPOINT) in production so signatures stay valid over HTTPS.
+  minio:
+    image: minio/minio:latest
+    container_name: backend-djuanda-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      # Console is loopback-only — SSH tunnel in if you need the UI:
+      #   ssh -L 9001:localhost:9001 <vps>
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mc ready local >/dev/null 2>&1 || curl -fs http://localhost:9000/minio/health/ready",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # One-shot bucket bootstrap, same converge pattern as redpanda-init.
+  minio-init:
+    image: minio/mc:latest
+    container_name: backend-djuanda-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      PLAYBACK_BUCKET: ${PLAYBACK_BUCKET:-playback-files}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "local/$${PLAYBACK_BUCKET}"
+        echo "Bucket $${PLAYBACK_BUCKET} ready."
+    restart: "no"
+
   auth-service:
     build:
       context: .
@@ -513,11 +563,25 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # Object storage for generated .pbk files — see minio service above.
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      PLAYBACK_BUCKET: ${PLAYBACK_BUCKET:-playback-files}
+      # Base URL the dashboard can reach when opening presigned upload/download
+      # URLs — e.g. https://files.asmgcs.midigi.id proxied to minio:9000. URLs
+      # minted against MINIO_ENDPOINT only resolve inside the compose network.
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-}
     depends_on:
       pgbouncer:
         condition: service_started
       redis:
         condition: service_healthy
+      # Files API is additive — don't take existing time-range sessions down
+      # with a MinIO hiccup.
+      minio-init:
+        condition: service_completed_successfully
+        required: false
     healthcheck:
       test:
         [
@@ -580,3 +644,5 @@ volumes:
   prometheus-data:
   redpanda-data:
     name: backend-djuanda-redpanda-data
+  minio-data:
+    name: backend-djuanda-minio-data

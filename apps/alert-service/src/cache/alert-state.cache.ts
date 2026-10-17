@@ -9,6 +9,10 @@ export function activeAlertKey(
   return `alert:active:${airportId}:${type}:${entityKey}`;
 }
 
+/** TTL key active-alert — sama untuk claim & refresh. Dipakai engine untuk
+ *  menghitung berapa lama sebuah ref tidak di-refresh (grace period clear). */
+export const ACTIVE_ALERT_TTL_SECONDS = 300;
+
 /**
  * Klaim entity secara atomic (SET ... NX) sebelum membuat alert baru.
  * Mencegah race condition: dua track update yang datang berdekatan untuk
@@ -23,7 +27,7 @@ export async function claimActiveAlert(
   type: string,
   entityKey: string,
   placeholder: string,
-  ttlSeconds = 300,
+  ttlSeconds = ACTIVE_ALERT_TTL_SECONDS,
 ): Promise<boolean> {
   try {
     const result = await redis.set(
@@ -45,7 +49,7 @@ export async function setActiveAlert(
   type: string,
   entityKey: string,
   alertId: string,
-  ttlSeconds = 300,
+  ttlSeconds = ACTIVE_ALERT_TTL_SECONDS,
 ): Promise<void> {
   try {
     await redis.setex(
@@ -82,6 +86,20 @@ export async function clearActiveAlert(
     await redis.del(activeAlertKey(airportId, type, entityKey));
   } catch (err) {
     logger.warn({ err, airportId, type, entityKey }, "clearActiveAlert failed");
+  }
+}
+
+/**
+ * Sisa TTL (detik) sebuah key active-alert — dipakai clearStaleAlerts untuk
+ * menghitung berapa lama candidate-nya tidak terlihat. -2 = key sudah tidak
+ * ada (expired/dihapus), -1 = tidak ada expiry.
+ */
+export async function getActiveAlertTtl(key: string): Promise<number> {
+  try {
+    return await redis.ttl(key);
+  } catch (err) {
+    logger.warn({ err, key }, "getActiveAlertTtl failed");
+    return -2;
   }
 }
 

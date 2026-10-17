@@ -8,11 +8,14 @@ import {
 import { logger } from "@repo/logger";
 import { and, eq, lt } from "drizzle-orm";
 import {
+  ACTIVE_ALERT_TTL_SECONDS,
   claimActiveAlert,
   getActiveAlert,
   getActiveAlertRefs,
+  getActiveAlertTtl,
   setActiveAlert,
 } from "../../cache/alert-state.cache";
+import { alertServiceEnv } from "../../config/env";
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getAirportTracks } from "../../context/surveillance.context";
 import {
@@ -242,6 +245,16 @@ async function registerCandidate(
   return stored;
 }
 
+/**
+ * Alert boleh kehilangan candidate-nya beberapa evaluasi sebelum di-clear.
+ * Satu tick "kosong" (jitter posisi di batas polygon, snapshot track yang
+ * beda antar-evaluasi paralel, context gagal sesaat) dulunya langsung
+ * membunuh alert → ALERT_CLEARED → recreated → kedip-kedip di frontend.
+ *
+ * Key active-alert di-refresh ke ACTIVE_ALERT_TTL_SECONDS tiap candidate
+ * terlihat, jadi sisa TTL adalah clock "berapa lama tidak ke-refresh":
+ * clear hanya kalau ttl <= ACTIVE_ALERT_TTL_SECONDS - grace.
+ */
 async function clearStaleAlerts(
   airportId: string,
   candidates: AlertCandidate[],
@@ -249,10 +262,17 @@ async function clearStaleAlerts(
   const cleared: Alert[] = [];
   const activeEntityKeys = new Set(candidates.map(buildEntityKey));
   const activeRefs = await getActiveAlertRefs(airportId);
+  const refreshThreshold =
+    ACTIVE_ALERT_TTL_SECONDS - alertServiceEnv.staleGraceSeconds;
 
   for (const ref of activeRefs) {
     if (!ref.entityKey || activeEntityKeys.has(ref.entityKey)) continue;
-    if (!ref.alertId) continue;
+    if (!ref.alertId || ref.alertId === PENDING_CLAIM_VALUE) continue;
+
+    // Masih dalam grace period — candidate bisa saja absen sesaat.
+    const ttl = await getActiveAlertTtl(ref.key);
+    if (ttl > refreshThreshold) continue;
+
     try {
       const clearedAlert = await clearAlertByAlertId(ref.alertId);
       if (clearedAlert) cleared.push(clearedAlert);
@@ -414,7 +434,13 @@ export const evaluateMovement = async (
     }
   }
 
-  const staleCleared = await clearStaleAlerts(input.airportId, candidates);
+  // Kalau context aerodrome gagal di-fetch, "tidak ada candidate" tidak bisa
+  // dipercaya — surface-based rules selalu menghasilkan nol saat geometrinya
+  // kosong, dan itu dulu menghapus SEMUA alert aktif airport ini sekaligus.
+  // Alert yang benar-benar stale tetap dibersihkan TTL sweep / expiry.
+  const staleCleared = ctx.aerodrome
+    ? await clearStaleAlerts(input.airportId, candidates)
+    : [];
   const expiredCleared = await clearExpiredAlerts(input.airportId);
   const cleared = [...staleCleared, ...expiredCleared];
 

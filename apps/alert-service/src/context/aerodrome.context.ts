@@ -9,6 +9,7 @@ import {
   getAerodromeGeometry,
   setAerodromeGeometry,
 } from "@/cache/context.cache";
+import { alertServiceEnv } from "@/config/env";
 import { pointInPolygon } from "../modules/engine/rules/geometry/geometry";
 import type {
   AerodromeContextData,
@@ -162,10 +163,17 @@ async function fetchAerodromeGeometry(
 
 const TRACK_FRESHNESS_MS = 60_000;
 
+// Kapan sebuah feature terakhir punya occupant — occupancy dilaporkan tetap
+// OCCUPIED selama occupancyStickyMs setelahnya supaya jitter posisi di batas
+// polygon (atau satu snapshot track yang kelewat) tidak bikin highlight
+// aerodrome kedip OCCUPIED↔AVAILABLE di frontend.
+const lastOccupiedAt = new Map<string, number>();
+
 /** Occupancy generic untuk semua polygon feature: sebuah polygon OCCUPIED
  *  selama minimal satu track (ground, posisi masih segar) berada di dalamnya.
  *  Tidak ada per-cabang per tipe layer — semua polygon dicek sama. */
 function computeOccupancy(
+  airportId: string,
   data: AerodromeContextData,
   tracks: MovementTrack[],
 ): PolygonOccupancy[] {
@@ -198,10 +206,28 @@ function computeOccupancy(
 
   return data.features.map((f) => {
     const aircraftIds = occupants.get(f.id) ?? [];
+    const stickyKey = `${airportId}:${f.id}`;
+
+    if (aircraftIds.length > 0) {
+      lastOccupiedAt.set(stickyKey, now);
+      return {
+        polygonId: f.id,
+        type: f.layer,
+        status: "OCCUPIED",
+        aircraftIds,
+        aircraftCount: aircraftIds.length,
+      };
+    }
+
+    const last = lastOccupiedAt.get(stickyKey);
+    const sticky =
+      last !== undefined && now - last < alertServiceEnv.occupancyStickyMs;
+    if (!sticky) lastOccupiedAt.delete(stickyKey);
+
     return {
       polygonId: f.id,
       type: f.layer,
-      status: aircraftIds.length > 0 ? "OCCUPIED" : "AVAILABLE",
+      status: sticky ? "OCCUPIED" : "AVAILABLE",
       aircraftIds,
       aircraftCount: aircraftIds.length,
     };
@@ -233,7 +259,7 @@ export async function getAerodromeContext(
   }
   if (!data) return null;
 
-  const occupancy = computeOccupancy(data, tracks ?? []);
+  const occupancy = computeOccupancy(airportId, data, tracks ?? []);
   const occupiedIds = new Set(
     occupancy.filter((o) => o.status === "OCCUPIED").map((o) => o.polygonId),
   );

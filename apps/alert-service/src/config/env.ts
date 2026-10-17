@@ -10,6 +10,8 @@ interface AlertServiceEnv {
   aerodromeServiceUrl: string;
   weatherServiceUrl: string;
   statisticsServiceUrl: string;
+  staleGraceSeconds: number;
+  occupancyStickyMs: number;
 }
 
 export const alertServiceEnv: AlertServiceEnv = {
@@ -33,4 +35,12 @@ export const alertServiceEnv: AlertServiceEnv = {
     process.env.WEATHER_SERVICE_URL || "http://weather-service:3008",
   statisticsServiceUrl:
     process.env.STATISTICS_SERVICE_URL || "http://gateway:8080",
+  // Berapa lama sebuah alert aktif boleh tidak ke-refresh candidate-nya
+  // sebelum dianggap stale dan di-clear. Meredam flicker dari jitter posisi
+  // di batas polygon, snapshot track yang beda antar-evaluasi paralel, dan
+  // context fetch yang gagal sesaat.
+  staleGraceSeconds: Number(process.env.ALERT_STALE_GRACE_SECONDS ?? 20),
+  // Surface tetap dilaporkan OCCUPIED selama ini setelah track terakhir
+  // terlihat di dalam — meredam kedip occupancy di batas polygon.
+  occupancyStickyMs: Number(process.env.ALERT_OCCUPANCY_STICKY_MS ?? 5000),
 };

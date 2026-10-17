@@ -167,25 +167,24 @@ services:
   # directly by the dashboard — front it with the TLS proxy (MINIO_PUBLIC_
   # ENDPOINT) in production so signatures stay valid over HTTPS.
   minio:
-    # MinIO sudah menarik image dari Docker Hub (Okt 2025) — registry resmi
-    # sekarang quay.io dan tidak ada tag :latest, harus pinned RELEASE tag.
-    # Rilis ini masih menyertakan admin console penuh (rilis >= Okt 2025
-    # memangkas sebagian besar console UI).
-    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z}
+    # MinIO menarik SEMUA image resmi (Docker Hub DAN quay.io, Okt 2025) —
+    # bitnamilegacy adalah arsip frozen di Docker Hub yang masih pullable
+    # anonymous. Image ini Debian-based, data dir /bitnami/minio/data, dan
+    # console otomatis di :9001 (tidak perlu override command).
+    image: ${MINIO_IMAGE:-docker.io/bitnamilegacy/minio:2025.7.23}
     container_name: backend-djuanda-minio
     restart: unless-stopped
     mem_limit: ${MINIO_MEM_LIMIT:-512m}
-    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
-      # Optional — set both when MinIO is fronted by a TLS proxy (Caddy/nginx):
+      # Optional — set when MinIO is fronted by a TLS proxy (Caddy/nginx):
       # presigned URLs then advertise the public https origin instead of the
       # container address, and the console redirects through it too.
       MINIO_SERVER_URL: ${MINIO_SERVER_URL:-}
       MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_REDIRECT_URL:-}
     volumes:
-      - minio-data:/data
+      - minio-data:/bitnami/minio/data
     ports:
       # Bind 0.0.0.0 by default so presigned URLs work when clients open them
       # directly; set MINIO_API_BIND=127.0.0.1 once a TLS proxy fronts the API
@@ -198,7 +197,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "mc ready local >/dev/null 2>&1 || curl -fs http://localhost:9000/minio/health/ready",
+          "curl -fs http://localhost:9000/minio/health/ready || exit 1",
         ]
       interval: 10s
       timeout: 5s
@@ -207,7 +206,7 @@ services:
 
   # One-shot bucket bootstrap, same converge pattern as redpanda-init.
   minio-init:
-    image: ${MINIO_MC_IMAGE:-quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z}
+    image: ${MINIO_MC_IMAGE:-docker.io/bitnamilegacy/minio-client:2025}
     container_name: backend-djuanda-minio-init
     depends_on:
       minio:

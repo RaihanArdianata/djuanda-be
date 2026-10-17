@@ -10,6 +10,7 @@ import { and, eq, lt } from "drizzle-orm";
 import {
   ACTIVE_ALERT_TTL_SECONDS,
   claimActiveAlert,
+  clearActiveAlert,
   getActiveAlert,
   getActiveAlertRefs,
   getActiveAlertTtl,
@@ -185,19 +186,27 @@ async function registerCandidate(
     relatedTrackHistory,
   };
 
-  const stored = await registerAlert({
-    ...candidate,
-    relatedTrackId: candidate.relatedTrackId ?? null,
-    notamId: null,
-    ashtamId: null,
-    aftnMessageId: null,
-    aerodromeFeatureId: candidate.aerodromeFeatureId ?? null,
-    acknowledgedAt: null,
-    acknowledgedBy: null,
-    clearedAt: null,
-    clearedBy: null,
-    data: enrichedData,
-  });
+  let stored: Alert;
+  try {
+    stored = await registerAlert({
+      ...candidate,
+      relatedTrackId: candidate.relatedTrackId ?? null,
+      notamId: null,
+      ashtamId: null,
+      aftnMessageId: null,
+      aerodromeFeatureId: candidate.aerodromeFeatureId ?? null,
+      acknowledgedAt: null,
+      acknowledgedBy: null,
+      clearedAt: null,
+      clearedBy: null,
+      data: enrichedData,
+    });
+  } catch (err) {
+    // Lepas klaim __pending__, kalau tidak entity ini tidak bisa membuat
+    // alert lagi sampai TTL klaim (5 menit) habis — alert valid hilang.
+    await clearActiveAlert(airportId, candidate.type, entityKey);
+    throw err;
+  }
 
   const trackHistoryPoints = [
     ...trackHistory.map((snap) =>

@@ -129,6 +129,11 @@ services:
         converge ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr} 3600000 536870912
         converge aeroswarm.ingest.example 3600000 268435456
 
+        # Flight-plan events (AFTN) diteruskan connector AeroSwarm ke topic ini
+        # -> advisory-service consumer -> aftn_messages -> asmgcs.advisory.
+        # Low-volume, tapi pesan persist ke Postgres jadi 1d retention cukup.
+        converge ${AEROSWARM_FLIGHTPLAN_TOPIC:-aeroswarm.flightplan.warr} 86400000 268435456
+
         # Track updates -> alert-service live pipeline (playback reads
         # aeroswarm_tracks in Postgres, not this topic).
         converge ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks} 86400000 1073741824
@@ -463,6 +468,8 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       KAFKA_BROKERS: redpanda:9092
+      # AFTN via connector AeroSwarm -> topic ini -> aftn_messages.
+      AEROSWARM_FLIGHTPLAN_TOPIC: ${AEROSWARM_FLIGHTPLAN_TOPIC:-aeroswarm.flightplan.warr}
     depends_on:
       redis:
         condition: service_healthy

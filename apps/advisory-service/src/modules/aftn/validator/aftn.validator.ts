@@ -45,15 +45,4 @@ export const listAftnQuerySchema = z
     { message: "startDate harus lebih awal dari endDate", path: ["startDate"] },
   );
 
-export const syncAftnSchema = z
-  .object({
-    startDate: z.coerce.date(),
-    endDate: z.coerce.date(),
-  })
-  .refine((value) => value.startDate <= value.endDate, {
-    message: "startDate harus lebih awal dari endDate",
-    path: ["startDate"],
-  });
-
 export type ListAftnQueryInput = z.infer<typeof listAftnQuerySchema>;
-export type SyncAftnInput = z.infer<typeof syncAftnSchema>;

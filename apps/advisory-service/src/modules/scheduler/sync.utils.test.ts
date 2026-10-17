@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { resolveIncrementalWindow } from "./aftn.service";
+import { resolveIncrementalWindow } from "./sync.utils";
 
 describe("resolveIncrementalWindow", () => {
   const now = new Date("2026-05-30T12:00:00.000Z");

@@ -8,7 +8,7 @@ import type { AshtamSourceItem } from "../parser/common";
  * A source is just "something that can produce a list of raw ASHTAM items".
  * The mock loader below implements this by reading a local JSON file; a
  * future `ashtam.provider.ts` (calling `POST /api/token` + `POST
- * /api/ashtam`, mirroring `aftn.provider.ts`) implements the same shape by
+ * /api/ashtam`) implements the same shape by
  * calling the external provider instead. The parser and repository never
  * need to know which one is in use.
  */

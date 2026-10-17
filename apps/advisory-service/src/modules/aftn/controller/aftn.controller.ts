@@ -1,14 +1,7 @@
 import { failureFromCode, success } from "@repo/shared/api-response";
 import { catchAsync } from "@repo/shared/catch-async";
-import {
-  getAftnMessageById,
-  getAftnMessages,
-  syncAftn,
-} from "../service/aftn.service";
-import type {
-  ListAftnQueryInput,
-  SyncAftnInput,
-} from "../validator/aftn.validator";
+import { getAftnMessageById, getAftnMessages } from "../service/aftn.service";
+import type { ListAftnQueryInput } from "../validator/aftn.validator";
 
 export const list = catchAsync(async (c) => {
   const query = c.get("parsedData") as ListAftnQueryInput;
@@ -40,14 +33,5 @@ export const detail = catchAsync(async (c) => {
 
   return success(c, message, {
     message: "AFTN message retrieved successfully",
-  });
-});
-
-export const sync = catchAsync(async (c) => {
-  const input = c.get("parsedData") as SyncAftnInput;
-  const result = await syncAftn(input);
-
-  return success(c, result, {
-    message: "AFTN synchronization completed",
   });
 });

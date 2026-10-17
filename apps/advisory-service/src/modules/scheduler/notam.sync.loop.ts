@@ -2,7 +2,7 @@ import { logger } from "@repo/logger";
 import cron, { type ScheduledTask } from "node-cron";
 import { env } from "@/config/env";
 import { syncNotamIncremental } from "../notam/service/notam.service";
-import { intervalMsToCronExpression } from "./sync.loop";
+import { intervalMsToCronExpression } from "./sync.utils";
 
 let notamTask: ScheduledTask | null = null;
 

@@ -148,13 +148,16 @@ export const upsertAlertByAlertId = async (
   const existing = await findAlertByAlertId(values.alertId);
 
   if (existing) {
+    // Upsert hanya dicapai lewat claim Redis baru (alert baru atau resurrect
+    // setelah CLEARED) — jadi row lama BUKAN lanjutan episode lama. Pertahankan
+    // triggeredAt/createdAt lama di sini salah: FE (isAlertRecent, window 5m)
+    // dan expiry sweep memakai triggeredAt — alert resurrect dengan timestamp
+    // lama langsung dianggap kedaluwarsa, tidak pernah muncul di tab Live.
     const [row] = await db
       .update(alerts)
       .set({
         ...values,
         updatedAt: new Date(),
-        triggeredAt: existing.triggeredAt,
-        createdAt: existing.createdAt,
       })
       .where(eq(alerts.alertId, values.alertId))
       .returning();

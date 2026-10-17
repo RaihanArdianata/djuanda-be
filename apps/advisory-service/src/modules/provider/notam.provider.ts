@@ -1,8 +1,8 @@
 import { logger } from "@repo/logger";
 import { env } from "@/config/env";
 import type { NotamSourceItem } from "../notam/parser/common";
-import { toProviderDateString } from "./aftn.provider";
 import { getAccessToken, providerBaseUrl } from "./auth.provider";
+import { toProviderDateString } from "./common";
 
 const NOTAM_ENDPOINT = "/api/notam";
 

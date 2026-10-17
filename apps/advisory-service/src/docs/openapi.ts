@@ -159,7 +159,7 @@ registry.registerPath({
     "untuk window yang diminta. Message di-upsert berdasarkan identity, sehingga " +
     "rentang yang overlap dengan scheduled sync tidak menghasilkan duplicate. " +
     "Body key snake_case (`start_date` / `end_date`) mengikuti convention " +
-    "`/advisory/notam/fetch`, bukan `/advisory/aftn/sync` yang camelCase.",
+    "`/advisory/notam/fetch`.",
   request: {
     body: {
       content: {
@@ -212,22 +212,15 @@ const aftnMessageSchema = z.object({
   updatedAt: z.string(),
 });
 
-const aftnSyncResultSchema = z.object({
-  totalReceived: z.number(),
-  created: z.number(),
-  updated: z.number(),
-  unchanged: z.number(),
-  failed: z.number(),
-});
-
 registry.registerPath({
   method: "get",
   path: "/advisory/aftn",
   tags: ["AFTN"],
   summary: "Daftar AFTN message dari database lokal",
   description:
-    "Menyajikan AFTN message (FPL/DEP/ARR/DLA/CHG) yang sudah disinkronkan dari " +
-    "provider setiap 30 menit. Mendukung filter, pagination, dan sorting. " +
+    "Menyajikan AFTN message (FPL/DEP/ARR/DLA/CHG/CNL) yang diterima streaming " +
+    "dari AeroSwarm (aero.flightplan.v1 -> aeroswarm.flightplan.warr). " +
+    "Mendukung filter, pagination, dan sorting. " +
     "Field yang tidak tersedia pada satu message type bernilai null, dan raw " +
     "message selalu disertakan.",
   request: {
@@ -306,49 +299,6 @@ registry.registerPath({
         },
       },
     },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/advisory/aftn/sync",
-  tags: ["AFTN"],
-  summary: "Manual synchronization AFTN untuk satu rentang waktu",
-  description:
-    "Memicu sinkronisasi ke provider (POST /api/aftn) untuk window yang diminta. " +
-    "Message di-upsert berdasarkan identity, sehingga rentang yang overlap dengan " +
-    "scheduled sync tidak menghasilkan duplicate.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: z.object({
-            startDate: z.string().describe("ISO 8601"),
-            endDate: z.string().describe("ISO 8601"),
-          }),
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      description: "Sinkronisasi selesai",
-      content: { "application/json": { schema: aftnSyncResultSchema } },
-    },
-    422: {
-      description: "Body tidak valid",
-      content: {
-        "application/json": {
-          schema: z.object({ error: z.string(), message: z.string() }),
-        },
-      },
-    },
-    502: upstreamErrorResponse(
-      "Provider AFTN tidak dapat dihubungi / membalas error",
-    ),
-    504: upstreamErrorResponse(
-      "Provider AFTN tidak merespons dalam batas waktu",
-    ),
   },
 });
 

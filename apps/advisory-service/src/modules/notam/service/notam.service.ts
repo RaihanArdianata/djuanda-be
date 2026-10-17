@@ -1,9 +1,9 @@
 import { logger } from "@repo/logger";
 import { env } from "@/config/env";
-import { resolveIncrementalWindow } from "../../aftn/service/aftn.service";
 import { fetchNotamHistories } from "../../client/navsim.client";
 import { parseNotamMessage } from "../../notam/parser/notam.parser";
 import { fetchNotamMessages } from "../../provider/notam.provider";
+import { resolveIncrementalWindow } from "../../scheduler/sync.utils";
 import type { NotamSourceItem } from "../parser/common";
 import {
   findLatestNotamDatetime,

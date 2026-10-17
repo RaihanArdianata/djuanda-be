@@ -1,8 +1,8 @@
 import { logger } from "@repo/logger";
 import { env } from "@/config/env";
 import type { AshtamSourceItem } from "../ashtam/parser/common";
-import { ProviderRequestError, toProviderDateString } from "./aftn.provider";
 import { getAccessToken, providerBaseUrl } from "./auth.provider";
+import { ProviderRequestError, toProviderDateString } from "./common";
 
 const ASHTAM_ENDPOINT = "/api/ashtam";
 
@@ -69,10 +69,10 @@ const postAshtam = async (
 /**
  * Fetches raw ASHTAM items from the real advisory provider.
  *
- * Mirrors `fetchAftnMessages` in `aftn.provider.ts`: same shared token
- * (`getAccessToken` from `auth.provider.ts`), same base URL, same
- * request/response envelope and 401-then-retry-once behavior — only the
- * endpoint path and payload type differ.
+ * Same shared token (`getAccessToken` from `auth.provider.ts`), same base
+ * URL, same request/response envelope and 401-then-retry-once behavior as the
+ * other advisory provider fetches — only the endpoint path and payload type
+ * differ.
  */
 export const fetchAshtamMessages = async (
   params: FetchAshtamParams,

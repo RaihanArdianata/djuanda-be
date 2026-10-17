@@ -2,16 +2,16 @@ import type { AshtamMessage } from "@repo/database";
 import { logger } from "@repo/logger";
 import ApiError from "@repo/shared/api-error";
 import { env } from "@/config/env";
-// `resolveIncrementalWindow` is a pure windowing helper (latest stored
-// datetime + overlap → [startDate, endDate]) with no AFTN-specific logic.
-// Reused as-is per "jangan membuat duplicate implementation" — ASHTAM does
-// not get its own copy.
-import { resolveIncrementalWindow } from "../../aftn/service/aftn.service";
 import { fetchAshtamHistories } from "../../client/navsim.client";
 import {
   type FetchAshtamParams,
   fetchAshtamMessages,
 } from "../../provider/ashtam.provider";
+// `resolveIncrementalWindow` is a pure windowing helper (latest stored
+// datetime + overlap → [startDate, endDate]) with no AFTN-specific logic.
+// Reused as-is per "jangan membuat duplicate implementation" — ASHTAM does
+// not get its own copy.
+import { resolveIncrementalWindow } from "../../scheduler/sync.utils";
 import { parseAshtamMessage } from "../parser/ashtam.parser";
 import type { AshtamSourceItem } from "../parser/common";
 import {

@@ -7,7 +7,6 @@ import {
   gte,
   ilike,
   lte,
-  max,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -156,11 +155,3 @@ export const findAftnMessageById = async (
   id: string,
 ): Promise<AftnMessage | undefined> =>
   await db.query.aftnMessages.findFirst({ where: eq(aftnMessages.id, id) });
-
-export const findLatestAftnDatetime = async (): Promise<Date | null> => {
-  const [row] = await db
-    .select({ latest: max(aftnMessages.datetime) })
-    .from(aftnMessages);
-
-  return row?.latest ?? null;
-};

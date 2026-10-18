@@ -20,6 +20,21 @@ interface SurfaceConfig {
   polygon: [number, number][];
 }
 
+/** Track tanpa flag onGround tapi altitude MSL di atas ini jelas airborne —
+ *  melintas di atas footprint polygon ≠ berada di permukaan. */
+const AIRBORNE_ALTITUDE_FT = 500;
+
+function isOnSurface(t: MovementTrack): boolean {
+  if (t.onGround === false) return false;
+  if (
+    t.onGround === undefined &&
+    t.altitude !== undefined &&
+    t.altitude > AIRBORNE_ALTITUDE_FT
+  )
+    return false;
+  return true;
+}
+
 function checkOffRoute(
   track: MovementTrack,
   expectedRoute: [number, number][],
@@ -119,6 +134,53 @@ function buildSurfaceCandidate(
   };
 }
 
+/** ≥2 tracks on the same surface → conflict candidates (intruder vs occupant). */
+function collectConflictCandidates(
+  surface: SurfaceConfig,
+  inside: MovementTrack[],
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+  criticalMeters: number,
+): AlertCandidate[] {
+  const entrants = inside.filter((t) =>
+    isTrackEnteringSurface(t, surface.polygon),
+  );
+  const occupants = inside.filter(
+    (t) => !isTrackEnteringSurface(t, surface.polygon),
+  );
+  const occupant = occupants[0] ?? inside[0];
+
+  // Aprons legitimately hold many parked aircraft. Sharing the polygon
+  // alone is not a conflict there — require actual proximity
+  // (criticalMeters) to another track on it. Taxiways keep
+  // the stricter shared-surface semantics: two tracks on one taxiway is
+  // already a conflict regardless of spacing.
+  const isApron = surface.type === "APRON";
+  const isTooClose = (t: MovementTrack): boolean =>
+    inside.some(
+      (o) =>
+        o.trackId !== t.trackId &&
+        haversineMeters([t.latitude, t.longitude], [o.latitude, o.longitude]) <=
+          criticalMeters,
+    );
+
+  const intruders = (
+    entrants.length > 0
+      ? entrants
+      : inside.filter((t) => t.trackId !== occupant.trackId)
+  ).filter(
+    (t) => t.trackId !== occupant.trackId && (!isApron || isTooClose(t)),
+  );
+
+  const candidates: AlertCandidate[] = [];
+  for (const intruder of intruders) {
+    if (intruder.trackId === occupant.trackId) continue;
+    candidates.push(
+      buildSurfaceCandidate(intruder, surface, ctx, occupant, criticalMeters),
+    );
+  }
+  return candidates;
+}
+
 function evaluateSurfaces(
   surfaces: SurfaceConfig[],
   tracks: MovementTrack[],
@@ -132,35 +194,26 @@ function evaluateSurfaces(
   for (const surface of surfaces) {
     const inside = tracks.filter(
       (t) =>
-        t.onGround !== false &&
+        isOnSurface(t) &&
         pointInPolygon([t.latitude, t.longitude], surface.polygon),
     );
     if (inside.length === 0) continue;
 
+    // A lone track inside an ACTIVE surface is just parked/taxiing — normal
+    // ops, not an incursion. Single-entry only alerts on surfaces that are
+    // explicitly closed or restricted (INACTIVE/RESTRICTED), where any
+    // occupancy is by definition unauthorized.
+    const restrictedEntry =
+      surface.status === "INACTIVE" || surface.status === "RESTRICTED";
     if (inside.length === 1) {
-      candidates.push(buildSurfaceCandidate(inside[0], surface, ctx));
+      if (restrictedEntry)
+        candidates.push(buildSurfaceCandidate(inside[0], surface, ctx));
       continue;
     }
 
-    const entrants = inside.filter((t) =>
-      isTrackEnteringSurface(t, surface.polygon),
+    candidates.push(
+      ...collectConflictCandidates(surface, inside, ctx, criticalMeters),
     );
-    const occupants = inside.filter(
-      (t) => !isTrackEnteringSurface(t, surface.polygon),
-    );
-    const occupant = occupants[0] ?? inside[0];
-
-    const intruders =
-      entrants.length > 0
-        ? entrants
-        : inside.filter((t) => t.trackId !== occupant.trackId);
-
-    for (const intruder of intruders) {
-      if (intruder.trackId === occupant.trackId) continue;
-      candidates.push(
-        buildSurfaceCandidate(intruder, surface, ctx, occupant, criticalMeters),
-      );
-    }
   }
 
   return candidates;
@@ -185,7 +238,7 @@ export const taxiwayApronIncursionRule: DetectionRule = {
     if (expectedRoute.length > 0) {
       const candidates: AlertCandidate[] = [];
       for (const track of ctx.tracks) {
-        if (track.onGround === false) continue;
+        if (!isOnSurface(track)) continue;
         const offRoute = checkOffRoute(
           track,
           expectedRoute,

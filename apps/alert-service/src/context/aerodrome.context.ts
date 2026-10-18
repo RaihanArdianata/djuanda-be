@@ -162,6 +162,25 @@ async function fetchAerodromeGeometry(
 }
 
 const TRACK_FRESHNESS_MS = 60_000;
+/** Timestamp lebih dari ini di masa depan (clock skew / replayed data)
+ *  dianggap tidak valid — kalau tidak, `now - ts` negatif selalu lolos
+ *  freshness check dan track mati menempati polygon selamanya. */
+const MAX_FUTURE_SKEW_MS = 30_000;
+/** Track tanpa flag onGround tapi jelas airborne (alt MSL di atas ini)
+ *  tidak boleh menempati permukaan — pesawat melintas di atas apron/taxiway
+ *  plan-view footprint bukan occupancy. */
+const AIRBORNE_ALTITUDE_FT = 500;
+
+function isGroundTrackOccupying(t: MovementTrack, now: number): boolean {
+  if (t.onGround === false) return false;
+  if (t.onGround === undefined) {
+    // Ground status unknown — only count if plausibly on the surface.
+    if (t.altitude !== undefined && t.altitude > AIRBORNE_ALTITUDE_FT)
+      return false;
+  }
+  const age = now - new Date(t.timestamp).getTime();
+  return age <= TRACK_FRESHNESS_MS && age >= -MAX_FUTURE_SKEW_MS;
+}
 
 // Kapan sebuah feature terakhir punya occupant — occupancy dilaporkan tetap
 // OCCUPIED selama occupancyStickyMs setelahnya supaya jitter posisi di batas
@@ -178,11 +197,7 @@ function computeOccupancy(
   tracks: MovementTrack[],
 ): PolygonOccupancy[] {
   const now = Date.now();
-  const ground = tracks.filter(
-    (t) =>
-      t.onGround !== false &&
-      now - new Date(t.timestamp).getTime() <= TRACK_FRESHNESS_MS,
-  );
+  const ground = tracks.filter((t) => isGroundTrackOccupying(t, now));
 
   const occupants = new Map<string, string[]>();
   for (const track of ground) {

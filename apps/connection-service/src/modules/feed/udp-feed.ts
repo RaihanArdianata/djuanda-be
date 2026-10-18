@@ -212,6 +212,14 @@ export class AsterixUdpFeed {
         }
 
         const f = rec.fields;
+        // Test targets, simulated targets, and fixed field-monitor
+        // transponders (MLAT RPUs etc.) transmit permanently from surveyed
+        // ground positions — real data, but they pin taxiway/apron surfaces
+        // as permanently OCCUPIED and spam incursion candidates.
+        if (f.testTarget || f.fixedTransponder || f.simulated) {
+          this.state.packetsSkipped++;
+          continue;
+        }
         const event = this.toTrackEvent(rec.category, rec.edition, f);
         if (!event) {
           this.state.packetsSkipped++;

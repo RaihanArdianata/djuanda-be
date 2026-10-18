@@ -15,6 +15,20 @@ interface RunwayConfig {
   polygon: [number, number][];
 }
 
+/** Track tanpa flag onGround tapi altitude MSL di atas ini jelas airborne. */
+const AIRBORNE_ALTITUDE_FT = 500;
+
+function isOnSurface(t: MovementTrack): boolean {
+  if (t.onGround === false) return false;
+  if (
+    t.onGround === undefined &&
+    t.altitude !== undefined &&
+    t.altitude > AIRBORNE_ALTITUDE_FT
+  )
+    return false;
+  return true;
+}
+
 /** Cek apakah track baru masuk ke runway (titik sebelumnya di luar polygon). */
 function isTrackEnteringRunway(
   track: MovementTrack,
@@ -71,7 +85,7 @@ function collectRunwayCandidates(
 ): AlertCandidate[] {
   const inside = tracks.filter(
     (t) =>
-      t.onGround !== false &&
+      isOnSurface(t) &&
       pointInPolygon([t.latitude, t.longitude], runway.polygon),
   );
   if (inside.length < 2) return [];

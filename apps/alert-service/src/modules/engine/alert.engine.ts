@@ -310,8 +310,27 @@ async function clearExpiredForAirport(airportId: string): Promise<Alert[]> {
       ),
     );
 
+  // Jangan expire alert yang entity-nya masih terlihat: Redis ref dengan ttl
+  // di atas threshold berarti candidate-nya direfresh dalam grace window
+  // (sama seperti clearStaleAlerts). Expire murni umur dulu membuat alert
+  // persisten (pesawat masih di dalam surface >5 menit) siklus
+  // Aktif→Selesai→BARU tanpa henti.
+  const refreshThreshold =
+    ACTIVE_ALERT_TTL_SECONDS - alertServiceEnv.staleGraceSeconds;
+  const refs = await getActiveAlertRefs(airportId);
+  const refKeyByAlertId = new Map(
+    refs
+      .filter((r) => r.alertId && r.alertId !== PENDING_CLAIM_VALUE)
+      .map((r) => [r.alertId as string, r.key]),
+  );
+
   const cleared: Alert[] = [];
   for (const { alertId } of expired) {
+    const refKey = refKeyByAlertId.get(alertId);
+    if (refKey) {
+      const ttl = await getActiveAlertTtl(refKey);
+      if (ttl > refreshThreshold) continue;
+    }
     try {
       const alert = await clearAlertByAlertId(alertId);
       if (alert) cleared.push(alert);

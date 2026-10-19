@@ -1,7 +1,14 @@
 import { failureFromCode, success } from "@repo/shared/api-response";
 import { catchAsync } from "@repo/shared/catch-async";
-import { getAftnMessageById, getAftnMessages } from "../service/aftn.service";
-import type { ListAftnQueryInput } from "../validator/aftn.validator";
+import {
+  getAftnMessageById,
+  getAftnMessages,
+  getLatestAftnAircraftDetail,
+} from "../service/aftn.service";
+import type {
+  LatestAftnQueryInput,
+  ListAftnQueryInput,
+} from "../validator/aftn.validator";
 
 export const list = catchAsync(async (c) => {
   const query = c.get("parsedData") as ListAftnQueryInput;
@@ -33,5 +40,14 @@ export const detail = catchAsync(async (c) => {
 
   return success(c, message, {
     message: "AFTN message retrieved successfully",
+  });
+});
+
+export const latest = catchAsync(async (c) => {
+  const query = c.get("parsedData") as LatestAftnQueryInput;
+  const detail = await getLatestAftnAircraftDetail(query);
+
+  return success(c, detail, {
+    message: "AFTN aircraft detail retrieved successfully",
   });
 });

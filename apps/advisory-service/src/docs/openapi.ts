@@ -280,6 +280,64 @@ registry.registerPath({
 
 registry.registerPath({
   method: "get",
+  path: "/advisory/aftn/latest",
+  tags: ["AFTN"],
+  summary:
+    "Data AFTN terbaru untuk detail pesawat (route, dep, arrival, status)",
+  description:
+    "Cari by callSign, lalu registration. status = messageType pesan " +
+    "terbaru; route/dep/arrival diambil dari pesan terbaru yang nilainya tidak null.",
+  request: {
+    query: z.object({
+      callSign: z.string().optional(),
+      registration: z.string().optional(),
+    }),
+  },
+  responses: {
+    200: {
+      description: "Berhasil",
+      content: {
+        "application/json": {
+          schema: z.object({
+            id: z.string().uuid(),
+            callSign: z.string().nullable(),
+            registration: z.string().nullable(),
+            datetime: z.string(),
+            status: z.string().describe("FPL | DEP | ARR | DLA | CHG | CNL"),
+            route: z.string().nullable(),
+            dep: z.object({
+              icao: z.string().nullable(),
+              time: z.string().nullable(),
+            }),
+            arrival: z.object({
+              icao: z.string().nullable(),
+              time: z.string().nullable(),
+            }),
+          }),
+        },
+      },
+    },
+    404: {
+      description: "Tidak ada pesan AFTN untuk pesawat tersebut",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+    422: {
+      description: "callSign atau registration wajib diisi",
+      content: {
+        "application/json": {
+          schema: z.object({ error: z.string(), message: z.string() }),
+        },
+      },
+    },
+  },
+});
+
+registry.registerPath({
+  method: "get",
   path: "/advisory/aftn/{id}",
   tags: ["AFTN"],
   summary: "Detail satu AFTN message (normalized + raw)",

@@ -46,3 +46,15 @@ export const listAftnQuerySchema = z
   );
 
 export type ListAftnQueryInput = z.infer<typeof listAftnQuerySchema>;
+
+export const latestAftnQuerySchema = z
+  .object({
+    callSign: z.string().trim().min(1).max(16).optional(),
+    registration: z.string().trim().min(1).max(16).optional(),
+  })
+  .refine((value) => value.callSign || value.registration, {
+    message: "callSign atau registration wajib diisi",
+    path: ["callSign"],
+  });
+
+export type LatestAftnQueryInput = z.infer<typeof latestAftnQuerySchema>;

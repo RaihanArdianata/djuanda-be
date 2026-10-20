@@ -155,3 +155,15 @@ export const findAftnMessageById = async (
   id: string,
 ): Promise<AftnMessage | undefined> =>
   await db.query.aftnMessages.findFirst({ where: eq(aftnMessages.id, id) });
+
+export const findRecentAftnMessagesByAircraft = async (
+  by: "callSign" | "registration",
+  value: string,
+  limit = 20,
+): Promise<AftnMessage[]> =>
+  await db
+    .select()
+    .from(aftnMessages)
+    .where(eq(aftnMessages[by], value.trim().toUpperCase()))
+    .orderBy(desc(aftnMessages.datetime))
+    .limit(limit);

@@ -5,6 +5,7 @@
     "": {
       "name": "backend-djuanda",
       "dependencies": {
+        "@aeroswarm/codec": "^0.1.10",
         "bcryptjs": "^3.0.3",
       },
       "devDependencies": {

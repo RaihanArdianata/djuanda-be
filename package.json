@@ -29,6 +29,7 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
+    "@aeroswarm/codec": "^0.1.10",
     "bcryptjs": "^3.0.3"
   }
 }

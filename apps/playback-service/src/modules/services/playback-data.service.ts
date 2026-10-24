@@ -17,6 +17,7 @@ export async function loadTimeline(
   airportId: string,
   from: Date,
   to: Date,
+  includeDummy = true,
 ): Promise<TimelineEvent[]> {
   const [tracks, movements, metars, tafs] = await Promise.all([
     loadAircraftTracks(airportId, from, to),
@@ -25,7 +26,9 @@ export async function loadTimeline(
     loadTafs(airportId, from, to),
   ]);
 
-  const dummy = buildDummyEvents(airportId, from.getTime(), to.getTime());
+  const dummy = includeDummy
+    ? buildDummyEvents(airportId, from.getTime(), to.getTime())
+    : [];
 
   const timeline = [...tracks, ...movements, ...metars, ...tafs, ...dummy];
   timeline.sort((a, b) => a.ts - b.ts);

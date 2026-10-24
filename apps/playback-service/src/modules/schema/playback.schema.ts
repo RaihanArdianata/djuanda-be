@@ -4,7 +4,7 @@ export const createSessionSchema = z.object({
   airportId: z.string().min(1),
   from: z.iso.datetime(),
   to: z.iso.datetime(),
-  speed: z.number().positive().default(1),
+  speed: z.number().positive().max(16).default(1),
 });
 
 export type CreateSessionRequest = z.infer<typeof createSessionSchema>;
@@ -64,6 +64,7 @@ export const playbackSessionRecordSchema = z.object({
   status: playbackStatusSchema,
   cursor: z.number(), // epoch ms, current playhead position
   createdAt: z.string(),
+  fileId: z.string().optional(),
 });
 
 export type PlaybackSessionRecord = z.infer<typeof playbackSessionRecordSchema>;

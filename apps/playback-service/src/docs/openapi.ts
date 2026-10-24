@@ -282,17 +282,30 @@ registry.registerPath({
   method: "get",
   path: "/playback/files/stats",
   tags: ["Playback Files"],
-  summary: "Get playback file storage statistics",
+  summary: "Get playback file statistics",
+  description:
+    "Returns playback file statistics using the same filters as GET /playback/files. " +
+    "When filters are provided, totalFiles, totalStorageBytes, and lastImportAt " +
+    "reflect only the matching files. If no files match, totalFiles and " +
+    "totalStorageBytes return 0, and lastImportAt returns null.",
   security: [{ [bearerAuth.name]: [] }],
+  request: {
+    query: listPlaybackFilesSchema,
+  },
   responses: {
     200: successResponse(
-      "Statistics retrieved",
+      "Filtered playback file statistics retrieved",
       z.object({
-        totalFiles: z.number(),
-        totalStorageBytes: z.number(),
-        lastImportAt: nullableDate,
+        totalFiles: z.number().describe("Number of matching files"),
+        totalStorageBytes: z
+          .number()
+          .describe("Total storage size of matching files in bytes"),
+        lastImportAt: nullableDate.describe(
+          "Latest import timestamp among matching files, or null",
+        ),
       }),
     ),
+    400: errorResponse("Bad Request"),
     ...commonErrors,
   },
 });

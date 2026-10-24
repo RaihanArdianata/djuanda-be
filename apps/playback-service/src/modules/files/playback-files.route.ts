@@ -36,7 +36,11 @@ const app = new Hono()
     }),
     importPlaybackFileRecord,
   )
-  .get("/files/stats", getPlaybackFileStatistics)
+  .get(
+    "/files/stats",
+    validate(listPlaybackFilesSchema),
+    getPlaybackFileStatistics,
+  )
   .get("/files", validate(listPlaybackFilesSchema), listPlaybackFileRecords)
   .get("/files/:id/download", downloadPlaybackFile)
   .post("/files/:id/play", validate(playFileSchema), playPlaybackFile)

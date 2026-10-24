@@ -206,11 +206,12 @@ export const getPlaybackFileRecord = catchAsync(async (c) => {
   });
 });
 
-export const getPlaybackFileStatistics = catchAsync(async (c) =>
-  success(c, await getPlaybackFileStats(), {
+export const getPlaybackFileStatistics = catchAsync(async (c) => {
+  const query = parsed<Parsed<typeof listPlaybackFilesSchema>>(c);
+  return success(c, await getPlaybackFileStats(query), {
     message: "Playback file statistics retrieved",
-  }),
-);
+  });
+});
 
 export const patchPlaybackFileRecord = catchAsync(async (c) => {
   const id = getRequiredParam(c, "id");

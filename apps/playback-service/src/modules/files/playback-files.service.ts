@@ -326,6 +326,38 @@ function calculateStats(events: TimelineEvent[]): RecordingStats {
   };
 }
 
+type PlaybackFileFilter = {
+  search?: string;
+  source?: PlaybackSource;
+  status?: PlaybackFileStatus;
+  airportId?: string;
+  from?: string;
+  to?: string;
+};
+
+function buildPlaybackFileConditions(
+  query: PlaybackFileFilter,
+): ReturnType<typeof and> {
+  const conditions = [];
+  if (query.search) {
+    const term = `%${query.search.replace(/[\\%_]/g, "\\$&")}%`;
+    const searchCondition = or(
+      ilike(playbackFiles.displayName, term),
+      ilike(playbackFiles.originalFileName, term),
+    );
+    if (searchCondition) conditions.push(searchCondition);
+  }
+  if (query.source) conditions.push(eq(playbackFiles.source, query.source));
+  if (query.status) conditions.push(eq(playbackFiles.status, query.status));
+  if (query.airportId)
+    conditions.push(eq(playbackFiles.airportId, query.airportId));
+  if (query.from)
+    conditions.push(gte(playbackFiles.createdAt, new Date(query.from)));
+  if (query.to)
+    conditions.push(lte(playbackFiles.createdAt, new Date(query.to)));
+  return conditions.length ? and(...conditions) : undefined;
+}
+
 export async function listPlaybackFiles(query: {
   search?: string;
   source?: PlaybackSource;
@@ -351,24 +383,7 @@ export async function listPlaybackFiles(query: {
     totalPages: number;
   };
 }> {
-  const conditions = [];
-  if (query.search) {
-    const term = `%${query.search.replace(/[\\%_]/g, "\\$&")}%`;
-    const searchCondition = or(
-      ilike(playbackFiles.displayName, term),
-      ilike(playbackFiles.originalFileName, term),
-    );
-    if (searchCondition) conditions.push(searchCondition);
-  }
-  if (query.source) conditions.push(eq(playbackFiles.source, query.source));
-  if (query.status) conditions.push(eq(playbackFiles.status, query.status));
-  if (query.airportId)
-    conditions.push(eq(playbackFiles.airportId, query.airportId));
-  if (query.from)
-    conditions.push(gte(playbackFiles.createdAt, new Date(query.from)));
-  if (query.to)
-    conditions.push(lte(playbackFiles.createdAt, new Date(query.to)));
-  const where = conditions.length ? and(...conditions) : undefined;
+  const where = buildPlaybackFileConditions(query);
   const sortColumn = {
     createdAt: playbackFiles.createdAt,
     updatedAt: playbackFiles.updatedAt,
@@ -408,16 +423,18 @@ interface PlaybackFileStats {
   lastImportAt: PlaybackFileRow["importedAt"] | null;
 }
 
-export async function getPlaybackFileStats(): Promise<
-  PlaybackFileStats | undefined
-> {
+export async function getPlaybackFileStats(
+  query: PlaybackFileFilter = {},
+): Promise<PlaybackFileStats | undefined> {
+  const where = buildPlaybackFileConditions(query);
   const [row] = await db
     .select({
       totalFiles: sql<number>`count(*)::int`,
       totalStorageBytes: sql<number>`coalesce(sum(${playbackFiles.sizeBytes}), 0)::float8`,
       lastImportAt: max(playbackFiles.importedAt),
     })
-    .from(playbackFiles);
+    .from(playbackFiles)
+    .where(where);
   return row;
 }
 

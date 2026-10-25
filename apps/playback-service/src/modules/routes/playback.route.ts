@@ -6,9 +6,11 @@ import {
   deletePlaybackSession,
   getPlaybackSessionById,
 } from "../controller/playback.controller";
+import playbackFilesRoute from "../files/playback-files.route";
 import { controlSchema, createSessionSchema } from "../schema/playback.schema";
 
 const app = new Hono()
+  .route("/", playbackFilesRoute)
   .post("/sessions", validate(createSessionSchema), createPlaybackSession)
   .get("/sessions/:id", getPlaybackSessionById)
   .post(

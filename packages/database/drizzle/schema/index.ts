@@ -8,6 +8,7 @@ export * from "./logs";
 export * from "./notam";
 export * from "./notams";
 export * from "./notifications";
+export * from "./playback-files";
 export * from "./rbac";
 export * from "./relations";
 export * from "./users";

@@ -32,6 +32,7 @@ export function ensureEngine(
   airportId: string,
   from: Date,
   to: Date,
+  fileId?: string,
 ): Promise<EngineState> {
   const existing = engines.get(sessionId);
   if (existing) return Promise.resolve(existing);
@@ -40,7 +41,14 @@ export function ensureEngine(
   if (!pending) {
     pending = (async (): Promise<EngineState> => {
       try {
-        const timeline = await loadTimeline(airportId, from, to);
+        // Loaded lazily: time-range sessions never import the files module
+        // (minio/bullmq/playback_files), so their module graph stays exactly
+        // what it was before playback files existed.
+        const timeline = fileId
+          ? await (
+              await import("../files/playback-files.service")
+            ).loadEventsFromFile(fileId)
+          : await loadTimeline(airportId, from, to);
         const engine: EngineState = { timeline, cursorIndex: 0 };
         engines.set(sessionId, engine);
         return engine;
@@ -69,6 +77,7 @@ export async function applyControl(
     session.airportId,
     new Date(session.from),
     new Date(session.to),
+    session.fileId,
   );
 
   switch (control.action) {
@@ -109,9 +118,13 @@ export async function applyControl(
       break;
     }
     case "set_speed": {
-      if (control.value === undefined || control.value <= 0)
+      if (
+        control.value === undefined ||
+        control.value <= 0 ||
+        control.value > 16
+      )
         throw new ApiError("BAD_REQUEST", {
-          message: "set_speed requires a positive value",
+          message: "set_speed requires a positive value of at most 16",
         });
       session.speed = control.value;
       await saveSessionRecord(session);

@@ -12,6 +12,7 @@ export async function createSessionRecord(params: {
   from: Date;
   to: Date;
   speed: number;
+  fileId?: string;
 }): Promise<PlaybackSessionRecord> {
   const record: PlaybackSessionRecord = {
     id: randomUUID(),
@@ -22,6 +23,7 @@ export async function createSessionRecord(params: {
     status: "created",
     cursor: params.from.getTime(),
     createdAt: new Date().toISOString(),
+    ...(params.fileId ? { fileId: params.fileId } : {}),
   };
 
   await saveSessionRecord(record);
@@ -40,6 +42,7 @@ export async function saveSessionRecord(
     status: record.status,
     cursor: String(record.cursor),
     createdAt: record.createdAt,
+    ...(record.fileId ? { fileId: record.fileId } : {}),
   });
   await redis.expire(sessionKey(record.id), SESSION_TTL_SECONDS);
 }
@@ -59,6 +62,7 @@ export async function getSessionRecord(
     status: raw.status as PlaybackStatus,
     cursor: Number(raw.cursor),
     createdAt: raw.createdAt,
+    ...(raw.fileId ? { fileId: raw.fileId } : {}),
   };
 }
 

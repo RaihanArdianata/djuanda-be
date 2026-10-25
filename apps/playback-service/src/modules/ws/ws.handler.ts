@@ -51,6 +51,7 @@ export const playbackWsHandlers = upgradeWebSocket((c) => {
         session.airportId,
         new Date(session.from),
         new Date(session.to),
+        session.fileId,
       ).catch((err) => logger.error("playback engine prime failed", err));
     },
 

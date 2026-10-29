@@ -6,8 +6,11 @@ import { publishWeatherEvent } from "../../messaging/weather.producer";
 import { isForecastStale, isObservationStale } from "../lib/staleness";
 import { parseMetar } from "../parser/metar.parser";
 import { parseTaf } from "../parser/taf.parser";
-import { fetchLatestMetar } from "../provider/metar.provider";
-import { fetchLatestTaf } from "../provider/taf.provider";
+import {
+  fetchLatestBmkgMetar,
+  fetchLatestBmkgSpeci,
+  fetchLatestBmkgTaf,
+} from "../provider/bmkg.provider";
 import { saveForecast, saveObservation } from "./weather.service";
 
 // Converts an interval in ms into a wall-clock cron expression, e.g.
@@ -42,6 +45,7 @@ const intervalMsToCronExpression = (intervalMs: number): string => {
 };
 
 let metarTask: ScheduledTask | null = null;
+let speciTask: ScheduledTask | null = null;
 let tafTask: ScheduledTask | null = null;
 
 export const pollMetar = async (): Promise<void> => {
@@ -50,7 +54,7 @@ export const pollMetar = async (): Promise<void> => {
   logger.info({ station }, "metar polling started");
 
   try {
-    const item = await fetchLatestMetar(station);
+    const item = await fetchLatestBmkgMetar();
     if (!item) {
       logger.info(
         { station, durationMs: Date.now() - startedAt, result: "no-data" },
@@ -63,12 +67,12 @@ export const pollMetar = async (): Promise<void> => {
 
     await saveObservation({
       station: item.icaoId,
-      kind: item.metarType,
-      observedAt: new Date(item.obsTime * 1000),
+      kind: "METAR",
+      observedAt: new Date(item.obsTime),
       raw: item.rawOb,
       parsed,
-      providerRaw: { ...item },
-      source: "aviationweather",
+      providerRaw: { ...item.providerRaw, reportId: item.reportId },
+      source: "bmkg",
     });
 
     await publishWeatherEvent(item.icaoId, item.icaoId, parsed, null);
@@ -84,9 +88,9 @@ export const pollMetar = async (): Promise<void> => {
 
     await publishToTopic("weather.updated", {
       station: item.icaoId,
-      kind: item.metarType,
-      observedAt: new Date(item.obsTime * 1000).toISOString(),
-      stale: isObservationStale(new Date(item.obsTime * 1000)),
+      kind: "METAR",
+      observedAt: new Date(item.obsTime).toISOString(),
+      stale: isObservationStale(new Date(item.obsTime)),
     });
   } catch (err) {
     logger.error(
@@ -99,13 +103,50 @@ export const pollMetar = async (): Promise<void> => {
   }
 };
 
+export const pollSpeci = async (): Promise<void> => {
+  const station = env.WEATHER_STATION_ICAO;
+  const startedAt = Date.now();
+  logger.info({ station }, "speci polling started");
+  try {
+    const item = await fetchLatestBmkgSpeci();
+    if (!item) return;
+    const parsed = parseMetar(item.rawOb);
+    await saveObservation({
+      station: item.icaoId,
+      kind: "SPECI",
+      observedAt: new Date(item.obsTime),
+      raw: item.rawOb,
+      parsed,
+      providerRaw: { ...item.providerRaw, reportId: item.reportId },
+      source: "bmkg",
+    });
+    await publishWeatherEvent(item.icaoId, item.icaoId, parsed, null);
+    await publishToTopic("weather.updated", {
+      station: item.icaoId,
+      kind: "SPECI",
+      observedAt: new Date(item.obsTime).toISOString(),
+      stale: isObservationStale(new Date(item.obsTime)),
+    });
+    logger.info(
+      { station, durationMs: Date.now() - startedAt, result: "saved" },
+      "speci polling finished",
+    );
+  } catch (err) {
+    logger.error(
+      { err, station, durationMs: Date.now() - startedAt },
+      "speci polling cycle failed",
+    );
+    throw err;
+  }
+};
+
 export const pollTaf = async (): Promise<void> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "taf polling started");
 
   try {
-    const item = await fetchLatestTaf(station);
+    const item = await fetchLatestBmkgTaf();
     if (!item) {
       logger.info(
         { station, durationMs: Date.now() - startedAt, result: "no-data" },
@@ -114,17 +155,19 @@ export const pollTaf = async (): Promise<void> => {
       return;
     }
 
-    const parsed = parseTaf(item.rawTAF, item.fcsts);
+    const parsed = parseTaf(item.rawTaf, [
+      { timeFrom: item.validTimeFrom / 1000, timeTo: item.validTimeTo / 1000 },
+    ]);
 
     await saveForecast({
       station: item.icaoId,
       issuedAt: new Date(item.issueTime),
-      validFrom: new Date(item.validTimeFrom * 1000),
-      validTo: new Date(item.validTimeTo * 1000),
-      raw: item.rawTAF,
+      validFrom: new Date(item.validTimeFrom),
+      validTo: new Date(item.validTimeTo),
+      raw: item.rawTaf,
       parsed,
-      providerRaw: { ...item },
-      source: "aviationweather",
+      providerRaw: { ...item.providerRaw, reportId: item.reportId },
+      source: "bmkg",
     });
 
     await publishWeatherEvent(item.icaoId, item.icaoId, null, parsed);
@@ -140,9 +183,9 @@ export const pollTaf = async (): Promise<void> => {
 
     await publishToTopic("weather.forecast.updated", {
       station: item.icaoId,
-      validFrom: new Date(item.validTimeFrom * 1000).toISOString(),
-      validTo: new Date(item.validTimeTo * 1000).toISOString(),
-      stale: isForecastStale(new Date(item.validTimeTo * 1000)),
+      validFrom: new Date(item.validTimeFrom).toISOString(),
+      validTo: new Date(item.validTimeTo).toISOString(),
+      stale: isForecastStale(new Date(item.validTimeTo)),
     });
   } catch (err) {
     logger.error(
@@ -155,11 +198,16 @@ export const pollTaf = async (): Promise<void> => {
 
 export const startWeatherPolling = (): void => {
   const metarCron = intervalMsToCronExpression(env.METAR_POLL_INTERVAL_MS);
+  const speciCron = intervalMsToCronExpression(env.SPECI_POLL_INTERVAL_MS);
   const tafCron = intervalMsToCronExpression(env.TAF_POLL_INTERVAL_MS);
 
   metarTask = cron.schedule(metarCron, pollMetar, {
     name: "metar-poll",
     noOverlap: true, // node-cron itself skips a tick if the previous run hasn't finished yet
+  });
+  speciTask = cron.schedule(speciCron, pollSpeci, {
+    name: "speci-poll",
+    noOverlap: true,
   });
 
   tafTask = cron.schedule(tafCron, pollTaf, {
@@ -170,11 +218,13 @@ export const startWeatherPolling = (): void => {
   // v4 tasks start automatically once scheduled — fire an out-of-schedule
   // run immediately so we don't wait for the first wall-clock tick.
   void metarTask.execute();
+  void speciTask.execute();
   void tafTask.execute();
 
   logger.info(
     {
       metarIntervalMs: env.METAR_POLL_INTERVAL_MS,
+      speciIntervalMs: env.SPECI_POLL_INTERVAL_MS,
       tafIntervalMs: env.TAF_POLL_INTERVAL_MS,
       metarCron,
       tafCron,
@@ -187,6 +237,10 @@ export const stopWeatherPolling = (): void => {
   if (metarTask) {
     void metarTask.destroy();
     metarTask = null;
+  }
+  if (speciTask) {
+    void speciTask.destroy();
+    speciTask = null;
   }
   if (tafTask) {
     void tafTask.destroy();

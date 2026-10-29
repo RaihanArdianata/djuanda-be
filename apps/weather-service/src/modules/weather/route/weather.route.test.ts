@@ -26,12 +26,14 @@ const getCurrentObservation = mock();
 const getObservationHistory = mock();
 const getObservationHistoryCount = mock();
 const getActiveForecast = mock();
+const getLatestObservation = mock();
 
 mock.module("../services/weather.service", () => ({
   getCurrentObservation,
   getObservationHistory,
   getObservationHistoryCount,
   getActiveForecast,
+  getLatestObservation,
   saveObservation: mock(),
   saveForecast: mock(),
 }));
@@ -81,6 +83,7 @@ beforeEach(() => {
   getObservationHistory.mockReset();
   getObservationHistoryCount.mockReset();
   getActiveForecast.mockReset();
+  getLatestObservation.mockReset();
 });
 
 describe("GET /current", () => {
@@ -125,6 +128,33 @@ describe("GET /current", () => {
   });
 });
 
+describe("product-specific observation routes", () => {
+  it("returns the latest METAR from /metar", async () => {
+    getLatestObservation.mockResolvedValue(sampleObservation);
+
+    const res = await weatherRoute.request("/metar?station=WARR");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.kind).toBe("METAR");
+    expect(getLatestObservation).toHaveBeenCalledWith("WARR", "METAR");
+  });
+
+  it("returns the latest SPECI from /speci", async () => {
+    getLatestObservation.mockResolvedValue({
+      ...sampleObservation,
+      kind: "SPECI",
+    });
+
+    const res = await weatherRoute.request("/speci?station=WARR");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.kind).toBe("SPECI");
+    expect(getLatestObservation).toHaveBeenCalledWith("WARR", "SPECI");
+  });
+});
+
 describe("GET /forecast", () => {
   it("returns the active TAF wrapped in the ApiResponse envelope", async () => {
     getActiveForecast.mockResolvedValue(sampleForecast);
@@ -145,6 +175,18 @@ describe("GET /forecast", () => {
 
     expect(res.status).toBe(404);
     expect(body.error.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("GET /taf", () => {
+  it("returns the active TAF from the product-specific route", async () => {
+    getActiveForecast.mockResolvedValue(sampleForecast);
+
+    const res = await weatherRoute.request("/taf?station=WARR");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.station).toBe("WARR");
   });
 });
 

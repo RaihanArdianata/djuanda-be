@@ -4,6 +4,7 @@ import { catchAsync } from "@repo/shared/catch-async";
 import {
   getActiveForecast,
   getCurrentObservation,
+  getLatestObservation,
   getObservationHistory,
   getObservationHistoryCount,
 } from "../services/weather.service";
@@ -64,3 +65,22 @@ export const getForecast = catchAsync(async (c) => {
     message: "Weather forecast fetched successfully",
   });
 });
+
+const getProductObservation = (kind: "METAR" | "SPECI"): typeof getCurrent =>
+  catchAsync(async (c) => {
+    const parsedData = c.get("parsedData") as GetCurrentObservationParams;
+    const result = await getLatestObservation(parsedData.station, kind);
+
+    if (!result) {
+      throw new ApiError("NOT_FOUND", {
+        message: `No ${kind} observation has been recorded for this station yet`,
+      });
+    }
+
+    return success(c, result, {
+      message: `${kind} weather observation fetched successfully`,
+    });
+  });
+
+export const getMetar = getProductObservation("METAR");
+export const getSpeci = getProductObservation("SPECI");

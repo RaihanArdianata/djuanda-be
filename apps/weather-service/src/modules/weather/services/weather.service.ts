@@ -30,6 +30,8 @@ export interface ForecastResult {
   stale: boolean;
 }
 
+export type ObservationKind = "METAR" | "SPECI";
+
 interface SaveObservationParams {
   station: string;
   kind: string;
@@ -54,20 +56,49 @@ interface SaveForecastParams {
 export async function saveObservation(
   params: SaveObservationParams,
 ): Promise<void> {
+  const existing = await db.query.weatherObservations.findFirst({
+    where: and(
+      eq(weatherObservations.station, params.station),
+      eq(weatherObservations.kind, params.kind),
+      eq(weatherObservations.observedAt, params.observedAt),
+      eq(weatherObservations.source, params.source),
+    ),
+  });
+  if (existing) return;
   await db.insert(weatherObservations).values(params);
 }
 
 export async function saveForecast(params: SaveForecastParams): Promise<void> {
+  const existing = await db.query.weatherForecasts.findFirst({
+    where: and(
+      eq(weatherForecasts.station, params.station),
+      eq(weatherForecasts.issuedAt, params.issuedAt),
+      eq(weatherForecasts.source, params.source),
+    ),
+  });
+  if (existing) return;
   await db.insert(weatherForecasts).values(params);
 }
 
 export async function getCurrentObservation(
   station: string | undefined,
 ): Promise<CurrentObservationResult | null> {
+  return getLatestObservation(station, undefined);
+}
+
+export async function getLatestObservation(
+  station: string | undefined,
+  kind: ObservationKind | undefined,
+): Promise<CurrentObservationResult | null> {
   const resolvedStation = station ?? env.WEATHER_STATION_ICAO;
 
   const observation = await db.query.weatherObservations.findFirst({
-    where: eq(weatherObservations.station, resolvedStation),
+    where: kind
+      ? and(
+          eq(weatherObservations.station, resolvedStation),
+          eq(weatherObservations.kind, kind),
+        )
+      : eq(weatherObservations.station, resolvedStation),
     orderBy: desc(weatherObservations.observedAt),
   });
 

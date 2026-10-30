@@ -97,6 +97,24 @@ Langkahnya:
 
 ## Dokumentasi
 
+- **Weather API untuk frontend**: [docs/weather-api.md](docs/weather-api.md)
+
+### Weather API
+
+Weather polling uses the BMKG Web Aviation API for WARR with separate METAR,
+SPECI, and TAF products. The BMKG token is backend-only and must be supplied
+through deployment environment configuration; never log or commit its value.
+
+Frontend-facing product routes:
+
+- `GET /weather/metar`
+- `GET /weather/speci`
+- `GET /weather/taf`
+
+The existing `/weather/current`, `/weather/history`, and `/weather/forecast`
+routes remain available. The BMKG `metar-speci` and SIGMET endpoints are not
+used by this service.
+
 - **A-SMGCS Juanda — kebutuhan inti → tugas implementasi**: [docs/asmgcs/000-ringkasan.md](docs/asmgcs/000-ringkasan.md)
   (seri 000–007: lalu lintas, warning function, persistence, NOTAM/ASHTAM, cuaca BMKG,
   record/playback, rules & taxiway lock)

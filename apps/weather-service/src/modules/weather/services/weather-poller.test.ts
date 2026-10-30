@@ -1,13 +1,23 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
 
-const fetchLatestMetar = mock();
-const fetchLatestTaf = mock();
+const fetchLatestBmkgMetar = mock();
+const fetchLatestBmkgSpeci = mock();
+const fetchLatestBmkgTaf = mock();
 const saveObservation = mock();
 const saveForecast = mock();
 
-mock.module("../provider/metar.provider", () => ({ fetchLatestMetar }));
-mock.module("../provider/taf.provider", () => ({ fetchLatestTaf }));
+mock.module("../provider/bmkg.provider", () => ({
+  fetchLatestBmkgMetar,
+  fetchLatestBmkgSpeci,
+  fetchLatestBmkgTaf,
+}));
 mock.module("./weather.service", () => ({ saveObservation, saveForecast }));
+mock.module("../../messaging/weather.producer", () => ({
+  publishWeatherEvent: mock(),
+}));
+mock.module("@repo/shared/sse/publisher", () => ({
+  publishToTopic: mock(),
+}));
 
 // Imported dynamically, after the mocks above are registered, so the poller
 // picks up the mocked provider + persistence layer instead of the real ones
@@ -42,15 +52,22 @@ const tafItem = {
 };
 
 beforeEach(() => {
-  fetchLatestMetar.mockReset();
-  fetchLatestTaf.mockReset();
+  fetchLatestBmkgMetar.mockReset();
+  fetchLatestBmkgSpeci.mockReset();
+  fetchLatestBmkgTaf.mockReset();
   saveObservation.mockReset();
   saveForecast.mockReset();
 });
 
 describe("pollMetar", () => {
   it("fetches, parses, and saves a new observation", async () => {
-    fetchLatestMetar.mockResolvedValue(metarItem);
+    fetchLatestBmkgMetar.mockResolvedValue({
+      icaoId: "WARR",
+      obsTime: 1_800_000_000,
+      rawOb: metarItem.rawOb,
+      reportId: "bmkg-metar-1",
+      providerRaw: {},
+    });
 
     await pollMetar();
 
@@ -59,12 +76,12 @@ describe("pollMetar", () => {
     expect(saved.station).toBe("WARR");
     expect(saved.kind).toBe("METAR");
     expect(saved.raw).toBe(metarItem.rawOb);
-    expect(saved.source).toBe("aviationweather");
+    expect(saved.source).toBe("bmkg");
     expect((saved.parsed as { windDirection: number }).windDirection).toBe(90);
   });
 
   it("does not save anything when the provider fails gracefully (returns null)", async () => {
-    fetchLatestMetar.mockResolvedValue(null);
+    fetchLatestBmkgMetar.mockResolvedValue(null);
 
     // Should resolve, not throw -- a provider outage must not stop the poller.
     await expect(pollMetar()).resolves.toBeUndefined();
@@ -72,16 +89,49 @@ describe("pollMetar", () => {
   });
 
   it("propagates a persistence failure instead of swallowing it", async () => {
-    fetchLatestMetar.mockResolvedValue(metarItem);
+    fetchLatestBmkgMetar.mockResolvedValue({
+      icaoId: "WARR",
+      obsTime: 1_800_000_000,
+      rawOb: metarItem.rawOb,
+      reportId: "bmkg-metar-1",
+      providerRaw: {},
+    });
     saveObservation.mockRejectedValue(new Error("db unavailable"));
 
     await expect(pollMetar()).rejects.toThrow("db unavailable");
   });
 });
 
+describe("pollSpeci", () => {
+  it("saves a BMKG SPECI as a distinct observation kind", async () => {
+    fetchLatestBmkgSpeci.mockResolvedValue({
+      icaoId: "WARR",
+      obsTime: 1_800_000_000,
+      rawOb: "SPECI WARR 080500Z 09008KT 9000 FEW018 30/24 Q1009=",
+      reportId: "bmkg-speci-1",
+      providerRaw: {},
+    });
+
+    const { pollSpeci } = await import("./weather-poller");
+    await pollSpeci();
+
+    const [saved] = saveObservation.mock.calls[0] as [Record<string, unknown>];
+    expect(saved.kind).toBe("SPECI");
+    expect(saved.source).toBe("bmkg");
+  });
+});
+
 describe("pollTaf", () => {
   it("fetches, parses, and saves a new forecast", async () => {
-    fetchLatestTaf.mockResolvedValue(tafItem);
+    fetchLatestBmkgTaf.mockResolvedValue({
+      icaoId: "WARR",
+      issueTime: tafItem.issueTime,
+      validTimeFrom: tafItem.validTimeFrom * 1000,
+      validTimeTo: tafItem.validTimeTo * 1000,
+      rawTaf: tafItem.rawTAF,
+      reportId: "bmkg-taf-1",
+      providerRaw: {},
+    });
 
     await pollTaf();
 
@@ -89,19 +139,29 @@ describe("pollTaf", () => {
     const [saved] = saveForecast.mock.calls[0] as [Record<string, unknown>];
     expect(saved.station).toBe("WARR");
     expect(saved.raw).toBe(tafItem.rawTAF);
-    expect(saved.source).toBe("aviationweather");
+    expect(saved.source).toBe("bmkg");
     expect((saved.parsed as { periods: unknown[] }).periods).toHaveLength(1);
+    expect(saved.validFrom).toEqual(new Date(tafItem.validTimeFrom * 1000));
+    expect(saved.validTo).toEqual(new Date(tafItem.validTimeTo * 1000));
   });
 
   it("does not save anything when the provider fails gracefully (returns null)", async () => {
-    fetchLatestTaf.mockResolvedValue(null);
+    fetchLatestBmkgTaf.mockResolvedValue(null);
 
     await expect(pollTaf()).resolves.toBeUndefined();
     expect(saveForecast).not.toHaveBeenCalled();
   });
 
   it("propagates a persistence failure instead of swallowing it", async () => {
-    fetchLatestTaf.mockResolvedValue(tafItem);
+    fetchLatestBmkgTaf.mockResolvedValue({
+      icaoId: "WARR",
+      issueTime: tafItem.issueTime,
+      validTimeFrom: tafItem.validTimeFrom * 1000,
+      validTimeTo: tafItem.validTimeTo * 1000,
+      rawTaf: tafItem.rawTAF,
+      reportId: "bmkg-taf-1",
+      providerRaw: {},
+    });
     saveForecast.mockRejectedValue(new Error("db unavailable"));
 
     await expect(pollTaf()).rejects.toThrow("db unavailable");

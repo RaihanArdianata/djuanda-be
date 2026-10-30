@@ -5,6 +5,8 @@ import {
   getCurrent,
   getForecast,
   getHistory,
+  getMetar,
+  getSpeci,
 } from "../controller/weather.controller";
 import {
   getCurrentObservationSchema,
@@ -18,5 +20,9 @@ const app = new Hono()
   .get("/current", validate(getCurrentObservationSchema), getCurrent)
   .get("/history", validate(getObservationHistorySchema), getHistory)
   .get("/forecast", validate(getForecastSchema), getForecast);
+
+app.get("/metar", validate(getCurrentObservationSchema), getMetar);
+app.get("/speci", validate(getCurrentObservationSchema), getSpeci);
+app.get("/taf", validate(getForecastSchema), getForecast);
 
 export default app;

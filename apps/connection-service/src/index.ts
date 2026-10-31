@@ -19,6 +19,11 @@ import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
+import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
+import {
+  createTrackFuser,
+  type TrackFuser,
+} from "./modules/fusion/track-fuser";
 import { isValidMonitorToken } from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
@@ -148,8 +153,28 @@ const movements = createMovementRecorder({
   },
 });
 movements.startSweep();
+
+// Radar and MLAT often see the same aircraft; without this each feed's own
+// track id would replace the other's on every update.
+const fusionConfig = fusionConfigFromEnv(process.env);
+for (const w of fusionConfig.warnings) logger.warn(w);
+const fuser: TrackFuser | null = fusionConfig.enabled
+  ? createTrackFuser(fusionConfig.options)
+  : null;
+const FUSION_SWEEP_MS = 30_000;
+const fusionSweep = fuser
+  ? setInterval(() => fuser.sweep(), FUSION_SWEEP_MS)
+  : null;
+logger.info(
+  fuser ? fusionConfig.options : {},
+  fuser
+    ? "track fusion enabled"
+    : "track fusion disabled (FUSION_ENABLED=false)",
+);
+
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
+  fuser?.forget(trackId);
 });
 
 // Flight plans: kept in memory for the live picture and forwarded to Kafka so
@@ -167,6 +192,7 @@ const onFlightPlan = (event: FlightPlanEvent): void => {
 };
 
 startAsterixFeeds({
+  fuse: fuser ? (event: FusedTrackEvent) => fuser.ingest(event) : undefined,
   persist: (event: FusedTrackEventLike): void => {
     enqueueTrackEvent(event, { awaitFlush: false })
       .then(() => feedMetrics.tracksPersisted.inc())
@@ -205,6 +231,7 @@ registerHealthProbe({
     tracks: liveRuntime.state.size,
     flightplans: liveRuntime.plans.size,
   }),
+  fusion: () => fuser?.stats() ?? null,
   database: async (): Promise<boolean> => {
     const timeout = new Promise<boolean>((resolve) =>
       setTimeout(() => resolve(false), DB_PROBE_TIMEOUT_MS),
@@ -264,6 +291,7 @@ const shutdown = async (signal: string): Promise<never> => {
   server.stop();
   liveRuntime.stop();
   movements.stop();
+  if (fusionSweep) clearInterval(fusionSweep);
   await stopAsterixFeeds();
   await stopAftnFeeds();
   await flightPlanPublisher.stop();

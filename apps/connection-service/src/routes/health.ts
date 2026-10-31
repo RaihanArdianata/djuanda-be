@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import type { FeedState } from "../modules/feed/asterix-feed";
+import type { FusionStats } from "../modules/fusion/track-fuser";
 
 /** Where health reads real state from; registered by index.ts once everything exists. */
 export interface HealthProbe {
   feeds(): FeedState[];
   live(): { clients: number; tracks: number; flightplans: number };
+  /** Null when fusion is switched off. */
+  fusion?(): FusionStats | null;
   /** True when the database answered. */
   database(): Promise<boolean>;
 }
@@ -27,6 +30,7 @@ export interface HealthReport {
   decoder: { status: DecoderStatus };
   database: { status: "up" | "down" | "unknown" };
   live: { clients: number; tracks: number; flightplans: number } | null;
+  fusion: FusionStats | null;
 }
 
 /** More than this share of datagrams undecodable means the decoder (or the feed format) is wrong. */
@@ -80,6 +84,7 @@ export async function buildHealth(
     decoder: { status: decoder },
     database: { status: database },
     live: probe?.live() ?? null,
+    fusion: probe?.fusion?.() ?? null,
   };
 }
 

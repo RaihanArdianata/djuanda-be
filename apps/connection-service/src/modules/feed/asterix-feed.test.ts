@@ -276,3 +276,63 @@ describe("startAsterixFeeds", () => {
     expect(f.sources.map((s) => s.name)).toEqual(["asterix-tcp"]);
   });
 });
+
+describe("startAsterixFeeds fusion", () => {
+  const env = { AEROSWARM_FEED_UDP_PORT: "30000" };
+  beforeEach(() => {
+    enqueued.length = 0;
+  });
+  afterEach(async () => {
+    await stopAsterixFeeds();
+  });
+
+  it("gives storage and onTrack the fused event, not the raw one", () => {
+    const f = fakeFactory();
+    const seen: unknown[] = [];
+    startAsterixFeeds({
+      env,
+      createSource: f.createSource,
+      persist,
+      fuse: (e) => ({ ...e, trackId: "canonical" }),
+      handlers: { onTrack: (e) => seen.push(e) },
+    });
+    first(f.sources).emit(track({ trackId: "raw" }));
+    expect(enqueued.map((e) => (e as { trackId: string }).trackId)).toEqual([
+      "canonical",
+    ]);
+    expect(seen.map((e) => (e as { trackId: string }).trackId)).toEqual([
+      "canonical",
+    ]);
+  });
+
+  it("swallows an event the fuser returns null for", () => {
+    const f = fakeFactory();
+    const seen: unknown[] = [];
+    startAsterixFeeds({
+      env,
+      createSource: f.createSource,
+      persist,
+      fuse: () => null,
+      handlers: { onTrack: (e) => seen.push(e) },
+    });
+    first(f.sources).emit(track());
+    expect(enqueued).toHaveLength(0);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("falls back to the raw event when the fuser throws", () => {
+    const f = fakeFactory();
+    startAsterixFeeds({
+      env,
+      createSource: f.createSource,
+      persist,
+      fuse: () => {
+        throw new Error("boom");
+      },
+    });
+    first(f.sources).emit(track({ trackId: "raw" }));
+    expect(enqueued.map((e) => (e as { trackId: string }).trackId)).toEqual([
+      "raw",
+    ]);
+  });
+});

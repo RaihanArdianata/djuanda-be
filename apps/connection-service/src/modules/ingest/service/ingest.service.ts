@@ -97,19 +97,18 @@ export interface FusedTrackEventLike {
   airportId?: string;
   lifecycle?: string;
   fusedAt: number;
+  // No index signatures on the nested objects: a typed FusedTrackEvent from
+  // @aeroswarm/ingest must be assignable (interfaces have no implicit one).
   identity?: {
     targetType?: string;
     vehicleFleet?: number;
-    [key: string]: unknown;
   };
   position?: {
     alt?: number;
     onGround?: boolean;
-    [key: string]: unknown;
   };
   velocity?: {
     groundSpeed?: number;
-    [key: string]: unknown;
   };
   [key: string]: unknown;
 }

@@ -52,3 +52,20 @@ Or remove it with one command:
 ```bash
 (sudo crontab -l | grep -v 'scripts/cleanup.sh') | sudo crontab -
 ```
+
+## `compare-live.ts`
+
+Membandingkan dua stream live (`/ws/tracks/live`) berdampingan, misalnya AeroSwarm (A) dengan
+connection-service baru (B), untuk jalan paralel sebelum cutover (task 11).
+
+```bash
+bun scripts/compare-live.ts   --a https://asmgcs.midigi.id/aeroswarm --a-token <token AeroSwarm>   --b https://asmgcs.midigi.id           --b-token <salah satu CONNECTION_API_TOKENS>   --airport WARR --duration 3600 --interval 5
+```
+
+Pesawat dicocokkan lewat `icao24` (lalu callsign), bukan `trackId`, karena id berbeda antar sistem.
+Dilaporkan: rata-rata jumlah track, persentase pesawat yang hanya ada di satu sisi (beserta yang
+paling sering), selisih posisi (p50/p95/max, hanya bila laporan keduanya berselang kurang dari 5 dtk),
+ketidakcocokan `status` dan `flightPlan.phase`. Ambang bawaan: hanya-satu-sisi ≤ 5%, posisi p95 ≤ 100 m,
+status ≤ 5%, phase ≤ 2%. Exit code 0 = semua lolos, 1 = ada yang gagal, 2 = argumen salah. Token juga
+bisa lewat `COMPARE_A_TOKEN` / `COMPARE_B_TOKEN`. Tes: `bun test scripts/lib`.
+

@@ -1,6 +1,6 @@
+import type { FusionStats } from "@aeroswarm/live-server";
 import { Hono } from "hono";
 import type { FeedState } from "../modules/feed/asterix-feed";
-import type { FusionStats } from "../modules/fusion/track-fuser";
 
 /** Where health reads real state from; registered by index.ts once everything exists. */
 export interface HealthProbe {

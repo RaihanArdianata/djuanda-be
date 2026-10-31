@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createSocket } from "node:dgram";
 import type { FusedTrackEvent } from "@aeroswarm/core";
-import { createTrackState } from "@aeroswarm/live-server";
+import { createTrackFuser, createTrackState } from "@aeroswarm/live-server";
 import {
   getFeedStates,
   startAsterixFeeds,
   stopAsterixFeeds,
 } from "../feed/asterix-feed";
 import { fusionConfigFromEnv } from "./fusion-config";
-import { createTrackFuser } from "./track-fuser";
 
 // Real captured CAT021 report (MAS179, Mode-S 75021b).
 const CAT21 = Buffer.from(

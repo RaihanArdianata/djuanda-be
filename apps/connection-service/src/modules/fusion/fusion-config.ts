@@ -1,25 +1,14 @@
+import {
+  DEFAULT_AIRBORNE_PRIORITY,
+  DEFAULT_SURFACE_PRIORITY,
+  defaultFusionOptions,
+  type FusionOptions,
+} from "@aeroswarm/live-server";
 import { type Env, str } from "../feed/feed-env";
-import type { FusionOptions } from "./track-fuser";
 
-/** MLAT first (CAT010 surface, CAT020 wide-area), then ADS-B, then radar. */
-export const DEFAULT_SURFACE_PRIORITY: string[] = [
-  "asterix-cat010",
-  "asterix-cat011",
-  "asterix-cat020",
-  "asterix-cat021",
-  "asterix-cat062",
-  "asterix-cat048",
-];
-
-/** MLAT is preferred in the air too: it is the sensor this deployment trusts most. */
-export const DEFAULT_AIRBORNE_PRIORITY: string[] = [
-  "asterix-cat020",
-  "asterix-cat010",
-  "asterix-cat011",
-  "asterix-cat021",
-  "asterix-cat062",
-  "asterix-cat048",
-];
+// The defaults (MLAT first, 5 s, 150 m, ...) live in @aeroswarm/live-server, so every
+// project that uses the fuser starts from the same values. Here only the env names.
+export { DEFAULT_AIRBORNE_PRIORITY, DEFAULT_SURFACE_PRIORITY };
 
 export interface FusionConfig {
   enabled: boolean;
@@ -27,12 +16,15 @@ export interface FusionConfig {
   warnings: string[];
 }
 
-function priorityList(raw: string | undefined, fallback: string[]): string[] {
+function priorityList(
+  raw: string | undefined,
+  fallback: readonly string[],
+): string[] {
   const items = (raw ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return items.length > 0 ? items : fallback;
+  return items.length > 0 ? items : [...fallback];
 }
 
 /** A positive number from env; the default (with a warning) when set but unusable. */
@@ -72,34 +64,45 @@ const isOn = (raw: string | undefined): boolean =>
  */
 export function fusionConfigFromEnv(env: Env): FusionConfig {
   const warnings: string[] = [];
+  const d = defaultFusionOptions();
   return {
     enabled: !isOff(env.FUSION_ENABLED),
     warnings,
     options: {
       surfacePriority: priorityList(
         env.FUSION_SURFACE_PRIORITY,
-        DEFAULT_SURFACE_PRIORITY,
+        d.surfacePriority,
       ),
       airbornePriority: priorityList(
         env.FUSION_AIRBORNE_PRIORITY,
-        DEFAULT_AIRBORNE_PRIORITY,
+        d.airbornePriority,
       ),
       maxSourceAgeMs: positive(
         env,
         "FUSION_MAX_SOURCE_AGE_MS",
-        5_000,
+        d.maxSourceAgeMs,
         warnings,
       ),
-      forgetAfterMs: positive(env, "FUSION_FORGET_AFTER_MS", 600_000, warnings),
+      forgetAfterMs: positive(
+        env,
+        "FUSION_FORGET_AFTER_MS",
+        d.forgetAfterMs,
+        warnings,
+      ),
       spatial: isOn(env.FUSION_SPATIAL),
-      matchRadiusM: positive(env, "FUSION_MATCH_RADIUS_M", 150, warnings),
+      matchRadiusM: positive(
+        env,
+        "FUSION_MATCH_RADIUS_M",
+        d.matchRadiusM,
+        warnings,
+      ),
       matchMaxSkewMs: positive(
         env,
         "FUSION_MATCH_MAX_SKEW_MS",
-        3_000,
+        d.matchMaxSkewMs,
         warnings,
       ),
-      disagreeM: positive(env, "FUSION_DISAGREE_M", 300, warnings),
+      disagreeM: positive(env, "FUSION_DISAGREE_M", d.disagreeM, warnings),
     },
   };
 }

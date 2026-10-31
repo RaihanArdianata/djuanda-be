@@ -10,8 +10,8 @@ describe("fusionConfigFromEnv", () => {
     const c = fusionConfigFromEnv({});
     expect(c.enabled).toBe(true);
     expect(c.warnings).toEqual([]);
-    expect(c.options.surfacePriority).toEqual(DEFAULT_SURFACE_PRIORITY);
-    expect(c.options.airbornePriority).toEqual(DEFAULT_AIRBORNE_PRIORITY);
+    expect(c.options.surfacePriority).toEqual([...DEFAULT_SURFACE_PRIORITY]);
+    expect(c.options.airbornePriority).toEqual([...DEFAULT_AIRBORNE_PRIORITY]);
     expect(c.options.surfacePriority[0]).toBe("asterix-cat010");
     expect(c.options.airbornePriority[0]).toBe("asterix-cat020");
     // Radar is the last resort in both.

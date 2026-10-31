@@ -3,7 +3,11 @@ import type {
   FusedTrackEvent,
   SourceHealthEvent,
 } from "@aeroswarm/core";
-import type { MovementEvent } from "@aeroswarm/live-server";
+import {
+  createTrackFuser,
+  type MovementEvent,
+  type TrackFuser,
+} from "@aeroswarm/live-server";
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
@@ -20,10 +24,6 @@ import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.prod
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
 import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
-import {
-  createTrackFuser,
-  type TrackFuser,
-} from "./modules/fusion/track-fuser";
 import { isValidMonitorToken } from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,

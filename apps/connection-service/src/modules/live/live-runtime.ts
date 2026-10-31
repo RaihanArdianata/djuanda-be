@@ -57,8 +57,19 @@ export function createLiveRuntime(opts: LiveRuntimeOptions): LiveRuntime {
     removeAfterMs: config.removeAfterMs,
     interestBbox: config.interestBbox,
     interestLookaheadMin: config.interestLookaheadMin,
+    exit: config.exit,
     attachFlightPlan: plans.attach,
   });
+  if (config.interestBbox) {
+    logger.info(
+      {
+        bbox: config.interestBbox,
+        lookaheadMin: config.interestLookaheadMin ?? 90,
+        exit: config.exit.enabled,
+      },
+      "live picture limited to the interest zone",
+    );
+  }
   plans.on("changed", (plan) => {
     state.refreshFlightPlans((track) => plans.matches(plan, track));
   });

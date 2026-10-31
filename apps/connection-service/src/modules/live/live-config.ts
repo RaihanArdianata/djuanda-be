@@ -1,4 +1,4 @@
-import type { Bbox } from "@aeroswarm/live-server";
+import type { Bbox, ExitRemovalOptions } from "@aeroswarm/live-server";
 
 type Env = Record<string, string | undefined>;
 
@@ -12,6 +12,8 @@ export interface LiveConfig {
   /** Ignore tracks outside this box unless they are heading into it. */
   interestBbox?: Bbox;
   interestLookaheadMin?: number;
+  /** Remove aircraft that have passed through `interestBbox`. Does nothing without a box. */
+  exit: ExitRemovalOptions;
   /** Per-client, per-track push rate when a client does not ask. Default 10. */
   defaultUpdateHz?: number;
   heartbeatMs?: number;
@@ -61,10 +63,41 @@ function bbox(env: Env, warnings: string[]): Bbox | undefined {
   return parts as Bbox;
 }
 
+const isOff = (raw: string | undefined): boolean =>
+  ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
+
+/**
+ * An aircraft that has been inside INTEREST_BBOX and then leaves it disappears at once.
+ * On by default, but it only acts when INTEREST_BBOX is set.
+ */
+function exitOptions(
+  env: Env,
+  warnings: string[],
+  hasBbox: boolean,
+): ExitRemovalOptions {
+  const explicit = env.EXIT_REMOVE_ENABLED?.trim();
+  const enabled = !isOff(explicit);
+  if (explicit && enabled && !hasBbox) {
+    warnings.push(
+      "EXIT_REMOVE_ENABLED is set but INTEREST_BBOX is not: an aircraft is removed after it leaves the interest box, so without one nothing is removed",
+    );
+  }
+  const confirm = num(env, "EXIT_CONFIRM_FIXES", warnings);
+  return {
+    enabled,
+    marginM: num(env, "EXIT_MARGIN_M", warnings, true),
+    confirmFixes:
+      confirm === undefined ? undefined : Math.max(1, Math.floor(confirm)),
+    suppressMs: num(env, "EXIT_SUPPRESS_MS", warnings),
+  };
+}
+
 /**
  * Live-picture settings from env:
  *   STALE_AFTER_MS, LOST_AFTER_MS, TRACK_REMOVE_AFTER_MS (0 = never remove)
  *   INTEREST_BBOX ("minLon,minLat,maxLon,maxLat"), INTEREST_LOOKAHEAD_MIN
+ *   EXIT_REMOVE_ENABLED (true), EXIT_MARGIN_M (1000; 0 allowed), EXIT_CONFIRM_FIXES (2),
+ *   EXIT_SUPPRESS_MS (600000)
  *   WS_DEFAULT_UPDATE_HZ, WS_HEARTBEAT_MS, TRACK_SWEEP_MS
  * Bad values warn and fall back to the default; the service still starts.
  */
@@ -72,12 +105,14 @@ export function liveConfigFromEnv(env: Env): LiveConfig {
   const warnings: string[] = [];
   const staleAfterMs = num(env, "STALE_AFTER_MS", warnings);
   const lostAfterMs = num(env, "LOST_AFTER_MS", warnings);
+  const interestBbox = bbox(env, warnings);
   const config: LiveConfig = {
     staleAfterMs,
     lostAfterMs,
     removeAfterMs: num(env, "TRACK_REMOVE_AFTER_MS", warnings, true),
-    interestBbox: bbox(env, warnings),
+    interestBbox,
     interestLookaheadMin: num(env, "INTEREST_LOOKAHEAD_MIN", warnings),
+    exit: exitOptions(env, warnings, interestBbox !== undefined),
     defaultUpdateHz: num(env, "WS_DEFAULT_UPDATE_HZ", warnings),
     heartbeatMs: num(env, "WS_HEARTBEAT_MS", warnings),
     sweepMs: num(env, "TRACK_SWEEP_MS", warnings) ?? 5000,

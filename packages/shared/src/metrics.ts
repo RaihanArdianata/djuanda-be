@@ -4,14 +4,20 @@ import client from "prom-client";
 export const registry = new client.Registry();
 client.collectDefaultMetrics({ register: registry });
 
+/** `collect` runs on every scrape, for values that live elsewhere (e.g. a stats object). */
 export const createCounter = (
   name: string,
   help: string,
+  collect?: (this: client.Counter<string>) => void,
 ): client.Counter<string> =>
-  new client.Counter({ name, help, registers: [registry] });
+  new client.Counter({ name, help, registers: [registry], collect });
 
-export const createGauge = (name: string, help: string): client.Gauge<string> =>
-  new client.Gauge({ name, help, registers: [registry] });
+export const createGauge = (
+  name: string,
+  help: string,
+  collect?: (this: client.Gauge<string>) => void,
+): client.Gauge<string> =>
+  new client.Gauge({ name, help, registers: [registry], collect });
 
 const httpRequestDuration = new client.Histogram({
   name: "http_request_duration_seconds",

@@ -324,20 +324,7 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      CONNECTION_SERVICE_PORT: ${HTTP_PORT:-18086}
-      HTTP_HOST: ${HTTP_HOST:-0.0.0.0}
-      HTTP_PORT: ${HTTP_PORT:-18086}
-      SOURCE_TRANSPORT: ${SOURCE_TRANSPORT:-udp}
-      SOURCE_BIND_HOST: ${SOURCE_BIND_HOST:-0.0.0.0}
-      SOURCE_PORT: ${SOURCE_PORT:-2026}
-      SOURCE_ID: ${SOURCE_ID:-radar-main}
-      AIRPORT_ID: ${AIRPORT_ID:-WARR}
-      AFTN_ENABLED: ${AFTN_ENABLED:-false}
-      AFTN_TRANSPORT: ${AFTN_TRANSPORT:-udp}
-      AFTN_BIND_HOST: ${AFTN_BIND_HOST:-0.0.0.0}
-      AFTN_PORT: ${AFTN_PORT:-2028}
-      AFTN_SOURCE_ID: ${AFTN_SOURCE_ID:-aftn}
-      AERO_TOKEN: ${AERO_TOKEN:-}
+      CONNECTION_SERVICE_PORT: ${CONNECTION_SERVICE_PORT:-3005}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       # Kafka ingest consumer (alternative to http/websocket — see
       # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run
@@ -369,9 +356,14 @@ services:
     # CONNECTION_SERVICE_PORT — kalau kamu ganti port di .env, connector
     # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
     ports:
-      - "${HTTP_PORT:-18086}:${HTTP_PORT:-18086}"
-      - "${SOURCE_PORT:-2026}:${SOURCE_PORT:-2026}/udp"
-      - "${AFTN_PORT:-2028}:${AFTN_PORT:-2028}/udp"
+      - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
+      # Radar/AFTN yang dikirim AeroSwarm lewat UDP. Port yang dibuka sama
+      # dengan port yang didengarkan feed (AEROSWARM_FEED_UDP_PORT,
+      # AFTN_FEED_UDP_PORT). Satu port UDP di host hanya bisa dipegang satu
+      # proses: kalau AeroSwarm masih mendengarkan 2026 di host yang sama,
+      # pakai port lain di sini.
+      - "${AEROSWARM_FEED_UDP_PORT:-2026}:${AEROSWARM_FEED_UDP_PORT:-2026}/udp"
+      - "${AFTN_FEED_UDP_PORT:-2028}:${AFTN_FEED_UDP_PORT:-2028}/udp"
     logging:
       driver: "json-file"
       options:

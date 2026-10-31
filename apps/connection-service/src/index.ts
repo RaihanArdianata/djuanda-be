@@ -1,4 +1,8 @@
-import type { FlightPlanEvent, FusedTrackEvent } from "@aeroswarm/core";
+import type {
+  FlightPlanEvent,
+  FusedTrackEvent,
+  SourceHealthEvent,
+} from "@aeroswarm/core";
 import type { MovementEvent } from "@aeroswarm/live-server";
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
@@ -7,9 +11,11 @@ import { app } from "./app";
 import { verifyToken } from "./modules/auth/token";
 import { startAftnFeeds, stopAftnFeeds } from "./modules/feed/aftn-feed";
 import {
+  getFeedStates,
   startAsterixFeeds,
   stopAsterixFeeds,
 } from "./modules/feed/asterix-feed";
+import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
@@ -48,6 +54,7 @@ import {
   createMovementRecorder,
   toMovementIngestEvent,
 } from "./modules/movement/movement-recorder";
+import { registerHealthProbe } from "./routes/health";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
@@ -149,24 +156,61 @@ liveRuntime.state.on("removed", ({ trackId }): void => {
 // advisory-service stores them (it reads the same topic AeroSwarm used to fill).
 const flightPlanPublisher = flightPlanPublisherFromEnv(process.env);
 const onFlightPlan = (event: FlightPlanEvent): void => {
+  feedMetrics.aftnMessagesReceived.inc();
   liveRuntime.feedHandlers.onFlightPlan?.(event);
-  flightPlanPublisher.publish(event).catch((err: unknown) => {
-    logger.warn({ err }, "flight plan not forwarded to Kafka");
-  });
+  flightPlanPublisher
+    .publish(event)
+    .then(() => feedMetrics.aftnFlightplansPersisted.inc())
+    .catch((err: unknown) => {
+      logger.warn({ err }, "flight plan not forwarded to Kafka");
+    });
 };
 
 startAsterixFeeds({
   persist: (event: FusedTrackEventLike): void => {
-    void enqueueTrackEvent(event, { awaitFlush: false });
+    enqueueTrackEvent(event, { awaitFlush: false })
+      .then(() => feedMetrics.tracksPersisted.inc())
+      .catch((err: unknown) => {
+        feedMetrics.dbWriteErrors.inc();
+        logger.error({ err }, "track could not be queued for storage");
+      });
   },
   // AFTN multiplexed onto the radar stream takes the same route as a dedicated AFTN feed.
   handlers: {
     ...liveRuntime.feedHandlers,
     onTrack: (event: FusedTrackEvent): void => {
+      feedMetrics.tracksDecoded.inc();
       liveRuntime.feedHandlers.onTrack?.(event);
       movements.evaluate(event);
     },
+    onHealth: (event: SourceHealthEvent): void => {
+      feedMetrics.sourceHealthEvents.inc();
+      liveRuntime.feedHandlers.onHealth?.(event);
+    },
     onFlightPlan,
+  },
+});
+
+// Numbers the packages already keep are read when Prometheus scrapes; the same
+// state backs /health, so the two cannot disagree.
+registerStatMetrics({
+  feeds: () => getFeedStates().map((f) => f.stats),
+  live: () => liveRuntime.live.stats(),
+});
+const DB_PROBE_TIMEOUT_MS = 2_000;
+registerHealthProbe({
+  feeds: getFeedStates,
+  live: () => ({
+    clients: liveRuntime.live.stats().clients,
+    tracks: liveRuntime.state.size,
+    flightplans: liveRuntime.plans.size,
+  }),
+  database: async (): Promise<boolean> => {
+    const timeout = new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(false), DB_PROBE_TIMEOUT_MS),
+    );
+    const ping = pool.query("select 1").then(() => true);
+    return Promise.race([ping, timeout]);
   },
 });
 

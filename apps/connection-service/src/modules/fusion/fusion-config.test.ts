@@ -6,14 +6,17 @@ import {
 } from "./fusion-config";
 
 describe("fusionConfigFromEnv", () => {
-  it("is on by default, with MLAT first on the ground and radar first in the air", () => {
+  it("is on by default, with MLAT first both on the ground and in the air", () => {
     const c = fusionConfigFromEnv({});
     expect(c.enabled).toBe(true);
     expect(c.warnings).toEqual([]);
     expect(c.options.surfacePriority).toEqual(DEFAULT_SURFACE_PRIORITY);
     expect(c.options.airbornePriority).toEqual(DEFAULT_AIRBORNE_PRIORITY);
     expect(c.options.surfacePriority[0]).toBe("asterix-cat010");
-    expect(c.options.airbornePriority[0]).toBe("asterix-cat062");
+    expect(c.options.airbornePriority[0]).toBe("asterix-cat020");
+    // Radar is the last resort in both.
+    expect(c.options.surfacePriority.at(-1)).toBe("asterix-cat048");
+    expect(c.options.airbornePriority.at(-1)).toBe("asterix-cat048");
     expect(c.options).toMatchObject({
       maxSourceAgeMs: 5_000,
       forgetAfterMs: 600_000,

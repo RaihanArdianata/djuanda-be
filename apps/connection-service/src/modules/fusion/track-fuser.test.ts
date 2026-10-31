@@ -20,10 +20,20 @@ const advance = (ms: number): void => {
   clock += ms;
 };
 
+/** Radar first in the air, so the tests below can tell which sensor was chosen. */
+const RADAR_FIRST_AIRBORNE = [
+  "asterix-cat062",
+  "asterix-cat048",
+  "asterix-cat021",
+  "asterix-cat020",
+  "asterix-cat010",
+  "asterix-cat011",
+];
+
 function fuser(over: Partial<FusionOptions> = {}): TrackFuser {
   return createTrackFuser({
     surfacePriority: DEFAULT_SURFACE_PRIORITY,
-    airbornePriority: DEFAULT_AIRBORNE_PRIORITY,
+    airbornePriority: RADAR_FIRST_AIRBORNE,
     maxSourceAgeMs: 5_000,
     forgetAfterMs: 600_000,
     spatial: false,
@@ -216,6 +226,21 @@ describe("radar and MLAT see the same aircraft", () => {
     const far = f.ingest(mlat({ lat: -7.39, onGround: true }));
     expect(far?.confidence.sourceAgreement).toBe(0);
     expect(f.stats().disagreements).toBe(1);
+  });
+
+  it("with the default priority MLAT wins in the air and on the ground", () => {
+    const f = fuser({ airbornePriority: DEFAULT_AIRBORNE_PRIORITY });
+    f.ingest(ev({ lat: -7.38 }));
+    const air = f.ingest(mlat({ lat: -7.3801 }));
+    expect(air?.sources[0]).toBe(MLAT);
+    expect(air?.position?.lat).toBe(-7.3801);
+
+    advance(500);
+    const ground = f.ingest(mlat({ lat: -7.382, onGround: true }));
+    expect(ground?.sources[0]).toBe(MLAT);
+    // Radar updates no longer move the picture while MLAT is fresh.
+    advance(500);
+    expect(f.ingest(ev({ lat: -7.5 }))).toBeNull();
   });
 
   it("honours a custom priority", () => {

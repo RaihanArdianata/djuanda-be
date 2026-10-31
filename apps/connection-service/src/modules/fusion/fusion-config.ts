@@ -1,24 +1,24 @@
 import { type Env, str } from "../feed/feed-env";
 import type { FusionOptions } from "./track-fuser";
 
-/** MLAT / surface sensors know the apron best. */
+/** MLAT first (CAT010 surface, CAT020 wide-area), then ADS-B, then radar. */
 export const DEFAULT_SURFACE_PRIORITY: string[] = [
   "asterix-cat010",
   "asterix-cat011",
   "asterix-cat020",
   "asterix-cat021",
-  "asterix-cat048",
   "asterix-cat062",
+  "asterix-cat048",
 ];
 
-/** In the air the system track and radar are the better position. */
+/** MLAT is preferred in the air too: it is the sensor this deployment trusts most. */
 export const DEFAULT_AIRBORNE_PRIORITY: string[] = [
-  "asterix-cat062",
-  "asterix-cat048",
-  "asterix-cat021",
   "asterix-cat020",
   "asterix-cat010",
   "asterix-cat011",
+  "asterix-cat021",
+  "asterix-cat062",
+  "asterix-cat048",
 ];
 
 export interface FusionConfig {

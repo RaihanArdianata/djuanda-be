@@ -12,6 +12,9 @@
     },
     "dependencies": {
         "@aeroswarm/codec": "^0.1.10",
+        "@aeroswarm/core": "^0.2.11",
+        "@aeroswarm/ingest": "^0.1.5",
+        "@aeroswarm/live-server": "^0.1.1",
         "@aeroswarm/replay-server": "^0.2.1",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",

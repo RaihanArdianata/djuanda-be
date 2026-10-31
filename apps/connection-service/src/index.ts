@@ -1,14 +1,27 @@
+import type { FlightPlanEvent, FusedTrackEvent } from "@aeroswarm/core";
+import type { MovementEvent } from "@aeroswarm/live-server";
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
 import { app } from "./app";
-import { startUdpFeed, stopUdpFeed } from "./modules/feed/udp-feed";
+import { verifyToken } from "./modules/auth/token";
+import { startAftnFeeds, stopAftnFeeds } from "./modules/feed/aftn-feed";
+import {
+  startAsterixFeeds,
+  stopAsterixFeeds,
+} from "./modules/feed/asterix-feed";
+import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
+import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
+import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
 import { isValidMonitorToken } from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
   replayWebsocketHandlers,
 } from "./modules/history/service/replay-socket";
 import {
+  enqueueMovementEvent,
+  enqueueTrackEvent,
+  type FusedTrackEventLike,
   flush,
   isValidIngestSecret,
 } from "./modules/ingest/service/ingest.service";
@@ -21,14 +34,38 @@ import {
   startTrackProducer,
   stopTrackProducer,
 } from "./modules/ingest/service/track.producer";
+import { createLiveRuntime } from "./modules/live/live-runtime";
+import {
+  type LiveSocketData,
+  liveSocketHandlers,
+  upgradeLive,
+} from "./modules/live/live-socket";
 import {
   startMovementProducer,
   stopMovementProducer,
 } from "./modules/messaging/movement.producer";
+import {
+  createMovementRecorder,
+  toMovementIngestEvent,
+} from "./modules/movement/movement-recorder";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
-type SocketData = ({ kind: "replay" } & ReplaySocketData) | { kind: "ingest" };
+type SocketData =
+  | ({ kind: "replay" } & ReplaySocketData)
+  | { kind: "ingest" }
+  | LiveSocketData;
+
+// The live picture (track state, flight plans, /ws/tracks/live). Built before
+// the server so the websocket handlers below can reference it.
+const liveRuntime = createLiveRuntime({
+  authenticate: (token: string) => verifyToken(token),
+});
+const liveHandlers = liveSocketHandlers(liveRuntime.live);
+const asLiveSocket = (
+  ws: ServerWebSocket<SocketData>,
+): ServerWebSocket<LiveSocketData> =>
+  ws as unknown as ServerWebSocket<LiveSocketData>;
 
 const asReplaySocket = (
   ws: ServerWebSocket<SocketData>,
@@ -42,6 +79,8 @@ const server = Bun.serve<SocketData>({
     srv: Bun.Server<SocketData>,
   ): Response | Promise<Response> | undefined {
     const url = new URL(req.url);
+    const live = upgradeLive(req, srv);
+    if (live !== null) return live;
     if (url.pathname === "/aero/replay") {
       const token = url.searchParams.get("token");
       if (!isValidMonitorToken(token)) {
@@ -70,6 +109,7 @@ const server = Bun.serve<SocketData>({
     open(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.open(asReplaySocket(ws));
+      else if (ws.data.kind === "live") liveHandlers.open(asLiveSocket(ws));
     },
     message(
       ws: ServerWebSocket<SocketData>,
@@ -77,18 +117,81 @@ const server = Bun.serve<SocketData>({
     ): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.message(asReplaySocket(ws), raw);
+      else if (ws.data.kind === "live")
+        liveHandlers.message(asLiveSocket(ws), raw);
       else handleIngestSocketMessage(raw, ws);
     },
     close(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.close(asReplaySocket(ws));
+      else if (ws.data.kind === "live") liveHandlers.close(asLiveSocket(ws));
     },
   },
 });
 
 logger.info(`connection-service listening on http://localhost:${port}`);
 
-startUdpFeed();
+// Takeoffs and landings, detected from the same track stream and stored with
+// the other ingest events (statistics-service reads them from there).
+const movements = createMovementRecorder({
+  onMovement: (event: MovementEvent): void => {
+    void enqueueMovementEvent(toMovementIngestEvent(event), {
+      awaitFlush: false,
+    });
+  },
+});
+movements.startSweep();
+liveRuntime.state.on("removed", ({ trackId }): void => {
+  movements.forget(trackId);
+});
+
+// Flight plans: kept in memory for the live picture and forwarded to Kafka so
+// advisory-service stores them (it reads the same topic AeroSwarm used to fill).
+const flightPlanPublisher = flightPlanPublisherFromEnv(process.env);
+const onFlightPlan = (event: FlightPlanEvent): void => {
+  liveRuntime.feedHandlers.onFlightPlan?.(event);
+  flightPlanPublisher.publish(event).catch((err: unknown) => {
+    logger.warn({ err }, "flight plan not forwarded to Kafka");
+  });
+};
+
+startAsterixFeeds({
+  persist: (event: FusedTrackEventLike): void => {
+    void enqueueTrackEvent(event, { awaitFlush: false });
+  },
+  // AFTN multiplexed onto the radar stream takes the same route as a dedicated AFTN feed.
+  handlers: {
+    ...liveRuntime.feedHandlers,
+    onTrack: (event: FusedTrackEvent): void => {
+      liveRuntime.feedHandlers.onTrack?.(event);
+      movements.evaluate(event);
+    },
+    onFlightPlan,
+  },
+});
+
+// Plans first, so tracks arriving meanwhile are matched as soon as the store is warm.
+(async (): Promise<void> => {
+  try {
+    const restored = await restoreFlightPlans(
+      liveRuntime.plans,
+      fetchStoredFlightPlanEvents,
+    );
+    logger.info(restored, "flight plans restored from stored AFTN");
+  } catch (err) {
+    logger.warn(
+      { err },
+      "could not restore flight plans — labels stay white until new AFTN arrives",
+    );
+  }
+  await flightPlanPublisher.start().catch((err: unknown) => {
+    logger.error(
+      { err },
+      "flight plan producer failed to start — AFTN is not forwarded",
+    );
+  });
+  startAftnFeeds({ onFlightPlan });
+})();
 
 startIngestKafkaConsumer().catch((err) => {
   logger.error(
@@ -115,7 +218,11 @@ const shutdown = async (signal: string): Promise<never> => {
     `${signal} received, shutting down connection-service gracefully`,
   );
   server.stop();
-  stopUdpFeed();
+  liveRuntime.stop();
+  movements.stop();
+  await stopAsterixFeeds();
+  await stopAftnFeeds();
+  await flightPlanPublisher.stop();
   await stopIngestKafkaConsumer();
   await stopMovementProducer();
   await flush();

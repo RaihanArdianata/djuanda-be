@@ -4,6 +4,7 @@ import {
   createReplayServer,
 } from "@aeroswarm/replay-server";
 import { logger } from "@repo/logger";
+import { verifyToken } from "../../auth/token";
 
 // This deployment's own airport identity. One backend-djuanda instance
 // serves exactly one airport by design (docs/development/federation/004-*.md
@@ -22,20 +23,12 @@ if (!AIRPORT_ID) {
   );
 }
 
-// Monitor tokens are minted by AeroSwarm when a connector is created for
-// this airport (Connectors tab → "monitor token", shown once) — paste them
-// into AEROSWARM_MONITOR_TOKENS (comma-separated). Static allowlist is the
-// deliberate v1; live introspection against AeroSwarm is a later
-// improvement. See aeroswarm-project/docs/development/federation/004-*.md.
-const MONITOR_TOKENS = new Set(
-  (process.env.AEROSWARM_MONITOR_TOKENS || "")
-    .split(",")
-    .map((t) => t.trim())
-    .filter(Boolean),
-);
-
+// Tokens come from CONNECTION_API_TOKENS (and the legacy
+// AEROSWARM_MONITOR_TOKENS) via the shared verifier in modules/auth, which also
+// guards the live WebSocket. Kept as a named export for the replay upgrade in
+// index.ts.
 export function isValidMonitorToken(token: string | null): boolean {
-  return token !== null && MONITOR_TOKENS.has(token);
+  return verifyToken(token) !== null;
 }
 
 // dbudara's aeroswarm_tracks/aeroswarm_alerts live in the default (public)
@@ -55,8 +48,12 @@ export const replayCheckpoints = createInMemoryCheckpointStore();
 export const replayServer = createReplayServer({
   store: replayStore,
   checkpoints: replayCheckpoints,
-  validateToken: async (token: string) =>
-    isValidMonitorToken(token) ? { airportId: AIRPORT_ID || undefined } : null,
+  validateToken: async (token: string) => {
+    const auth = verifyToken(token);
+    return auth
+      ? { airportId: auth.airportId ?? (AIRPORT_ID || undefined) }
+      : null;
+  },
 });
 
 // Per-connection envelope sequence numbers (see ReplaySession) — one shared

@@ -21,7 +21,13 @@ const isAllowedOrigin = (origin: string): boolean =>
 
 const corsMiddleware = cors({
   origin: (origin: string) => (isAllowedOrigin(origin) ? origin : "*"),
-  allowHeaders: ["Content-Type", "Authorization", "X-Aero-Ingest-Secret"],
+  allowHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Aero-Ingest-Secret",
+    // @aeroswarm/client sends it to ask for the standard response envelope.
+    "X-Aero-Envelope",
+  ],
   allowMethods: ["GET", "POST", "OPTIONS"],
   maxAge: 600,
 });

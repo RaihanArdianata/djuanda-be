@@ -117,8 +117,8 @@
         "@aeroswarm/codec": "^0.1.10",
         "@aeroswarm/core": "^0.2.12",
         "@aeroswarm/ingest": "^0.1.6",
-        "@aeroswarm/live-server": "^0.1.3",
-        "@aeroswarm/replay-server": "^0.2.2",
+        "@aeroswarm/live-server": "^0.1.4",
+        "@aeroswarm/replay-server": "^0.2.3",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
@@ -315,9 +315,9 @@
 
     "@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.6", "", { "dependencies": { "@aeroswarm/codec": "^0.1.8", "@aeroswarm/core": "^0.2.12" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-wowQE4+nUME+snrN3szLSPdNK7ywiX/NhF5aLViHv/HHgw0hIBWJRY22EoSO3f3XyWcQLrBHDWS0WMU6dxDJHw=="],
 
-    "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.3", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "zod": "^4.4.3" } }, "sha512-l61/DsyldAXWqLfIEk6+65EyTcx5zBuIzj6q3bHLBFU0yWjC9mhDLbyFOeAW7lgo6kKULUXebfw+RGMmt0LhfA=="],
+    "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.4", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "zod": "^4.4.3" } }, "sha512-SuIPhZS4ImJAtyDUDKJbMFoRr05ZsdGr53myrWSsyl1BAvhhRRdnWm22loLTFCQIW5M6Tu75Y3CbI/0MCLw3PA=="],
 
-    "@aeroswarm/replay-server": ["@aeroswarm/replay-server@0.2.2", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "postgres": "^3.4.7", "ws": "^8.16.0" }, "peerDependencies": { "hono": ">=4.0.0" }, "optionalPeers": ["hono"] }, "sha512-4/16SBsnbJCcAe2TO74HqFw4vbu6+If/mVroZgWomZTSHqC2M4B3PEibfDdJQB3wbKYOC6h4AF6qVwXACkw7zw=="],
+    "@aeroswarm/replay-server": ["@aeroswarm/replay-server@0.2.3", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "postgres": "^3.4.7", "ws": "^8.16.0" }, "peerDependencies": { "hono": ">=4.0.0" }, "optionalPeers": ["hono"] }, "sha512-fheLJuaEL1tbr1eH4J6NCoR5xbZ9lc4u0WsZLvJlum/qvmzsSc0YzQSiVKXrHZ8Mks/lresNJlNrgS177NvDRw=="],
 
     "@asteasolutions/zod-to-openapi": ["@asteasolutions/zod-to-openapi@8.5.0", "", { "dependencies": { "openapi3-ts": "^4.1.2" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-SABbKiObg5dLRiTFnqiW1WWwGcg1BJfmHtT2asIBnBHg6Smy/Ms2KHc650+JI4Hw7lSkdiNebEGXpwoxfben8Q=="],
 

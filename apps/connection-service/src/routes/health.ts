@@ -8,6 +8,8 @@ export interface HealthProbe {
   live(): { clients: number; tracks: number; flightplans: number };
   /** Null when fusion is switched off. */
   fusion?(): FusionStats | null;
+  /** Null when trails are switched off. */
+  trail?(): { tracks: number; points: number } | null;
   /** True when the database answered. */
   database(): Promise<boolean>;
 }
@@ -31,6 +33,7 @@ export interface HealthReport {
   database: { status: "up" | "down" | "unknown" };
   live: { clients: number; tracks: number; flightplans: number } | null;
   fusion: FusionStats | null;
+  trail: { tracks: number; points: number } | null;
 }
 
 /** More than this share of datagrams undecodable means the decoder (or the feed format) is wrong. */
@@ -85,6 +88,7 @@ export async function buildHealth(
     database: { status: database },
     live: probe?.live() ?? null,
     fusion: probe?.fusion?.() ?? null,
+    trail: probe?.trail?.() ?? null,
   };
 }
 

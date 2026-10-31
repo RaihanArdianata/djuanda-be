@@ -5,6 +5,7 @@ import type {
 } from "@aeroswarm/core";
 import {
   createTrackFuser,
+  createTrailStore,
   type MovementEvent,
   type TrackFuser,
 } from "@aeroswarm/live-server";
@@ -24,7 +25,10 @@ import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.prod
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
 import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
-import { isValidMonitorToken } from "./modules/history/service/history.service";
+import {
+  isValidMonitorToken,
+  replayStore,
+} from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
   replayWebsocketHandlers,
@@ -59,6 +63,10 @@ import {
   createMovementRecorder,
   toMovementIngestEvent,
 } from "./modules/movement/movement-recorder";
+import { registerTrailRoute } from "./modules/trail/trail.route";
+import { trailConfigFromEnv } from "./modules/trail/trail-config";
+import { registerTrailStatMetrics } from "./modules/trail/trail-metrics";
+import { createTrailService } from "./modules/trail/trail-service";
 import { registerHealthProbe } from "./routes/health";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
@@ -172,6 +180,36 @@ logger.info(
     : "track fusion disabled (FUSION_ENABLED=false)",
 );
 
+// The line behind each aircraft, kept in memory as the live picture changes, so
+// answering a trail request is a read and costs the feeds nothing.
+const trailConfig = trailConfigFromEnv(process.env);
+for (const w of trailConfig.warnings) logger.warn(w);
+const trail = trailConfig.enabled ? createTrailStore(trailConfig.store) : null;
+if (trail) {
+  trail.attach(liveRuntime.state);
+  trail.startSweep();
+  registerTrailStatMetrics(trail);
+  registerTrailRoute({
+    authenticate: (token: string | null): boolean =>
+      verifyToken(token) !== null,
+    service: createTrailService({
+      trail,
+      history: trailConfig.dbFallback ? replayStore : undefined,
+      icao24Of: (id: string): string | undefined =>
+        liveRuntime.state.get(id)?.icao24 ?? undefined,
+      minDistanceM: trailConfig.store.minDistanceM ?? 100,
+      backfillMs: trailConfig.backfillMs,
+      startedAt: Date.now(),
+    }),
+    labelEveryMs: trailConfig.labelEveryMs,
+    defaultLimit: trailConfig.defaultLimit,
+  });
+}
+logger.info(
+  trail ? { ...trailConfig.store, dbFallback: trailConfig.dbFallback } : {},
+  trail ? "trails enabled" : "trails disabled (TRAIL_ENABLED=false)",
+);
+
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
   fuser?.forget(trackId);
@@ -232,6 +270,7 @@ registerHealthProbe({
     flightplans: liveRuntime.plans.size,
   }),
   fusion: () => fuser?.stats() ?? null,
+  trail: () => trail?.stats() ?? null,
   database: async (): Promise<boolean> => {
     const timeout = new Promise<boolean>((resolve) =>
       setTimeout(() => resolve(false), DB_PROBE_TIMEOUT_MS),
@@ -292,6 +331,7 @@ const shutdown = async (signal: string): Promise<never> => {
   liveRuntime.stop();
   movements.stop();
   if (fusionSweep) clearInterval(fusionSweep);
+  trail?.stopSweep();
   await stopAsterixFeeds();
   await stopAftnFeeds();
   await flightPlanPublisher.stop();

@@ -10,7 +10,7 @@ Menghubungkan backend ini ke AeroSwarm untuk data surveillance bandara (WARR):
    service ini (client-side federation — set `history_endpoint` bandara di dashboard AeroSwarm
    ke `http://<host>:3005/aero`).
 
-Port default: `3005` (`CONNECTION_SERVICE_PORT`). Diakses **langsung** (bukan lewat gateway):
+Port default surveillance: `18086` (`HTTP_PORT`). Diakses **langsung** (bukan lewat gateway):
 AeroSwarm POST ingest ke sini, dan browser dashboard connect ke sini untuk replay — karena itu
 CORS ditangani di service ini sendiri.
 
@@ -28,6 +28,67 @@ bedanya cuma cara event sampai ke sini. Perbandingan lengkap:
 | `udp` direct ASTERIX | socket UDP lokal, bukan endpoint HTTP | jaringan (siapa pun yang bisa kirim ke port) | **Drop** datagram selama down — UDP memang fire-and-forget |
 
 ### UDP direct ASTERIX feed
+
+The surveillance deployment also accepts the R&D configuration names:
+
+| Variable | Default | Function |
+|---|---:|---|
+| `SOURCE_TRANSPORT` | `udp` | Source transport |
+| `SOURCE_BIND_HOST` | `0.0.0.0` | UDP bind address |
+| `SOURCE_PORT` | `2026` | ASTERIX/mixed UDP port |
+| `SOURCE_ID` | `radar-main` | Source identity |
+| `AIRPORT_ID` | empty | Airport scope |
+| `AFTN_ENABLED` | `false` | Enable dedicated AFTN input |
+| `AFTN_PORT` | `2028` | Dedicated AFTN UDP port |
+| `AFTN_SOURCE_ID` | `aftn` | AFTN source identity |
+| `HTTP_HOST` / `HTTP_PORT` | `0.0.0.0` / `18086` | HTTP and WebSocket listener |
+| `AERO_TOKEN` | empty | Live/replay token; never log it |
+
+`@aeroswarm/ingest` handles ASTERIX through `@aeroswarm/codec`, detects AFTN
+messages on a mixed source when ASTERIX decoding yields no record, and emits
+CAT023 source-health events separately. CAT020 is treated as MLAT by the
+deployment documentation; the decoder's original category/protocol metadata is
+preserved in the event.
+
+The live endpoint is:
+
+```text
+ws://<host>:18086/ws/tracks/live?token=<AERO_TOKEN>
+```
+
+Send the standard message:
+
+```json
+{"type":"subscribe","airportId":"WARR","maxUpdateHz":10}
+```
+
+Replay remains available under `/aero/replay/days`, `/aero/replay/range`, and
+`/aero/tracks/:trackId/history` with the configured monitor token.
+
+### Optional output connectors
+
+Outbound connectors are disabled unless configured. The service accepts:
+
+```env
+AEROSWARM_OUTPUT_WEBHOOK_URL=
+AEROSWARM_OUTPUT_WEBHOOK_SECRET=
+AEROSWARM_OUTPUT_KAFKA_BROKERS=redpanda:9092
+AEROSWARM_OUTPUT_KAFKA_TOPIC=aeroswarm.surveillance
+AEROSWARM_OUTPUT_WEBSOCKET_URL=
+```
+
+Connector failures are logged without secrets, counted, and do not stop UDP
+ingest. Shutdown flushes and closes configured connectors.
+
+### Surveillance metrics
+
+The `/metrics` endpoint includes the surveillance counters
+`asterix_packets_received_total`, `asterix_packets_undecoded_total`,
+`asterix_tracks_decoded_total`, `asterix_tracks_persisted_total`,
+`aftn_messages_received_total`, `aftn_flightplans_persisted_total`,
+`source_health_events_total`, `websocket_clients`,
+`websocket_messages_sent_total`, `websocket_updates_dropped_total`,
+`db_write_errors_total`, and `connector_send_errors_total`.
 
 `udp-feed.ts` men-decode datagram ASTERIX langsung di process ini via `@aeroswarm/codec`
 (tanpa AeroSwarm processing layer) — berguna saat backend ini menerima feed radar/MLAT

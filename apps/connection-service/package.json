@@ -11,12 +11,17 @@
         "test:coverage": "bun test --coverage --coverage-reporter=text"
     },
     "dependencies": {
-        "@aeroswarm/codec": "^0.1.10",
-        "@aeroswarm/replay-server": "^0.2.1",
+        "@aeroswarm/client": "0.1.12",
+        "@aeroswarm/codec": "0.1.10",
+        "@aeroswarm/connectors": "0.3.2",
+        "@aeroswarm/core": "0.2.11",
+        "@aeroswarm/ingest": "0.1.5",
+        "@aeroswarm/live-server": "0.1.1",
+        "@aeroswarm/replay-server": "0.2.1",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
         "@repo/shared": "workspace:*",
-        "drizzle-orm": "^0.45.2",
+        "drizzle-orm": "0.45.2",
         "hono": "^4.12.27",
         "kafkajs": "^2.2.4",
         "zod": "^4.4.3"

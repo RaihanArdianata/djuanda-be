@@ -2,7 +2,7 @@ import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
 import { app } from "./app";
-import { startUdpFeed, stopUdpFeed } from "./modules/feed/udp-feed";
+import { isValidAeroToken, surveillanceConfig } from "./config/surveillance";
 import { isValidMonitorToken } from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
@@ -25,18 +25,33 @@ import {
   startMovementProducer,
   stopMovementProducer,
 } from "./modules/messaging/movement.producer";
+import {
+  liveWebsocketHandlers,
+  startSurveillance,
+  stopSurveillance,
+} from "./modules/surveillance/service/surveillance.service";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
-type SocketData = ({ kind: "replay" } & ReplaySocketData) | { kind: "ingest" };
+type SocketData =
+  | ({ kind: "replay" } & ReplaySocketData)
+  | { kind: "ingest" }
+  | { kind: "live"; token: string | null };
 
 const asReplaySocket = (
   ws: ServerWebSocket<SocketData>,
 ): ServerWebSocket<ReplaySocketData> =>
   ws as unknown as ServerWebSocket<ReplaySocketData>;
 
+const asLiveSocket = (
+  ws: ServerWebSocket<SocketData>,
+): ServerWebSocket<{ kind: "live"; token: string | null }> =>
+  ws as unknown as ServerWebSocket<{ kind: "live"; token: string | null }>;
+
 const server = Bun.serve<SocketData>({
-  port,
+  hostname: surveillanceConfig.httpHost,
+  port: surveillanceConfig.httpPort || port,
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: route dispatch covers three established WebSocket protocols
   fetch(
     req: Request,
     srv: Bun.Server<SocketData>,
@@ -64,12 +79,24 @@ const server = Bun.serve<SocketData>({
       if (upgraded) return undefined;
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
+    if (url.pathname === "/ws/tracks/live") {
+      if (!isValidAeroToken(url.searchParams.get("token"))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const upgraded = srv.upgrade(req, {
+        data: { kind: "live" as const, token: url.searchParams.get("token") },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
     return app.fetch(req);
   },
   websocket: {
     open(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.open(asReplaySocket(ws));
+      else if (ws.data.kind === "live")
+        liveWebsocketHandlers.open(asLiveSocket(ws), ws.data.token);
     },
     message(
       ws: ServerWebSocket<SocketData>,
@@ -77,18 +104,22 @@ const server = Bun.serve<SocketData>({
     ): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.message(asReplaySocket(ws), raw);
+      else if (ws.data.kind === "live")
+        liveWebsocketHandlers.message(asLiveSocket(ws), raw);
       else handleIngestSocketMessage(raw, ws);
     },
     close(ws: ServerWebSocket<SocketData>): void {
       if (ws.data.kind === "replay")
         replayWebsocketHandlers.close(asReplaySocket(ws));
+      else if (ws.data.kind === "live")
+        liveWebsocketHandlers.close(asLiveSocket(ws));
     },
   },
 });
 
 logger.info(`connection-service listening on http://localhost:${port}`);
 
-startUdpFeed();
+startSurveillance();
 
 startIngestKafkaConsumer().catch((err) => {
   logger.error(
@@ -115,7 +146,7 @@ const shutdown = async (signal: string): Promise<never> => {
     `${signal} received, shutting down connection-service gracefully`,
   );
   server.stop();
-  stopUdpFeed();
+  await stopSurveillance();
   await stopIngestKafkaConsumer();
   await stopMovementProducer();
   await flush();

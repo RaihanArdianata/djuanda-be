@@ -34,6 +34,40 @@ export const aeroswarmTracks = pgTable(
       t.trackId,
       t.fusedAt,
     ),
+    fusedAtIdx: index("aeroswarm_tracks_fused_at_idx").on(t.fusedAt),
+    trackFusedAtIdx: index("aeroswarm_tracks_track_fused_at_idx").on(
+      t.trackId,
+      t.fusedAt,
+    ),
+  }),
+);
+
+export const aeroswarmFlightplans = pgTable(
+  "aeroswarm_flightplans",
+  {
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    planId: text("plan_id").primaryKey(),
+    airportId: text("airport_id"),
+    data: jsonb("data").notNull(),
+  },
+  (t) => ({
+    updatedAtIdx: index("aeroswarm_flightplans_updated_at_idx").on(t.updatedAt),
+  }),
+);
+
+export const aeroswarmSourceHealth = pgTable(
+  "aeroswarm_source_health",
+  {
+    observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+    sourceId: text("source_id").notNull(),
+    airportId: text("airport_id"),
+    status: text("status").notNull(),
+    data: jsonb("data").notNull(),
+  },
+  (t) => ({
+    observedAtIdx: index("aeroswarm_source_health_observed_at_idx").on(
+      t.observedAt,
+    ),
   }),
 );
 
@@ -88,3 +122,7 @@ export const aeroswarmMovements = pgTable(
 export type AeroswarmTrack = InferSelectModel<typeof aeroswarmTracks>;
 export type AeroswarmAlert = InferSelectModel<typeof aeroswarmAlerts>;
 export type AeroswarmMovement = InferSelectModel<typeof aeroswarmMovements>;
+export type AeroswarmFlightplan = InferSelectModel<typeof aeroswarmFlightplans>;
+export type AeroswarmSourceHealth = InferSelectModel<
+  typeof aeroswarmSourceHealth
+>;

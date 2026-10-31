@@ -1,6 +1,13 @@
 import { describe, expect, it } from "bun:test";
 import { loadAsterixFeedConfigs } from "./asterix-config";
 
+/** First element, failing the test with a clear message instead of a non-null assertion. */
+function first<T>(items: readonly T[]): T {
+  const item = items[0];
+  if (item === undefined) throw new Error("expected at least one item");
+  return item;
+}
+
 describe("loadAsterixFeedConfigs", () => {
   it("returns no feeds and no warnings noise when nothing is configured", () => {
     const { feeds, warnings } = loadAsterixFeedConfigs({});
@@ -14,7 +21,7 @@ describe("loadAsterixFeedConfigs", () => {
       AEROSWARM_AIRPORT_ID: "WARR",
     });
     expect(feeds).toHaveLength(1);
-    const f = feeds[0]!;
+    const f = first(feeds);
     expect(f.name).toBe("asterix-udp");
     expect(f.config).toMatchObject({
       transport: "udp",
@@ -22,7 +29,7 @@ describe("loadAsterixFeedConfigs", () => {
       airportId: "WARR",
       sourceId: "asterix-udp",
     });
-    expect([...f.config.allowedCats!].sort((a, b) => a - b)).toEqual([
+    expect([...(f.config.allowedCats ?? [])].sort((a, b) => a - b)).toEqual([
       10, 11, 20, 21, 48, 62,
     ]);
   });
@@ -35,7 +42,7 @@ describe("loadAsterixFeedConfigs", () => {
       AEROSWARM_FEED_MULTICAST_IFACE: "10.0.0.2",
       AEROSWARM_FEED_SOURCE_ID: "radar-a",
     });
-    expect(feeds[0]!.config).toMatchObject({
+    expect(first(feeds).config).toMatchObject({
       bindHost: "10.0.0.2",
       multicastGroup: "224.0.0.1",
       multicastIface: "10.0.0.2",
@@ -49,8 +56,8 @@ describe("loadAsterixFeedConfigs", () => {
       ASTERIX_TCP_PORT: "2000",
     });
     expect(feeds).toHaveLength(1);
-    expect(feeds[0]!.name).toBe("asterix-tcp");
-    expect(feeds[0]!.config).toMatchObject({
+    expect(first(feeds).name).toBe("asterix-tcp");
+    expect(first(feeds).config).toMatchObject({
       transport: "tcp",
       host: "192.168.2.10",
       port: 2000,
@@ -99,7 +106,7 @@ describe("loadAsterixFeedConfigs", () => {
       RADAR_SITE_LAT: "",
       RADAR_SITE_LON: "",
     });
-    expect(feeds[0]!.config.radarSite).toBeUndefined();
+    expect(first(feeds).config.radarSite).toBeUndefined();
     expect(warnings.some((w) => w.includes("RADAR_SITE_LAT/LON"))).toBe(true);
   });
 
@@ -114,8 +121,8 @@ describe("loadAsterixFeedConfigs", () => {
         "51:1": { lat: 999, lon: 0 },
       }),
     });
-    expect(feeds[0]!.config.radarSite).toEqual({ lat: -7.38, lon: 112.78 });
-    expect(feeds[0]!.config.radarSites).toEqual({
+    expect(first(feeds).config.radarSite).toEqual({ lat: -7.38, lon: 112.78 });
+    expect(first(feeds).config.radarSites).toEqual({
       "50:176": { lat: -7.4, lon: 112.8 },
     });
     expect(
@@ -130,7 +137,7 @@ describe("loadAsterixFeedConfigs", () => {
       RADAR_SITE_LON: "112.78",
       ASTERIX_RADAR_SITES: "{nope",
     });
-    expect(feeds[0]!.config.radarSites).toBeUndefined();
+    expect(first(feeds).config.radarSites).toBeUndefined();
     expect(warnings.some((w) => w.includes("not valid JSON"))).toBe(true);
   });
 
@@ -140,10 +147,13 @@ describe("loadAsterixFeedConfigs", () => {
       ASTERIX_ALLOWED_CATS: "21, 48,x,-1",
       ASTERIX_FORCED_EDITIONS: "21:2.4, 48:1.21, bad",
     });
-    expect([...feeds[0]!.config.allowedCats!].sort((a, b) => a - b)).toEqual([
-      21, 48,
-    ]);
-    expect(feeds[0]!.config.forcedEditions).toEqual({ 21: "2.4", 48: "1.21" });
+    expect(
+      [...(first(feeds).config.allowedCats ?? [])].sort((a, b) => a - b),
+    ).toEqual([21, 48]);
+    expect(first(feeds).config.forcedEditions).toEqual({
+      21: "2.4",
+      48: "1.21",
+    });
   });
 
   describe("ASTERIX_FEEDS (several feeds)", () => {

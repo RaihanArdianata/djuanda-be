@@ -11,6 +11,13 @@ import {
   stopAsterixFeeds,
 } from "./asterix-feed";
 
+/** First element, failing the test with a clear message instead of a non-null assertion. */
+function first<T>(items: readonly T[]): T {
+  const item = items[0];
+  if (item === undefined) throw new Error("expected at least one item");
+  return item;
+}
+
 type Emit = (ev: unknown) => void;
 type CreateSource = NonNullable<
   Parameters<typeof startAsterixFeeds>[0]["createSource"]
@@ -139,8 +146,8 @@ describe("startAsterixFeeds", () => {
       persist: () => order.push("persist"),
       handlers: { onTrack: () => order.push("onTrack") },
     });
-    f.sources[0]!.emit(track());
-    f.sources[0]!.emit(track({ lifecycle: "dropped" }));
+    first(f.sources).emit(track());
+    first(f.sources).emit(track({ lifecycle: "dropped" }));
     expect(order).toEqual(["persist", "onTrack", "persist", "onTrack"]);
   });
 
@@ -151,7 +158,7 @@ describe("startAsterixFeeds", () => {
       createSource: f.createSource,
       persist,
     });
-    f.sources[0]!.emit(track());
+    first(f.sources).emit(track());
     expect(enqueued).toHaveLength(1);
     expect((enqueued[0] as { trackId: string }).trackId).toBe("t1");
   });
@@ -165,7 +172,7 @@ describe("startAsterixFeeds", () => {
         throw new Error("must not persist");
       },
     });
-    const emit = f.sources[0]!.emit;
+    const emit = first(f.sources).emit;
     emit({
       kind: "track",
       event: { trackId: "x", icao24: "a", lat: 1, lon: 2 },
@@ -190,8 +197,8 @@ describe("startAsterixFeeds", () => {
         },
       },
     });
-    f.sources[0]!.emit(track());
-    f.sources[0]!.emit(track());
+    first(f.sources).emit(track());
+    first(f.sources).emit(track());
     expect(seen).toBe(2);
   });
 
@@ -208,10 +215,10 @@ describe("startAsterixFeeds", () => {
       kind: "health",
       event: { sourceId: "s", status },
     });
-    f.sources[0]!.emit(health("healthy"));
-    f.sources[0]!.emit(health("degraded"));
+    first(f.sources).emit(health("healthy"));
+    first(f.sources).emit(health("degraded"));
     expect(seen).toEqual(["healthy", "degraded"]);
-    expect(getFeedStates()[0]!.lastHealth).toBe("degraded");
+    expect(first(getFeedStates()).lastHealth).toBe("degraded");
   });
 
   it("forwards AFTN found on the ASTERIX stream", () => {
@@ -223,7 +230,7 @@ describe("startAsterixFeeds", () => {
       persist,
       handlers: { onFlightPlan: (e) => seen.push(e) },
     });
-    f.sources[0]!.emit({ kind: "flightplan", event: { messageId: "m1" } });
+    first(f.sources).emit({ kind: "flightplan", event: { messageId: "m1" } });
     expect(seen).toEqual([{ messageId: "m1" }]);
   });
 
@@ -236,7 +243,7 @@ describe("startAsterixFeeds", () => {
     };
     startAsterixFeeds(opts);
     await stopAsterixFeeds();
-    expect(f.sources[0]!.stopped).toBe(true);
+    expect(first(f.sources).stopped).toBe(true);
     expect(getFeedStates()).toEqual([]);
     startAsterixFeeds(opts);
     expect(f.sources).toHaveLength(2);

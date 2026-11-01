@@ -208,7 +208,7 @@ registry.registerPath({
       description: "Berkas laporan Excel",
       content: {
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
-          schema: z.string().openapi({ format: "binary" }),
+          schema: z.string(),
         },
       },
     },

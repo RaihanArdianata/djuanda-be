@@ -196,6 +196,40 @@ export const pollTaf = async (): Promise<void> => {
   }
 };
 
+const SYNC_COOLDOWN_MS = 30_000;
+let lastManualSyncAt = 0;
+
+export interface ManualSyncResult {
+  /** Detik tersisa sebelum sync manual berikutnya boleh jalan; 0 bila baru saja jalan. */
+  retryAfterSec: number;
+  results: Record<"metar" | "speci" | "taf", "ok" | "failed">;
+}
+
+/**
+ * Tarik METAR, SPECI, dan TAF dari BMKG sekarang juga (tombol resync di FE).
+ * Dibatasi satu kali per SYNC_COOLDOWN_MS supaya tidak menghujani BMKG.
+ * Return `null` bila masih dalam masa tunggu.
+ */
+export const syncWeatherNow = async (
+  now: number = Date.now(),
+): Promise<ManualSyncResult | null> => {
+  if (now - lastManualSyncAt < SYNC_COOLDOWN_MS) return null;
+  lastManualSyncAt = now;
+
+  const [metar, speci, taf] = await Promise.allSettled([
+    pollMetar(),
+    pollSpeci(),
+    pollTaf(),
+  ]);
+  const status = (r: PromiseSettledResult<void>): "ok" | "failed" =>
+    r.status === "fulfilled" ? "ok" : "failed";
+
+  return {
+    retryAfterSec: SYNC_COOLDOWN_MS / 1000,
+    results: { metar: status(metar), speci: status(speci), taf: status(taf) },
+  };
+};
+
 export const startWeatherPolling = (): void => {
   const metarCron = intervalMsToCronExpression(env.METAR_POLL_INTERVAL_MS);
   const speciCron = intervalMsToCronExpression(env.SPECI_POLL_INTERVAL_MS);

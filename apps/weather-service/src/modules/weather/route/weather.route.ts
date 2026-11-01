@@ -7,6 +7,7 @@ import {
   getHistory,
   getMetar,
   getSpeci,
+  syncWeather,
 } from "../controller/weather.controller";
 import {
   getCurrentObservationSchema,
@@ -14,7 +15,11 @@ import {
   getObservationHistorySchema,
 } from "../validator/weather.validator";
 
+// Sync manual hanya butuh login (bukan izin RBAC per-endpoint): tombol di panel
+// cuaca dipakai semua operator. Didaftarkan sebelum rbacMiddleware.
 const app = new Hono()
+  .use("/sync", authentication)
+  .post("/sync", syncWeather)
   .use("/*", authentication)
   .use("/*", rbacMiddleware)
   .get("/current", validate(getCurrentObservationSchema), getCurrent)

@@ -14,6 +14,10 @@ const envSchema = z.object({
   USER_SERVICE_URL: z.url().default("http://localhost:3002"),
   ADVISORY_SERVICE_URL: z.url().default("http://localhost:3007"),
   CONNECTION_SERVICE_URL: z.url().default("http://localhost:3005"),
+  // Token the gateway presents to connection-service for the user-facing /aero/tracks route.
+  // Defaults to the first entry of CONNECTION_API_TOKENS, which the same .env already holds.
+  CONNECTION_SERVICE_TOKEN: z.string().optional(),
+  CONNECTION_API_TOKENS: z.string().optional(),
   WEATHER_SERVICE_URL: z.url().default("http://localhost:3008"),
   AERODROME_SERVICE_URL: z.url().default("http://localhost:3009"),
   STATISTICS_SERVICE_URL: z.url().default("http://localhost:3010"),

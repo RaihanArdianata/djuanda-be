@@ -55,6 +55,7 @@ import {
   liveSocketHandlers,
   upgradeLive,
 } from "./modules/live/live-socket";
+import { createMovementPhaseStore } from "./modules/live/movement-phase";
 import {
   startMovementProducer,
   stopMovementProducer,
@@ -78,8 +79,12 @@ type SocketData =
 
 // The live picture (track state, flight plans, /ws/tracks/live). Built before
 // the server so the websocket handlers below can reference it.
+// Takeoff/landing terakhir tiap track; menentukan Arrival/Departure di label, dengan atau
+// tanpa rencana penerbangan (AFTN).
+const movementPhases = createMovementPhaseStore();
 const liveRuntime = createLiveRuntime({
   authenticate: (token: string) => verifyToken(token),
+  movementPhases,
 });
 const liveHandlers = liveSocketHandlers(liveRuntime.live);
 const asLiveSocket = (
@@ -155,6 +160,11 @@ logger.info(`connection-service listening on http://localhost:${port}`);
 // the other ingest events (statistics-service reads them from there).
 const movements = createMovementRecorder({
   onMovement: (event: MovementEvent): void => {
+    movementPhases.set(event.trackId, event.type);
+    // Dorong fase baru ke klien sekarang, tanpa menunggu update radar berikutnya.
+    liveRuntime.state.refreshFlightPlans(
+      (track) => track.trackId === event.trackId,
+    );
     void enqueueMovementEvent(toMovementIngestEvent(event), {
       awaitFlush: false,
     });
@@ -212,6 +222,7 @@ logger.info(
 
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
+  movementPhases.forget(trackId);
   fuser?.forget(trackId);
 });
 

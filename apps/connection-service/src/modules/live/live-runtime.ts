@@ -1,4 +1,5 @@
 import type {
+  CurrentTrack,
   FlightPlanEvent,
   FusedTrackEvent,
   SourceHealthEvent,
@@ -15,6 +16,7 @@ import {
 import { logger } from "@repo/logger";
 import type { FeedHandlers } from "../feed/asterix-feed";
 import { type LiveConfig, liveConfigFromEnv } from "./live-config";
+import type { MovementPhaseStore } from "./movement-phase";
 
 export interface LiveRuntime {
   /** Live picture: lifecycle, de-duplication, flight-plan attachment. */
@@ -33,6 +35,8 @@ export interface LiveRuntimeOptions {
   /** Returns the grant for a valid token, null to reject. */
   authenticate: (token: string) => LiveAuth | null;
   config?: LiveConfig;
+  /** Takeoff/landing terakhir per track; fasenya menimpa fase dari rencana penerbangan. */
+  movementPhases?: MovementPhaseStore;
 }
 
 /**
@@ -51,6 +55,7 @@ export function createLiveRuntime(opts: LiveRuntimeOptions): LiveRuntime {
   for (const w of config.warnings) logger.warn(w);
 
   const plans = createFlightPlanStore();
+  const movementPhases = opts.movementPhases;
   const state = createTrackState({
     staleAfterMs: config.staleAfterMs,
     lostAfterMs: config.lostAfterMs,
@@ -58,7 +63,10 @@ export function createLiveRuntime(opts: LiveRuntimeOptions): LiveRuntime {
     interestBbox: config.interestBbox,
     interestLookaheadMin: config.interestLookaheadMin,
     exit: config.exit,
-    attachFlightPlan: plans.attach,
+    attachFlightPlan: movementPhases
+      ? (track: CurrentTrack): CurrentTrack =>
+          movementPhases.attach(plans.attach(track))
+      : plans.attach,
   });
   if (config.interestBbox) {
     logger.info(

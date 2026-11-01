@@ -189,6 +189,32 @@ describe("stcaRule", () => {
       expect(run([airborne, parkedB]).length).toBe(0);
     });
 
+    test("a slow, low target flagged onGround=false is still treated as on the ground", () => {
+      // Taking-off aircraft (79 kt, 225 ft) and a taxiing target the feed
+      // failed to mark as surface (4 kt, 0 ft).
+      const takeoff = {
+        ...trackA,
+        trackId: "LNI690",
+        latitude: -7.376198,
+        longitude: 112.763892,
+        altitude: 225,
+        groundSpeed: 79,
+        heading: 255,
+        onGround: false,
+      };
+      const taxiing = {
+        ...trackA,
+        trackId: "ast_twql3gsOVXMR",
+        latitude: -7.374358,
+        longitude: 112.788118,
+        altitude: 0,
+        groundSpeed: 4,
+        heading: 344,
+        onGround: false,
+      };
+      expect(run([takeoff, taxiing]).length).toBe(0);
+    });
+
     test("includeSurface brings the old behaviour back", () => {
       expect(
         run([parkedA, parkedB], { ...cfg, includeSurface: true }).length,

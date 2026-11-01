@@ -1,5 +1,15 @@
 import type { AftnMessage } from "@repo/database";
 
+/**
+ * Pesan AFTN yang lebih tua dari ini tidak dianggap jadwal terkini: sama dengan umur
+ * rencana penerbangan di connection-service (48 jam), yang menentukan warna label track.
+ * Tanpa batas ini, penerbangan harian menampilkan pesan berbulan-bulan lalu seolah jadwal hari ini.
+ */
+export const LATEST_WINDOW_MS = 48 * 3_600_000;
+
+export const latestWindowStart = (now: number = Date.now()): Date =>
+  new Date(now - LATEST_WINDOW_MS);
+
 export interface AftnAircraftDetail {
   id: string;
   callSign: string | null;

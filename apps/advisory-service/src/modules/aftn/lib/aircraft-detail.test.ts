@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { AftnMessage } from "@repo/database";
-import { buildAftnAircraftDetail } from "./aircraft-detail";
+import {
+  buildAftnAircraftDetail,
+  LATEST_WINDOW_MS,
+  latestWindowStart,
+} from "./aircraft-detail";
 
 const row = (override: Partial<AftnMessage>): AftnMessage =>
   ({
@@ -56,5 +60,19 @@ describe("buildAftnAircraftDetail", () => {
     const result = buildAftnAircraftDetail([row({})]);
     expect(result?.route).toBeNull();
     expect(result?.dep).toEqual({ icao: null, time: null });
+  });
+});
+
+describe("latestWindowStart", () => {
+  it("looks back 48 hours, so month-old messages never count as the current schedule", () => {
+    const now = Date.UTC(2026, 10, 2, 0, 0);
+    expect(LATEST_WINDOW_MS).toBe(48 * 3_600_000);
+    expect(latestWindowStart(now).toISOString()).toBe(
+      "2026-10-31T00:00:00.000Z",
+    );
+    // The stale BTK6391 DEP from 30 May 2026 falls outside the window.
+    expect(new Date("2026-05-30T22:16:00.000Z") < latestWindowStart(now)).toBe(
+      true,
+    );
   });
 });

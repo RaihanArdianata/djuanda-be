@@ -3,6 +3,7 @@ import ApiError from "@repo/shared/api-error";
 import {
   type AftnAircraftDetail,
   buildAftnAircraftDetail,
+  latestWindowStart,
 } from "../lib/aircraft-detail";
 import {
   findAftnMessageById,
@@ -49,15 +50,17 @@ export const getAftnMessageById = async (id: string): Promise<AftnMessage> => {
 export const getLatestAftnAircraftDetail = async (
   params: LatestAftnQueryInput,
 ): Promise<AftnAircraftDetail> => {
+  const since = latestWindowStart();
   // Callsign dulu, registration sebagai cadangan.
   let rows = params.callSign
-    ? await findRecentAftnMessagesByAircraft("callSign", params.callSign)
+    ? await findRecentAftnMessagesByAircraft("callSign", params.callSign, since)
     : [];
 
   if (rows.length === 0 && params.registration) {
     rows = await findRecentAftnMessagesByAircraft(
       "registration",
       params.registration,
+      since,
     );
   }
 
@@ -65,7 +68,7 @@ export const getLatestAftnAircraftDetail = async (
 
   if (!detail) {
     throw new ApiError("NOT_FOUND", {
-      message: "No AFTN message found for this aircraft",
+      message: "No AFTN message in the last 48 hours for this aircraft",
     });
   }
 

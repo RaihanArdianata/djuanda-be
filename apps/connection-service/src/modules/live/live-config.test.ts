@@ -10,6 +10,7 @@ describe("liveConfigFromEnv", () => {
       removeAfterMs: undefined,
       interestBbox: undefined,
       interestLookaheadMin: undefined,
+      exit: { enabled: true },
       defaultUpdateHz: undefined,
       heartbeatMs: undefined,
       sweepMs: 5000,
@@ -69,6 +70,70 @@ describe("liveConfigFromEnv", () => {
     expect(
       c.warnings.some((w) => w.includes("STALE_AFTER_MS must be smaller")),
     ).toBe(true);
+  });
+
+  it("removing aircraft that left the interest box is on by default", () => {
+    expect(liveConfigFromEnv({}).exit).toEqual({ enabled: true });
+    expect(
+      liveConfigFromEnv({ INTEREST_BBOX: "112,-8,113,-7" }).warnings,
+    ).toEqual([]);
+  });
+
+  it("reads the exit settings, and lets the margin be 0", () => {
+    const c = liveConfigFromEnv({
+      INTEREST_BBOX: "112,-8,113,-7",
+      EXIT_MARGIN_M: "0",
+      EXIT_CONFIRM_FIXES: "1",
+      EXIT_SUPPRESS_MS: "60000",
+    });
+    expect(c.exit).toEqual({
+      enabled: true,
+      marginM: 0,
+      confirmFixes: 1,
+      suppressMs: 60000,
+    });
+    expect(c.warnings).toEqual([]);
+  });
+
+  it("switches off with false, 0, off or no", () => {
+    for (const v of ["false", "0", "off", "NO", " False "]) {
+      expect(
+        liveConfigFromEnv({
+          EXIT_REMOVE_ENABLED: v,
+          INTEREST_BBOX: "112,-8,113,-7",
+        }).exit.enabled,
+      ).toBe(false);
+    }
+  });
+
+  it("confirmFixes is a whole number of at least 1", () => {
+    expect(
+      liveConfigFromEnv({ EXIT_CONFIRM_FIXES: "2.9" }).exit.confirmFixes,
+    ).toBe(2);
+    expect(
+      liveConfigFromEnv({ EXIT_CONFIRM_FIXES: "0" }).exit.confirmFixes,
+    ).toBeUndefined();
+    expect(
+      liveConfigFromEnv({ EXIT_CONFIRM_FIXES: "0" }).warnings,
+    ).toHaveLength(1);
+  });
+
+  it("warns on a junk value and keeps the default", () => {
+    const c = liveConfigFromEnv({
+      EXIT_MARGIN_M: "abc",
+      EXIT_SUPPRESS_MS: "-5",
+    });
+    expect(c.exit.marginM).toBeUndefined();
+    expect(c.exit.suppressMs).toBeUndefined();
+    expect(c.warnings).toHaveLength(2);
+  });
+
+  it("warns when exit is asked for explicitly but there is no interest box", () => {
+    const c = liveConfigFromEnv({ EXIT_REMOVE_ENABLED: "true" });
+    expect(c.warnings).toHaveLength(1);
+    expect(c.warnings[0]).toContain("INTEREST_BBOX");
+    // and stays quiet when it is simply left at its default
+    expect(liveConfigFromEnv({}).warnings).toEqual([]);
   });
 
   it("parses INTEREST_BBOX and rejects malformed ones", () => {

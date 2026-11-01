@@ -1,2 +1,4 @@
 # Shell scripts must keep LF line endings (run in Linux/WSL containers)
 *.sh text eol=lf
+# Biome requires lineEnding "lf"; keep TypeScript sources LF on every platform
+*.ts text eol=lf

@@ -33,6 +33,12 @@ export interface StartFeedsOptions {
   handlers?: FeedHandlers;
   /** Where decoded tracks are stored (index.ts passes the shared ingest buffer). */
   persist: (event: FusedTrackEventLike) => void;
+  /**
+   * Merges what several sensors report about one aircraft. Runs before storage
+   * and before `handlers.onTrack`, so both see one track per aircraft. Return
+   * null to swallow an event that adds nothing. Absent = events pass as they are.
+   */
+  fuse?: (event: FusedTrackEvent) => FusedTrackEvent | null;
   /** Test seam. Default: `createFeedSource({ protocol: "asterix", ... })`. */
   createSource?: (feed: NamedFeedConfig) => RunnableFeed;
 }
@@ -70,16 +76,35 @@ function safely(label: string, fn: () => void): void {
   }
 }
 
+/** The event after fusion; the original when there is no fuser or it throws. */
+function fuseTrack(
+  track: FusedTrackEvent,
+  fuse: StartFeedsOptions["fuse"],
+): FusedTrackEvent | null {
+  if (!fuse) return track;
+  try {
+    return fuse(track);
+  } catch (err) {
+    logger.error(
+      { err },
+      "asterix feed: fusion threw — using the unfused track",
+    );
+    return track;
+  }
+}
+
 function route(
   entry: Running,
   ev: IngestEvent,
   handlers: FeedHandlers,
   persist: (event: FusedTrackEventLike) => void,
+  fuse: StartFeedsOptions["fuse"],
 ): void {
   switch (ev.kind) {
     case "track": {
       if (!isFused(ev.event)) return;
-      const track = ev.event;
+      const track = fuseTrack(ev.event, fuse);
+      if (!track) return;
       safely("persist", () => persist({ ...track }));
       if (handlers.onTrack) {
         const fn = handlers.onTrack;
@@ -147,7 +172,9 @@ export function startAsterixFeeds(opts: StartFeedsOptions): void {
     running.push(entry);
     try {
       void Promise.resolve(
-        entry.source.start((ev) => route(entry, ev, handlers, persist)),
+        entry.source.start((ev) =>
+          route(entry, ev, handlers, persist, opts.fuse),
+        ),
       ).catch((err) =>
         logger.error({ err, feed: feed.name }, "asterix feed: failed to start"),
       );

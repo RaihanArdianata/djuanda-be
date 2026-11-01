@@ -4,7 +4,15 @@ import { DEFAULT_TIMEOUT_MS, REQUEST_ID_HEADER } from "../config/constants";
 import type { Variables } from "../types/hono";
 import { filterHeaders } from "../utils/headers";
 
-export const createProxy = (targetBaseUrl: string) => {
+export interface ProxyOptions {
+  /** Headers to set on the forwarded request, replacing what the caller sent. */
+  setHeaders?: () => Record<string, string>;
+}
+
+export const createProxy = (
+  targetBaseUrl: string,
+  options: ProxyOptions = {},
+) => {
   return async (c: Context<{ Variables: Variables }>): Promise<Response> => {
     const incomingUrl = new URL(c.req.url);
 
@@ -14,6 +22,9 @@ export const createProxy = (targetBaseUrl: string) => {
     );
 
     const headers = filterHeaders(c.req.raw.headers);
+    for (const [key, value] of Object.entries(options.setHeaders?.() ?? {})) {
+      headers.set(key, value);
+    }
     const requestId = c.get("requestId");
 
     if (requestId) {

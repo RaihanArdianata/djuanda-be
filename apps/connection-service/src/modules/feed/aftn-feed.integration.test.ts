@@ -127,6 +127,7 @@ describe("AFTN feeds against real sockets", () => {
         sweepMs: 5000,
         warnings: [],
         defaultUpdateHz: 60,
+        exit: { enabled: false },
       },
     });
     const handlers = liveSocketHandlers(runtime.live);

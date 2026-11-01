@@ -4,6 +4,7 @@ import aerodrome from "./aerodrome";
 import alert from "./alert";
 import alertRules from "./alert-rules";
 import auth from "./auth";
+import connection from "./connection";
 import health from "./health";
 import notams from "./notams";
 import notifications from "./notifications";
@@ -27,6 +28,7 @@ const app = new Hono()
   .route("/alert-rules", alertRules)
   .route("/users", users)
   .route("/advisory", advisory)
+  .route("/aero/tracks", connection)
   .route("/weather", weather)
   .route("/aerodrome", aerodrome)
   .route("/statistics", statistics)

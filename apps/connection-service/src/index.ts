@@ -1,5 +1,14 @@
-import type { FlightPlanEvent, FusedTrackEvent } from "@aeroswarm/core";
-import type { MovementEvent } from "@aeroswarm/live-server";
+import type {
+  FlightPlanEvent,
+  FusedTrackEvent,
+  SourceHealthEvent,
+} from "@aeroswarm/core";
+import {
+  createTrackFuser,
+  createTrailStore,
+  type MovementEvent,
+  type TrackFuser,
+} from "@aeroswarm/live-server";
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
@@ -7,13 +16,19 @@ import { app } from "./app";
 import { verifyToken } from "./modules/auth/token";
 import { startAftnFeeds, stopAftnFeeds } from "./modules/feed/aftn-feed";
 import {
+  getFeedStates,
   startAsterixFeeds,
   stopAsterixFeeds,
 } from "./modules/feed/asterix-feed";
+import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
-import { isValidMonitorToken } from "./modules/history/service/history.service";
+import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
+import {
+  isValidMonitorToken,
+  replayStore,
+} from "./modules/history/service/history.service";
 import {
   type ReplaySocketData,
   replayWebsocketHandlers,
@@ -48,6 +63,11 @@ import {
   createMovementRecorder,
   toMovementIngestEvent,
 } from "./modules/movement/movement-recorder";
+import { registerTrailRoute } from "./modules/trail/trail.route";
+import { trailConfigFromEnv } from "./modules/trail/trail-config";
+import { registerTrailStatMetrics } from "./modules/trail/trail-metrics";
+import { createTrailService } from "./modules/trail/trail-service";
+import { registerHealthProbe } from "./routes/health";
 
 const port: string | number = process.env.CONNECTION_SERVICE_PORT || 3005;
 
@@ -141,32 +161,122 @@ const movements = createMovementRecorder({
   },
 });
 movements.startSweep();
+
+// Radar and MLAT often see the same aircraft; without this each feed's own
+// track id would replace the other's on every update.
+const fusionConfig = fusionConfigFromEnv(process.env);
+for (const w of fusionConfig.warnings) logger.warn(w);
+const fuser: TrackFuser | null = fusionConfig.enabled
+  ? createTrackFuser(fusionConfig.options)
+  : null;
+const FUSION_SWEEP_MS = 30_000;
+const fusionSweep = fuser
+  ? setInterval(() => fuser.sweep(), FUSION_SWEEP_MS)
+  : null;
+logger.info(
+  fuser ? fusionConfig.options : {},
+  fuser
+    ? "track fusion enabled"
+    : "track fusion disabled (FUSION_ENABLED=false)",
+);
+
+// The line behind each aircraft, kept in memory as the live picture changes, so
+// answering a trail request is a read and costs the feeds nothing.
+const trailConfig = trailConfigFromEnv(process.env);
+for (const w of trailConfig.warnings) logger.warn(w);
+const trail = trailConfig.enabled ? createTrailStore(trailConfig.store) : null;
+if (trail) {
+  trail.attach(liveRuntime.state);
+  trail.startSweep();
+  registerTrailStatMetrics(trail);
+  registerTrailRoute({
+    authenticate: (token: string | null): boolean =>
+      verifyToken(token) !== null,
+    service: createTrailService({
+      trail,
+      history: trailConfig.dbFallback ? replayStore : undefined,
+      icao24Of: (id: string): string | undefined =>
+        liveRuntime.state.get(id)?.icao24 ?? undefined,
+      minDistanceM: trailConfig.store.minDistanceM ?? 100,
+      backfillMs: trailConfig.backfillMs,
+      startedAt: Date.now(),
+    }),
+    labelEveryMs: trailConfig.labelEveryMs,
+    defaultLimit: trailConfig.defaultLimit,
+  });
+}
+logger.info(
+  trail ? { ...trailConfig.store, dbFallback: trailConfig.dbFallback } : {},
+  trail ? "trails enabled" : "trails disabled (TRAIL_ENABLED=false)",
+);
+
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
+  fuser?.forget(trackId);
 });
 
 // Flight plans: kept in memory for the live picture and forwarded to Kafka so
 // advisory-service stores them (it reads the same topic AeroSwarm used to fill).
 const flightPlanPublisher = flightPlanPublisherFromEnv(process.env);
 const onFlightPlan = (event: FlightPlanEvent): void => {
+  feedMetrics.aftnMessagesReceived.inc();
   liveRuntime.feedHandlers.onFlightPlan?.(event);
-  flightPlanPublisher.publish(event).catch((err: unknown) => {
-    logger.warn({ err }, "flight plan not forwarded to Kafka");
-  });
+  flightPlanPublisher
+    .publish(event)
+    .then(() => feedMetrics.aftnFlightplansPersisted.inc())
+    .catch((err: unknown) => {
+      logger.warn({ err }, "flight plan not forwarded to Kafka");
+    });
 };
 
 startAsterixFeeds({
+  fuse: fuser ? (event: FusedTrackEvent) => fuser.ingest(event) : undefined,
   persist: (event: FusedTrackEventLike): void => {
-    void enqueueTrackEvent(event, { awaitFlush: false });
+    enqueueTrackEvent(event, { awaitFlush: false })
+      .then(() => feedMetrics.tracksPersisted.inc())
+      .catch((err: unknown) => {
+        feedMetrics.dbWriteErrors.inc();
+        logger.error({ err }, "track could not be queued for storage");
+      });
   },
   // AFTN multiplexed onto the radar stream takes the same route as a dedicated AFTN feed.
   handlers: {
     ...liveRuntime.feedHandlers,
     onTrack: (event: FusedTrackEvent): void => {
+      feedMetrics.tracksDecoded.inc();
       liveRuntime.feedHandlers.onTrack?.(event);
       movements.evaluate(event);
     },
+    onHealth: (event: SourceHealthEvent): void => {
+      feedMetrics.sourceHealthEvents.inc();
+      liveRuntime.feedHandlers.onHealth?.(event);
+    },
     onFlightPlan,
+  },
+});
+
+// Numbers the packages already keep are read when Prometheus scrapes; the same
+// state backs /health, so the two cannot disagree.
+registerStatMetrics({
+  feeds: () => getFeedStates().map((f) => f.stats),
+  live: () => liveRuntime.live.stats(),
+});
+const DB_PROBE_TIMEOUT_MS = 2_000;
+registerHealthProbe({
+  feeds: getFeedStates,
+  live: () => ({
+    clients: liveRuntime.live.stats().clients,
+    tracks: liveRuntime.state.size,
+    flightplans: liveRuntime.plans.size,
+  }),
+  fusion: () => fuser?.stats() ?? null,
+  trail: () => trail?.stats() ?? null,
+  database: async (): Promise<boolean> => {
+    const timeout = new Promise<boolean>((resolve) =>
+      setTimeout(() => resolve(false), DB_PROBE_TIMEOUT_MS),
+    );
+    const ping = pool.query("select 1").then(() => true);
+    return Promise.race([ping, timeout]);
   },
 });
 
@@ -220,6 +330,8 @@ const shutdown = async (signal: string): Promise<never> => {
   server.stop();
   liveRuntime.stop();
   movements.stop();
+  if (fusionSweep) clearInterval(fusionSweep);
+  trail?.stopSweep();
   await stopAsterixFeeds();
   await stopAftnFeeds();
   await flightPlanPublisher.stop();

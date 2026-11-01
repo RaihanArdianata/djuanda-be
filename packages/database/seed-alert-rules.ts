@@ -23,13 +23,15 @@ const defaultRules = [
           "Jarak horizontal minimum (nautical miles) antara dua track.",
         minimumVerticalSeparationFt:
           "Jarak vertikal minimum (feet) antara dua track — opsional.",
+        includeSurface:
+          "true = target di darat ikut dihitung (bawaan false: konflik di darat ditangani aturan incursion).",
       },
       examples: [
         {
-          name: "2 pesawat di posisi sama",
+          name: "2 pesawat di udara, posisi sama",
           topic: "asmgcs.tracks",
           explanation:
-            "Kirim 2 track posisi sama / sangat dekat. Jarak 0 NM < 3 NM akan trigger STCA.",
+            "Kirim 2 track di udara (onGround false) pada posisi sama / sangat dekat. Jarak 0 NM < 3 NM akan trigger STCA. Target di darat tidak dihitung.",
           payloads: [
             {
               eventType: "TRACK_UPDATED",
@@ -40,10 +42,10 @@ const defaultRules = [
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
                 longitude: 112.7874,
-                altitudeFt: 100,
-                groundSpeedKt: 0,
+                altitudeFt: 3000,
+                groundSpeedKt: 150,
                 heading: 90,
-                onGround: true,
+                onGround: false,
                 callsign: "STCA1",
               },
             },
@@ -56,10 +58,10 @@ const defaultRules = [
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
                 longitude: 112.7874,
-                altitudeFt: 100,
-                groundSpeedKt: 0,
+                altitudeFt: 3000,
+                groundSpeedKt: 150,
                 heading: 270,
-                onGround: true,
+                onGround: false,
                 callsign: "STCA2",
               },
             },

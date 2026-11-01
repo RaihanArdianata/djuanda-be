@@ -2,6 +2,21 @@ import type { AlertCandidate, AlertContext, DetectionRule } from "../../types";
 
 const DEFAULT_HORIZON_SECONDS = 60;
 
+/** Track tanpa flag onGround tapi altitude MSL di atas ini jelas airborne (sama dengan aturan incursion). */
+const AIRBORNE_ALTITUDE_FT = 500;
+
+/**
+ * STCA adalah peringatan konflik di UDARA. Target di darat (taksi, parkir, kendaraan) tidak ikut:
+ * konflik di permukaan ditangani aturan incursion, dan ambang pemisahan STCA (bawaan 3 NM) jauh
+ * lebih besar dari jarak antar target di apron, sehingga dua target yang diam pun memicu alert.
+ * Tanpa flag onGround, target dianggap di udara hanya bila altitudenya jelas di atas permukaan.
+ */
+function isAirborne(track: AlertContext["tracks"][0]): boolean {
+  if (track.onGround === true) return false;
+  if (track.onGround === false) return true;
+  return track.altitude !== undefined && track.altitude > AIRBORNE_ALTITUDE_FT;
+}
+
 export const stcaRule: DetectionRule = {
   type: "STCA",
   // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: STCA logic
@@ -14,13 +29,19 @@ export const stcaRule: DetectionRule = {
         ? config.predictionTimeSeconds
         : DEFAULT_HORIZON_SECONDS;
 
+    // `includeSurface: true` mengembalikan perilaku lama (semua target, termasuk di darat).
+    const tracks =
+      config.includeSurface === true
+        ? ctx.tracks
+        : ctx.tracks.filter(isAirborne);
+
     const candidates: AlertCandidate[] = [];
     const seen = new Set<string>();
 
-    for (let i = 0; i < ctx.tracks.length; i++) {
-      for (let j = i + 1; j < ctx.tracks.length; j++) {
-        const a = ctx.tracks[i];
-        const b = ctx.tracks[j];
+    for (let i = 0; i < tracks.length; i++) {
+      for (let j = i + 1; j < tracks.length; j++) {
+        const a = tracks[i];
+        const b = tracks[j];
 
         const pairKey = [a.trackId, b.trackId].sort().join("|");
         if (seen.has(pairKey)) continue;

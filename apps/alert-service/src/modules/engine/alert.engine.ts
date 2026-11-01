@@ -315,8 +315,6 @@ async function clearExpiredForAirport(airportId: string): Promise<Alert[]> {
   // (sama seperti clearStaleAlerts). Expire murni umur dulu membuat alert
   // persisten (pesawat masih di dalam surface >5 menit) siklus
   // Aktif→Selesai→BARU tanpa henti.
-  const refreshThreshold =
-    ACTIVE_ALERT_TTL_SECONDS - alertServiceEnv.staleGraceSeconds;
   const refs = await getActiveAlertRefs(airportId);
   const refKeyByAlertId = new Map(
     refs
@@ -327,10 +325,10 @@ async function clearExpiredForAirport(airportId: string): Promise<Alert[]> {
   const cleared: Alert[] = [];
   for (const { alertId } of expired) {
     const refKey = refKeyByAlertId.get(alertId);
-    if (refKey) {
-      const ttl = await getActiveAlertTtl(refKey);
-      if (ttl > refreshThreshold) continue;
-    }
+    // The event timestamp may come from a delayed/replayed surveillance feed.
+    // An existing Redis claim is the runtime liveness signal; expiring from
+    // `triggeredAt` alone creates ALERT_CLEARED/ALERT_CREATED flicker.
+    if (refKey) continue;
     try {
       const alert = await clearAlertByAlertId(alertId);
       if (alert) cleared.push(alert);

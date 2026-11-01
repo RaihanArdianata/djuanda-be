@@ -7,6 +7,7 @@ import { logger } from "hono/logger";
 import health from "./routes/health";
 import { sseHandler } from "./sse";
 import { wsHandler } from "./websocket";
+import { connectionLiveProxy } from "./websocket/connection-live";
 
 const app = new Hono()
   .use(logger())
@@ -15,6 +16,7 @@ const app = new Hono()
   .get("/metrics", metricsHandler)
   .route("/health", health)
   .get("/ws/playback/:sessionId", playbackWsHandlers)
+  .get("/ws/tracks/live", connectionLiveProxy)
   .get("/ws/:topic", wsHandler)
   .get("/events/:topic", sseHandler);
 

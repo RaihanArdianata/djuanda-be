@@ -86,6 +86,8 @@ mock.module("../service/statistics.service", () => ({
   getOperationalStatistics,
 }));
 
+import { sampleReportResult } from "../lib/report-fixture";
+
 const { default: statisticsRoute } = await import("./statistics.route");
 
 const sampleOperationalStatistics = {
@@ -159,5 +161,44 @@ describe("GET /operational", () => {
 
     expect(res.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("GET /operational/export", () => {
+  it("returns the Excel report as a downloadable xlsx file", async () => {
+    getOperationalStatistics.mockResolvedValue(sampleReportResult());
+
+    const res = await statisticsRoute.request(
+      "/operational/export?period=daily&startDate=2026-11-01&endDate=2026-11-02&severity=CRITICAL",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe(
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    expect(res.headers.get("content-disposition")).toBe(
+      'attachment; filename="laporan_statistik_bandara_daily_2026-11-01_2026-11-02.xlsx"',
+    );
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    // An xlsx is a zip archive: it starts with "PK".
+    expect(String.fromCharCode(bytes[0] ?? 0, bytes[1] ?? 0)).toBe("PK");
+    expect(getOperationalStatistics).toHaveBeenCalledWith(
+      expect.objectContaining({ severity: "CRITICAL" }),
+    );
+  });
+
+  it("rejects a start date after the end date", async () => {
+    const res = await statisticsRoute.request(
+      "/operational/export?period=daily&startDate=2026-11-05&endDate=2026-11-02",
+    );
+    expect(res.status).toBe(400);
+    expect(getOperationalStatistics).not.toHaveBeenCalled();
+  });
+
+  it("validates the query like the JSON endpoint does", async () => {
+    const res = await statisticsRoute.request(
+      "/operational/export?period=yearly&startDate=2026-11-01&endDate=2026-11-02",
+    );
+    expect(res.status).toBe(400);
   });
 });

@@ -189,6 +189,7 @@
         "@repo/shared": "workspace:*",
         "@repo/validation": "workspace:*",
         "drizzle-orm": "^0.45.2",
+        "exceljs": "^4.4.0",
         "hono": "^4.12.27",
         "ioredis": "^5.11.1",
         "kafkajs": "^2.2.4",

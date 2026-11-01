@@ -192,6 +192,32 @@ registry.registerPath({
   },
 });
 
+registry.registerPath({
+  method: "get",
+  path: "/statistics/operational/export",
+  tags: ["Statistics"],
+  summary: "Download operational statistics report (Excel)",
+  description:
+    "Laporan Excel (.xlsx) dengan filter yang sama seperti /statistics/operational: ringkasan eksekutif, tren per periode, lalu lintas, ringkasan alert, log alert, log pergerakan, dan legenda. Respons berupa berkas unduhan (Content-Disposition: attachment).",
+  security: [{ [bearerAuth.name]: [] }],
+  request: {
+    query: getOperationalStatisticsSchema,
+  },
+  responses: {
+    200: {
+      description: "Berkas laporan Excel",
+      content: {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+          schema: z.string().openapi({ format: "binary" }),
+        },
+      },
+    },
+    400: errorResponse("Validasi gagal atau rentang tanggal tidak valid"),
+    401: errorResponse("Belum login"),
+    403: errorResponse("Tidak memiliki permission"),
+  },
+});
+
 export const openApiDocument = new OpenApiGeneratorV3(
   registry.definitions,
 ).generateDocument({

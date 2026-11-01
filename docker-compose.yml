@@ -325,6 +325,14 @@ services:
     env_file: .env
     environment:
       CONNECTION_SERVICE_PORT: ${CONNECTION_SERVICE_PORT:-3005}
+      AEROSWARM_AIRPORT_ID: ${AIRPORT_ID:-WARR}
+      CONNECTION_API_TOKENS: ${CONNECTION_API_TOKENS:-${AERO_TOKEN:-}}
+      AEROSWARM_FEED_UDP_PORT: ${AEROSWARM_FEED_UDP_PORT:-2026}
+      AEROSWARM_FEED_UDP_HOST: ${SOURCE_BIND_HOST:-0.0.0.0}
+      AEROSWARM_FEED_SOURCE_ID: ${SOURCE_ID:-radar-main}
+      AFTN_FEED_UDP_PORT: ${AFTN_FEED_UDP_PORT:-}
+      AFTN_FEED_SOURCE_ID: ${AFTN_SOURCE_ID:-aftn-udp}
+      AEROSWARM_FLIGHTPLAN_TOPIC: ${AEROSWARM_FLIGHTPLAN_TOPIC:-aeroswarm.flightplan.warr}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       # Kafka ingest consumer (alternative to http/websocket — see
       # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run

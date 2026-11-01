@@ -22,7 +22,7 @@ mock.module("@repo/shared/sse/publisher", () => ({
 // Imported dynamically, after the mocks above are registered, so the poller
 // picks up the mocked provider + persistence layer instead of the real ones
 // (no network call, no DB required to exercise the polling logic itself).
-const { pollMetar, pollTaf } = await import("./weather-poller");
+const { pollMetar, pollTaf, syncWeatherNow } = await import("./weather-poller");
 
 const metarItem = {
   icaoId: "WARR",
@@ -165,5 +165,20 @@ describe("pollTaf", () => {
     saveForecast.mockRejectedValue(new Error("db unavailable"));
 
     await expect(pollTaf()).rejects.toThrow("db unavailable");
+  });
+});
+
+describe("syncWeatherNow", () => {
+  it("polls all three feeds, reports each one, and rate limits the next call", async () => {
+    fetchLatestBmkgMetar.mockResolvedValue(null);
+    fetchLatestBmkgSpeci.mockResolvedValue(null);
+    fetchLatestBmkgTaf.mockRejectedValue(new Error("bmkg down"));
+
+    const t0 = 1_000_000_000_000;
+    const first = await syncWeatherNow(t0);
+    expect(first?.results).toEqual({ metar: "ok", speci: "ok", taf: "failed" });
+
+    expect(await syncWeatherNow(t0 + 5_000)).toBeNull();
+    expect(await syncWeatherNow(t0 + 31_000)).not.toBeNull();
   });
 });

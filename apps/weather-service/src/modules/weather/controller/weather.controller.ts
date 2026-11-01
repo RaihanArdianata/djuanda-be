@@ -8,6 +8,7 @@ import {
   getObservationHistory,
   getObservationHistoryCount,
 } from "../services/weather.service";
+import { syncWeatherNow } from "../services/weather-poller";
 import type {
   GetCurrentObservationParams,
   GetForecastParams,
@@ -84,3 +85,15 @@ const getProductObservation = (kind: "METAR" | "SPECI"): typeof getCurrent =>
 
 export const getMetar = getProductObservation("METAR");
 export const getSpeci = getProductObservation("SPECI");
+
+export const syncWeather = catchAsync(async (c) => {
+  const result = await syncWeatherNow();
+
+  if (!result) {
+    throw new ApiError("TOO_MANY_ATTEMPTS", {
+      message: "Weather was just synced, try again in a few seconds",
+    });
+  }
+
+  return success(c, result, { message: "Weather sync finished" });
+});

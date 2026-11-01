@@ -77,25 +77,37 @@ describe("connectionServiceToken", () => {
       connectionServiceToken({
         CONNECTION_SERVICE_TOKEN: " x ",
         CONNECTION_API_TOKENS: "a,b",
+        AEROSWARM_MONITOR_TOKENS: undefined,
       }),
     ).toBe("x");
     expect(
       connectionServiceToken({
         CONNECTION_SERVICE_TOKEN: undefined,
         CONNECTION_API_TOKENS: " a , b",
+        AEROSWARM_MONITOR_TOKENS: undefined,
       }),
     ).toBe("a");
     expect(
       connectionServiceToken({
         CONNECTION_SERVICE_TOKEN: "",
         CONNECTION_API_TOKENS: ",,",
+        AEROSWARM_MONITOR_TOKENS: undefined,
       }),
     ).toBeUndefined();
     expect(
       connectionServiceToken({
         CONNECTION_SERVICE_TOKEN: undefined,
         CONNECTION_API_TOKENS: undefined,
+        AEROSWARM_MONITOR_TOKENS: undefined,
       }),
     ).toBeUndefined();
+    // The name this deployment's .env uses for the same list.
+    expect(
+      connectionServiceToken({
+        CONNECTION_SERVICE_TOKEN: undefined,
+        CONNECTION_API_TOKENS: undefined,
+        AEROSWARM_MONITOR_TOKENS: "legacy-1,legacy-2",
+      }),
+    ).toBe("legacy-1");
   });
 });

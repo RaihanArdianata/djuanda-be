@@ -4,12 +4,20 @@ import { env } from "./env";
 export function connectionServiceToken(
   source: Pick<
     typeof env,
-    "CONNECTION_SERVICE_TOKEN" | "CONNECTION_API_TOKENS"
+    | "CONNECTION_SERVICE_TOKEN"
+    | "CONNECTION_API_TOKENS"
+    | "AEROSWARM_MONITOR_TOKENS"
   > = env,
 ): string | undefined {
   const explicit = source.CONNECTION_SERVICE_TOKEN?.trim();
   if (explicit) return explicit;
-  const first = source.CONNECTION_API_TOKENS?.split(",")
+  // Same lists, same order as connection-service reads them.
+  const list = [
+    source.CONNECTION_API_TOKENS,
+    source.AEROSWARM_MONITOR_TOKENS,
+  ].join(",");
+  const first = list
+    .split(",")
     .map((t) => t.trim())
     .find((t) => t.length > 0);
   return first || undefined;

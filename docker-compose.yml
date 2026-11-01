@@ -379,6 +379,8 @@ services:
     env_file: .env
     environment:
       WORKER_SERVICE_PORT: ${WORKER_SERVICE_PORT:-3003}
+      # /ws/tracks/live is relayed here to connection-service (WebSocket traffic enters via the worker).
+      CONNECTION_SERVICE_URL: http://connection-service:${CONNECTION_SERVICE_PORT:-3005}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       REDIS_HOST: redis
       REDIS_PORT: "6379"

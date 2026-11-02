@@ -22,9 +22,12 @@ import {
 } from "./modules/feed/asterix-feed";
 import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
 import { createIdentityMemory } from "./modules/feed/identity-memory";
+import { restoreIdentities } from "./modules/feed/identity-restore";
+import { fetchStoredIdentities } from "./modules/feed/identity-restore.db";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
+import { callsignFromPlan } from "./modules/flightplan/plan-callsign";
 import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
 import {
   isValidMonitorToken,
@@ -259,7 +262,22 @@ setInterval(() => {
 
 // ASTERIX menyertakan callsign hanya sesekali; ingat yang terakhir supaya update tanpa identitas
 // tidak menimpanya (label kembali ke kode Mode-S, termasuk saat track lost).
-const identityMemory = createIdentityMemory();
+// Pesawat yang belum pernah mengirim identitas diberi nama dari rencana AFTN yang memuat alamat
+// Mode-S-nya; saat start, callsign 30 menit terakhir dipulihkan dari database.
+const identityMemory = createIdentityMemory({
+  fallback: (icao24: string, now: number): string | undefined =>
+    callsignFromPlan(liveRuntime.plans, icao24, now),
+});
+restoreIdentities(identityMemory, fetchStoredIdentities)
+  .then((restored) =>
+    logger.info(restored, "aircraft callsigns restored from stored tracks"),
+  )
+  .catch((err: unknown) =>
+    logger.warn(
+      { err },
+      "could not restore aircraft callsigns — names fill in as identities arrive",
+    ),
+  );
 setInterval(() => identityMemory.sweep(), 60_000).unref?.();
 
 startAsterixFeeds({

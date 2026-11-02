@@ -24,6 +24,10 @@ import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
 import { createIdentityMemory } from "./modules/feed/identity-memory";
 import { restoreIdentities } from "./modules/feed/identity-restore";
 import { fetchStoredIdentities } from "./modules/feed/identity-restore.db";
+import {
+  applySurfaceState,
+  createSurfaceStateStore,
+} from "./modules/feed/surface-state";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
@@ -90,9 +94,12 @@ type SocketData =
 // Takeoff/landing terakhir tiap track; menentukan Arrival/Departure di label, dengan atau
 // tanpa rencana penerbangan (AFTN).
 const movementPhases = createMovementPhaseStore();
+// Satu keputusan darat/udara untuk peta, alert, dan statistik (flag feed saja tidak cukup).
+const surfaceStates = createSurfaceStateStore();
 const liveRuntime = createLiveRuntime({
   authenticate: (token: string) => verifyToken(token),
   movementPhases,
+  surfaceStates,
 });
 const liveHandlers = liveSocketHandlers(liveRuntime.live);
 const asLiveSocket = (
@@ -231,6 +238,7 @@ logger.info(
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
   movementPhases.forget(trackId);
+  surfaceStates.forget(trackId);
   fuser?.forget(trackId);
 });
 
@@ -282,8 +290,12 @@ setInterval(() => identityMemory.sweep(), 60_000).unref?.();
 
 startAsterixFeeds({
   fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
-    const filled = identityMemory.fill(event);
-    return fuser ? fuser.ingest(filled) : filled;
+    const normalized = applySurfaceState(identityMemory.fill(event));
+    const out = fuser ? fuser.ingest(normalized) : normalized;
+    if (out && out.lifecycle !== "dropped") {
+      surfaceStates.set(out.trackId, out.position?.onGround);
+    }
+    return out;
   },
   persist: (event: FusedTrackEventLike): void => {
     enqueueTrackEvent(event, { awaitFlush: false })

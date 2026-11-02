@@ -15,6 +15,7 @@ import {
 } from "@aeroswarm/live-server";
 import { logger } from "@repo/logger";
 import type { FeedHandlers } from "../feed/asterix-feed";
+import type { SurfaceStateStore } from "../feed/surface-state";
 import { type LiveConfig, liveConfigFromEnv } from "./live-config";
 import type { MovementPhaseStore } from "./movement-phase";
 
@@ -37,6 +38,8 @@ export interface LiveRuntimeOptions {
   config?: LiveConfig;
   /** Takeoff/landing terakhir per track; fasenya menimpa fase dari rencana penerbangan. */
   movementPhases?: MovementPhaseStore;
+  /** Status darat/udara yang sudah dinormalkan; ikut dikirim ke klien sebagai `onGround`. */
+  surfaceStates?: SurfaceStateStore;
 }
 
 /**
@@ -56,6 +59,13 @@ export function createLiveRuntime(opts: LiveRuntimeOptions): LiveRuntime {
 
   const plans = createFlightPlanStore();
   const movementPhases = opts.movementPhases;
+  const surfaceStates = opts.surfaceStates;
+  const attachTrack = (track: CurrentTrack): CurrentTrack => {
+    let out = plans.attach(track);
+    if (movementPhases) out = movementPhases.attach(out);
+    if (surfaceStates) out = surfaceStates.attach(out);
+    return out;
+  };
   const state = createTrackState({
     staleAfterMs: config.staleAfterMs,
     lostAfterMs: config.lostAfterMs,
@@ -63,10 +73,7 @@ export function createLiveRuntime(opts: LiveRuntimeOptions): LiveRuntime {
     interestBbox: config.interestBbox,
     interestLookaheadMin: config.interestLookaheadMin,
     exit: config.exit,
-    attachFlightPlan: movementPhases
-      ? (track: CurrentTrack): CurrentTrack =>
-          movementPhases.attach(plans.attach(track))
-      : plans.attach,
+    attachFlightPlan: attachTrack,
   });
   if (config.interestBbox) {
     logger.info(

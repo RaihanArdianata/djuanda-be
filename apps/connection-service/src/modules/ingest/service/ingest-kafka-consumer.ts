@@ -1,6 +1,8 @@
+import type { FusedTrackEvent } from "@aeroswarm/core";
 import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
 import { feedMetrics } from "../../feed/feed-metrics";
+import { applySurfaceState } from "../../feed/surface-state";
 import {
   isCoveredDuplicate,
   isFlightPlanShape,
@@ -106,7 +108,10 @@ async function parseMessageValue(
   // consumer when the buffer is full, and the offset is only committed for
   // events at most MAX_BUFFER behind the durable flush.
   try {
-    await enqueueIngestEvent(event, { awaitFlush: false });
+    // Track dari AeroSwarm disimpan dengan status darat/udara yang sama seperti feed langsung.
+    const toStore =
+      kind === "track" ? applySurfaceState(event as FusedTrackEvent) : event;
+    await enqueueIngestEvent(toStore, { awaitFlush: false });
     recordIngestLog({
       source: "kafka",
       kind,

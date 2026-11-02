@@ -1,5 +1,11 @@
 import { logger } from "@repo/logger";
 import { type Consumer, type EachMessagePayload, Kafka } from "kafkajs";
+import { feedMetrics } from "../../feed/feed-metrics";
+import {
+  isCoveredDuplicate,
+  isFlightPlanShape,
+  type PrimaryFeedGate,
+} from "../lib/primary-feed-gate";
 import {
   AirportMismatchError,
   assertExpectedAirport,
@@ -15,7 +21,10 @@ function getEventKeys(event: unknown): string[] | string {
   return event && typeof event === "object" ? Object.keys(event) : typeof event;
 }
 
-async function parseMessageValue(raw: Buffer | null): Promise<void> {
+async function parseMessageValue(
+  raw: Buffer | null,
+  gate?: PrimaryFeedGate,
+): Promise<void> {
   if (!raw) return;
   let event: unknown;
   try {
@@ -36,6 +45,11 @@ async function parseMessageValue(raw: Buffer | null): Promise<void> {
 
   const { id, airportId } = getIngestEventIdentity(event);
   const kind = getIngestLogKind(event);
+
+  if (kind === "unknown" && isFlightPlanShape(event)) {
+    // AFTN yang diteruskan AeroSwarm ke topic ini; AFTN sudah diterima lewat UDP langsung.
+    return;
+  }
 
   if (kind === "unknown") {
     recordIngestLog({
@@ -72,6 +86,20 @@ async function parseMessageValue(raw: Buffer | null): Promise<void> {
     throw err;
   }
 
+  // Radar/MLAT yang sama juga masuk lewat feed UDP langsung dengan trackId lain: bila jalur itu
+  // sudah mencakup pesawatnya, event ini kembar dan dibuang (lihat primary-feed-gate.ts).
+  if (isCoveredDuplicate(gate, kind, event)) {
+    feedMetrics.ingestDuplicatesDropped.inc();
+    recordIngestLog({
+      source: "kafka",
+      kind,
+      status: "duplicate",
+      id,
+      airportId,
+    });
+    return;
+  }
+
   // Buffer-only enqueue (awaitFlush: false) — awaiting the timed flush per
   // message throttles the consumer to ~1 batch per 500ms, which cannot keep
   // up with the simulator feed rate. applyBackpressure still pauses the
@@ -105,7 +133,14 @@ async function parseMessageValue(raw: Buffer | null): Promise<void> {
 
 /** No-op (consumer stays unset) when AEROSWARM_INGEST_KAFKA_BROKERS is
  *  unset — the http/websocket ingest paths work independently of this. */
-export async function startIngestKafkaConsumer(): Promise<void> {
+export interface IngestKafkaConsumerOptions {
+  /** Penyaring event kembar dari jalur utama; tanpa ini semua event diterima. */
+  gate?: PrimaryFeedGate;
+}
+
+export async function startIngestKafkaConsumer(
+  options: IngestKafkaConsumerOptions = {},
+): Promise<void> {
   const brokersEnv = process.env.AEROSWARM_INGEST_KAFKA_BROKERS;
   if (!brokersEnv) {
     logger.info(
@@ -138,7 +173,7 @@ export async function startIngestKafkaConsumer(): Promise<void> {
   await consumer.run({
     partitionsConsumedConcurrently: 3,
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
-      await parseMessageValue(message.value);
+      await parseMessageValue(message.value, options.gate);
     },
   });
 

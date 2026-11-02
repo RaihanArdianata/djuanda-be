@@ -24,7 +24,7 @@ export interface IngestLogEntry {
   timestamp: string;
   source: "http" | "kafka";
   kind: "track" | "alert" | "movement" | "unknown";
-  status: "accepted" | "rejected" | "error";
+  status: "accepted" | "rejected" | "error" | "duplicate";
   id?: string;
   airportId?: string;
   message?: string;

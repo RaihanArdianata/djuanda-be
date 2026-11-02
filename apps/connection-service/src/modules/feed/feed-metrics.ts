@@ -22,6 +22,10 @@ export const feedMetrics = {
     "source_health_events_total",
     "Ground-station status events received",
   ),
+  ingestDuplicatesDropped: createCounter(
+    "ingest_duplicates_dropped_total",
+    "Kafka ingest events dropped because the direct feed already covers that aircraft",
+  ),
   dbWriteErrors: createCounter(
     "db_write_errors_total",
     "Tracks that could not be queued for storage",

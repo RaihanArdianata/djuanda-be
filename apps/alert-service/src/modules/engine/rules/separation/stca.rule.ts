@@ -54,6 +54,10 @@ export const stcaRule: DetectionRule = {
         const a = tracks[i];
         const b = tracks[j];
 
+        // Callsign sama = satu pesawat yang terlihat dua kali (dua trackId dari dua jalur feed),
+        // bukan dua pesawat yang berdekatan.
+        if (a.callsign && a.callsign === b.callsign) continue;
+
         const pairKey = [a.trackId, b.trackId].sort().join("|");
         if (seen.has(pairKey)) continue;
         seen.add(pairKey);

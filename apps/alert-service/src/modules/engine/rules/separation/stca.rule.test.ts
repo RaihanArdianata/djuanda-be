@@ -62,6 +62,24 @@ describe("stcaRule", () => {
     expect(results[0].relatedTrackId).toBe("B");
   });
 
+  test("does not pair a track with its twin of the same callsign", () => {
+    const ctx: AlertContext = {
+      airportId: "WARR",
+      timestamp: now,
+      tracks: [
+        { ...trackA, callsign: "CTV696" },
+        { ...trackA, trackId: "A-twin", callsign: "CTV696" },
+      ],
+    };
+
+    expect(
+      stcaRule.evaluate(ctx, {
+        predictionTimeSeconds: 60,
+        minimumHorizontalSeparationNm: 3,
+      }).length,
+    ).toBe(0);
+  });
+
   test("does not generate an STCA for well separated tracks", () => {
     const ctx: AlertContext = {
       airportId: "WARR",

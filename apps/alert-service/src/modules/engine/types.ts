@@ -109,8 +109,17 @@ export interface AlertContext {
   notam?: NotamContextData | null;
 }
 
+/** Konteks tambahan (selain aerodrome) yang dibaca sebuah rule. */
+export type ContextNeed = "weather" | "aftn" | "notam";
+
 export interface DetectionRule {
   type: string;
+  /**
+   * Konteks tambahan yang dibaca rule ini. Kosong/tidak diisi = tidak butuh. Cuaca, AFTN, dan NOTAM
+   * hanya diambil bila ada rule aktif yang memintanya: mengambilnya tiap evaluasi (cache Redis
+   * berukuran ribuan pesan, atau HTTP dengan timeout 2 detik) menahan setiap putaran evaluasi.
+   */
+  needs?: readonly ContextNeed[];
   evaluate: (
     ctx: AlertContext,
     config: Record<string, unknown>,

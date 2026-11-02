@@ -8,6 +8,7 @@ import { getWeatherContext } from "../../context/weather.context";
 import type {
   AerodromeContextData,
   AlertContext,
+  ContextNeed,
   MovementTrack,
 } from "./types";
 
@@ -37,12 +38,13 @@ function pick<T>(
 export async function buildAlertContext(
   input: BuildDetectionContextInput,
   aerodromePromise?: Promise<AerodromeContextData | null>,
+  needs: ReadonlySet<ContextNeed> = new Set(),
 ): Promise<AlertContext> {
   const [weather, aerodrome, aftn, notam] = await Promise.allSettled([
-    getWeatherContext(input.airportId),
+    needs.has("weather") ? getWeatherContext(input.airportId) : null,
     aerodromePromise ?? getAerodromeContext(input.airportId, input.tracks),
-    getAftnContext(input.airportId),
-    getNotamContext(input.airportId),
+    needs.has("aftn") ? getAftnContext(input.airportId) : null,
+    needs.has("notam") ? getNotamContext(input.airportId) : null,
   ]);
 
   return {

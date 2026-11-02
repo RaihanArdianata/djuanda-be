@@ -35,7 +35,12 @@ import {
   resolveTrackHistoryKey,
   type TrackHistoryRecord,
 } from "./track-history";
-import type { AlertCandidate, AlertContext, MovementTrack } from "./types";
+import type {
+  AlertCandidate,
+  AlertContext,
+  ContextNeed,
+  MovementTrack,
+} from "./types";
 
 function trackSnapshotToHistoryPoint(
   alertId: string,
@@ -117,6 +122,16 @@ export async function processTrackUpdate(track: MovementTrack): Promise<void> {
   }
 
   await evaluateMovement(input);
+}
+
+/** Konteks tambahan yang dibaca oleh rule yang sedang aktif. */
+export function contextNeeds(rules: AlertRule[]): Set<ContextNeed> {
+  const needs = new Set<ContextNeed>();
+  for (const rule of rules) {
+    const detector = detectionRules.find((d) => d.type === rule.type);
+    for (const need of detector?.needs ?? []) needs.add(need);
+  }
+  return needs;
 }
 
 function collectCandidates(
@@ -437,7 +452,11 @@ export const evaluateMovement = async (
     return { created: [], updated: [], cleared: [] };
   }
 
-  const ctx = await buildAlertContext(input, aerodromePromise);
+  const ctx = await buildAlertContext(
+    input,
+    aerodromePromise,
+    contextNeeds(rules),
+  );
   const candidates = collectCandidates(rules, ctx);
 
   if (candidates.length === 0) {

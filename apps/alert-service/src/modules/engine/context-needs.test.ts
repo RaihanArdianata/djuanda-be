@@ -17,6 +17,16 @@ describe("contextNeeds", () => {
     expect(needs.size).toBe(0);
   });
 
+  it("the weather rules need the weather context, and only that", () => {
+    const needs = contextNeeds([
+      rule("WEATHER_MINIMA"),
+      rule("WEATHER_CROSSWIND"),
+      rule("WEATHER_CATEGORY_DROP"),
+      rule("WEATHER_THUNDERSTORM"),
+    ]);
+    expect([...needs]).toEqual(["weather"]);
+  });
+
   it("ignores rule types that have no detector", () => {
     expect(contextNeeds([rule("SOMETHING_ELSE")]).size).toBe(0);
   });

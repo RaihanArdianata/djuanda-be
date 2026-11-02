@@ -259,6 +259,95 @@ const defaultRules = [
         "Untuk trigger otomatis dari AFTN, parser FPL harus menghasilkan expectedRoute. Saat ini perlu ditambahkan manual di configuration atau modifikasi fpl.parser.ts.",
     },
   },
+  {
+    type: "WEATHER_MINIMA",
+    enabled: true,
+    // Nilai minima berasal dari ketentuan bandara, jadi seed tidak mengisinya dan tidak menimpa isian pengguna.
+    preserveConfiguration: true,
+    description:
+      "Cuaca di bawah minima yang ditentukan bandara (jarak pandang, plafon, RVR). Pengamatan = CRITICAL, prakiraan TAF = WARNING.",
+    configuration: {},
+    documentation: {
+      parameters: {
+        visibilityM:
+          "Jarak pandang minimum (meter). Pengamatan di bawah nilai ini memicu alert. Kosong = tidak diperiksa.",
+        ceilingFt:
+          "Plafon minimum (feet di atas tanah; dasar awan BKN/OVC/VV terendah). Kosong = tidak diperiksa.",
+        rvrM: "RVR minimum (meter). Kosong = tidak diperiksa. Data RVR yang tidak ada tidak memicu alert.",
+        rvrRunways:
+          'Daftar runway yang diperiksa untuk RVR, mis. ["10","28"]. Kosong = semua yang dilaporkan.',
+        forecastHours:
+          "Berapa jam ke depan TAF diperiksa untuk peringatan dini (WARNING). Bawaan 3; 0 = hanya pengamatan.",
+        maxObservationAgeMinutes:
+          "Pengamatan yang lebih tua dari ini (menurut jam di laporannya) diabaikan. Bawaan 120.",
+      },
+      notes:
+        "Tanpa satu pun ambang yang diisi, rule ini tidak menghasilkan alert. Nilai minima tidak punya bawaan: isi sesuai ketentuan bandara.",
+    },
+  },
+  {
+    type: "WEATHER_CROSSWIND",
+    enabled: true,
+    preserveConfiguration: true,
+    description:
+      "Angin silang di runway melewati batas yang ditentukan bandara. Hembusan (gust) dihitung. Pengamatan = CRITICAL, prakiraan TAF = WARNING.",
+    configuration: {},
+    documentation: {
+      parameters: {
+        crosswindKt:
+          "Batas angin silang (knot). Wajib diisi; kosong = rule tidak aktif.",
+        runways:
+          'Opsional. Daftar runway dengan heading magnetik, mis. [{"designator":"10","magneticHeadingDeg":98}]. Kosong = runway aktif dari data aerodrome (heading dari sumbu polygonnya).',
+        variationEastDeg:
+          "Variasi magnetik (derajat, positif ke timur) untuk mengubah heading magnetik di `runways` menjadi true. Angin METAR dalam derajat true. Heading dari polygon sudah true.",
+        onlyActiveRunways:
+          "true (bawaan) = hanya runway berstatus aktif di data aerodrome.",
+        forecastHours:
+          "Berapa jam ke depan TAF diperiksa (WARNING). Bawaan 3; 0 = hanya pengamatan.",
+        maxObservationAgeMinutes:
+          "Pengamatan yang lebih tua dari ini diabaikan. Bawaan 120.",
+      },
+      notes:
+        "Angin silang sama besarnya di kedua arah runway, jadi arah yang dipakai tidak perlu diketahui. Batasnya diisi dari ketentuan bandara atau operator; tidak ada nilai bawaan.",
+    },
+  },
+  {
+    type: "WEATHER_CATEGORY_DROP",
+    enabled: true,
+    preserveConfiguration: true,
+    description:
+      "Kategori penerbangan (VFR/MVFR/IFR/LIFR) turun ke tingkat yang ditentukan atau lebih buruk. Pengamatan = CRITICAL, prakiraan TAF = WARNING.",
+    configuration: {},
+    documentation: {
+      parameters: {
+        alertFrom:
+          'Kategori terbaik yang masih memicu alert: "MVFR", "IFR", atau "LIFR". Mis. "IFR" memicu pada IFR dan LIFR. Kosong atau tidak valid = rule tidak aktif.',
+        forecastHours:
+          "Berapa jam ke depan TAF diperiksa (WARNING). Bawaan 3; 0 = hanya pengamatan.",
+        maxObservationAgeMinutes:
+          "Pengamatan yang lebih tua dari ini diabaikan. Bawaan 120.",
+      },
+      notes:
+        "Kategori mengikuti definisi FAA (ICAO tidak mendefinisikannya): LIFR di bawah 500 ft atau 1 mil, IFR di bawah 1.000 ft atau 3 mil, MVFR sampai 3.000 ft atau 5 mil.",
+    },
+  },
+  {
+    type: "WEATHER_THUNDERSTORM",
+    enabled: true,
+    preserveConfiguration: true,
+    description:
+      "Badai petir dan awan CB. Badai di bandara pada pengamatan = CRITICAL; di sekitar (VCTS) atau CB, atau prakiraan TAF = WARNING.",
+    configuration: { forecastHours: 3 },
+    documentation: {
+      parameters: {
+        forecastHours:
+          "Berapa jam ke depan TAF diperiksa untuk badai petir atau CB. Bawaan 3; 0 = hanya pengamatan.",
+        maxObservationAgeMinutes:
+          "Pengamatan yang lebih tua dari ini diabaikan. Bawaan 120.",
+      },
+      notes: "Tidak butuh ambang.",
+    },
+  },
 ];
 
 async function seed(): Promise<void> {
@@ -280,8 +369,10 @@ async function seed(): Promise<void> {
         .set({
           description: rule.description,
           documentation: rule.documentation,
-          configuration: rule.configuration,
-          enabled: rule.enabled,
+          // Rule yang nilainya diisi pengguna (mis. minima cuaca) tidak boleh ditimpa saat seed ulang.
+          ...("preserveConfiguration" in rule && rule.preserveConfiguration
+            ? {}
+            : { configuration: rule.configuration, enabled: rule.enabled }),
           updatedAt: new Date(),
         })
         .where(eq(alertRules.id, existing[0].id));

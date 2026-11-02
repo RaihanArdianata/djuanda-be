@@ -11,6 +11,7 @@
         "test:coverage": "bun test --coverage --coverage-reporter=text"
     },
     "dependencies": {
+        "@aeroswarm/weather": "^0.3.0",
         "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",

@@ -63,6 +63,7 @@
       "name": "@repo/alert-service",
       "version": "0.0.0",
       "dependencies": {
+        "@aeroswarm/weather": "^0.3.0",
         "@repo/auth": "workspace:*",
         "@repo/config": "workspace:*",
         "@repo/database": "workspace:*",
@@ -319,6 +320,8 @@
     "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.4", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "zod": "^4.4.3" } }, "sha512-SuIPhZS4ImJAtyDUDKJbMFoRr05ZsdGr53myrWSsyl1BAvhhRRdnWm22loLTFCQIW5M6Tu75Y3CbI/0MCLw3PA=="],
 
     "@aeroswarm/replay-server": ["@aeroswarm/replay-server@0.2.3", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "postgres": "^3.4.7", "ws": "^8.16.0" }, "peerDependencies": { "hono": ">=4.0.0" }, "optionalPeers": ["hono"] }, "sha512-fheLJuaEL1tbr1eH4J6NCoR5xbZ9lc4u0WsZLvJlum/qvmzsSc0YzQSiVKXrHZ8Mks/lresNJlNrgS177NvDRw=="],
+
+    "@aeroswarm/weather": ["@aeroswarm/weather@0.3.0", "", {}, "sha512-CBq8RA3S2hY25pN++POCHCStRgWrqKZGyVkg525X6VPtH89iOO3nn/EwRN364+VwjkWtVhAUCUBoTH51O7+HHg=="],
 
     "@asteasolutions/zod-to-openapi": ["@asteasolutions/zod-to-openapi@8.5.0", "", { "dependencies": { "openapi3-ts": "^4.1.2" }, "peerDependencies": { "zod": "^4.0.0" } }, "sha512-SABbKiObg5dLRiTFnqiW1WWwGcg1BJfmHtT2asIBnBHg6Smy/Ms2KHc650+JI4Hw7lSkdiNebEGXpwoxfben8Q=="],
 

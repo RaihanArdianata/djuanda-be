@@ -21,9 +21,17 @@ import {
   stopAsterixFeeds,
 } from "./modules/feed/asterix-feed";
 import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
+import { createIdentityMemory } from "./modules/feed/identity-memory";
+import { restoreIdentities } from "./modules/feed/identity-restore";
+import { fetchStoredIdentities } from "./modules/feed/identity-restore.db";
+import {
+  applySurfaceState,
+  createSurfaceStateStore,
+} from "./modules/feed/surface-state";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
+import { callsignFromPlan } from "./modules/flightplan/plan-callsign";
 import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
 import {
   isValidMonitorToken,
@@ -86,9 +94,12 @@ type SocketData =
 // Takeoff/landing terakhir tiap track; menentukan Arrival/Departure di label, dengan atau
 // tanpa rencana penerbangan (AFTN).
 const movementPhases = createMovementPhaseStore();
+// Satu keputusan darat/udara untuk peta, alert, dan statistik (flag feed saja tidak cukup).
+const surfaceStates = createSurfaceStateStore();
 const liveRuntime = createLiveRuntime({
   authenticate: (token: string) => verifyToken(token),
   movementPhases,
+  surfaceStates,
 });
 const liveHandlers = liveSocketHandlers(liveRuntime.live);
 const asLiveSocket = (
@@ -227,6 +238,7 @@ logger.info(
 liveRuntime.state.on("removed", ({ trackId }): void => {
   movements.forget(trackId);
   movementPhases.forget(trackId);
+  surfaceStates.forget(trackId);
   fuser?.forget(trackId);
 });
 
@@ -256,8 +268,35 @@ setInterval(() => {
   }
 }, 60_000).unref?.();
 
+// ASTERIX menyertakan callsign hanya sesekali; ingat yang terakhir supaya update tanpa identitas
+// tidak menimpanya (label kembali ke kode Mode-S, termasuk saat track lost).
+// Pesawat yang belum pernah mengirim identitas diberi nama dari rencana AFTN yang memuat alamat
+// Mode-S-nya; saat start, callsign 30 menit terakhir dipulihkan dari database.
+const identityMemory = createIdentityMemory({
+  fallback: (icao24: string, now: number): string | undefined =>
+    callsignFromPlan(liveRuntime.plans, icao24, now),
+});
+restoreIdentities(identityMemory, fetchStoredIdentities)
+  .then((restored) =>
+    logger.info(restored, "aircraft callsigns restored from stored tracks"),
+  )
+  .catch((err: unknown) =>
+    logger.warn(
+      { err },
+      "could not restore aircraft callsigns — names fill in as identities arrive",
+    ),
+  );
+setInterval(() => identityMemory.sweep(), 60_000).unref?.();
+
 startAsterixFeeds({
-  fuse: fuser ? (event: FusedTrackEvent) => fuser.ingest(event) : undefined,
+  fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
+    const normalized = applySurfaceState(identityMemory.fill(event));
+    const out = fuser ? fuser.ingest(normalized) : normalized;
+    if (out && out.lifecycle !== "dropped") {
+      surfaceStates.set(out.trackId, out.position?.onGround);
+    }
+    return out;
+  },
   persist: (event: FusedTrackEventLike): void => {
     enqueueTrackEvent(event, { awaitFlush: false })
       .then(() => feedMetrics.tracksPersisted.inc())

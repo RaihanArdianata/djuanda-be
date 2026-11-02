@@ -34,6 +34,12 @@ interface AirportState {
 
 export function createEvaluationScheduler(opts: {
   minIntervalMs: number;
+  /**
+   * Tanpa pesan baru, evaluasi tetap diminta ulang tiap interval ini untuk setiap bandara yang
+   * pernah terlihat. Tanpa itu, saat semua pesawat pergi (atau lalu lintas berhenti) tidak ada
+   * evaluasi lagi: sorotan aerodrome "terisi" tersangkut dan alert tidak ikut dibersihkan.
+   */
+  heartbeatMs?: number;
   evaluate: (airportId: string, timestamp: Date) => Promise<void>;
   clock?: () => number;
 }): EvaluationScheduler {
@@ -41,6 +47,7 @@ export function createEvaluationScheduler(opts: {
   const airports = new Map<string, AirportState>();
   const counters: EvaluationStats = { requested: 0, runs: 0, failures: 0 };
   let stopped = false;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   const stateOf = (airportId: string, timestamp: Date): AirportState => {
     let state = airports.get(airportId);
@@ -84,7 +91,7 @@ export function createEvaluationScheduler(opts: {
     state.timer.unref?.();
   };
 
-  return {
+  const self: EvaluationScheduler = {
     request(airportId: string, timestamp: Date): void {
       counters.requested++;
       const state = stateOf(airportId, timestamp);
@@ -95,6 +102,8 @@ export function createEvaluationScheduler(opts: {
     },
     stop(): void {
       stopped = true;
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = null;
       for (const state of airports.values()) {
         if (state.timer) clearTimeout(state.timer);
         state.timer = null;
@@ -102,6 +111,16 @@ export function createEvaluationScheduler(opts: {
     },
     stats: (): EvaluationStats => ({ ...counters }),
   };
+
+  if (opts.heartbeatMs && opts.heartbeatMs > 0) {
+    heartbeat = setInterval(() => {
+      for (const airportId of [...airports.keys()]) {
+        self.request(airportId, new Date(clock()));
+      }
+    }, opts.heartbeatMs);
+    heartbeat.unref?.();
+  }
+  return self;
 }
 
 /** Jarak minimum antar evaluasi per bandara. Bawaan 1 detik. */

@@ -101,7 +101,7 @@ export async function evaluateAirport(
   timestamp: Date,
   tracks: MovementTrack[],
 ): Promise<void> {
-  if (tracks.length === 0) return;
+  // Juga saat tidak ada track: hunian aerodrome harus kembali "kosong" dan alert lama dibersihkan.
   await evaluateMovement({ airportId, timestamp, tracks });
 }
 

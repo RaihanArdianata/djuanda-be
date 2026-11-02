@@ -101,6 +101,40 @@ describe("evaluation scheduler", () => {
   });
 });
 
+describe("heartbeat", () => {
+  it("keeps evaluating an airport after its last message so stale occupancy can clear", async () => {
+    const stamps: number[] = [];
+    const scheduler = createEvaluationScheduler({
+      minIntervalMs: 0,
+      heartbeatMs: 20,
+      evaluate: async (_airport, ts) => {
+        stamps.push(ts.getTime());
+      },
+    });
+    scheduler.request("WARR", new Date(1)); // the only message ever
+    await sleep(120);
+    scheduler.stop();
+    const runsAtStop = scheduler.stats().runs;
+    expect(runsAtStop).toBeGreaterThanOrEqual(3);
+    // The later runs carry a fresh timestamp, not the old message time.
+    expect((stamps.at(-1) ?? 0) > 1_000).toBe(true);
+
+    await sleep(60);
+    expect(scheduler.stats().runs).toBe(runsAtStop); // stop() ends the heartbeat
+  });
+
+  it("does nothing until an airport has been seen", async () => {
+    const scheduler = createEvaluationScheduler({
+      minIntervalMs: 0,
+      heartbeatMs: 10,
+      evaluate: async () => undefined,
+    });
+    await sleep(40);
+    scheduler.stop();
+    expect(scheduler.stats().runs).toBe(0);
+  });
+});
+
 describe("evaluation settings from env", () => {
   it("defaults to 1 s between evaluations and ignores events older than 60 s", () => {
     expect(evaluationIntervalFromEnv({})).toBe(1_000);

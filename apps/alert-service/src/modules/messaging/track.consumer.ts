@@ -28,8 +28,11 @@ let consumer: Consumer | null = null;
 // seberapa jauh konsumen tertinggal.
 const liveTracks = createLiveTracks(trackMaxAgeFromEnv(process.env));
 const MAX_EVENT_AGE_MS = maxEventAgeFromEnv(process.env);
+/** Evaluasi ulang tanpa pesan baru, supaya hunian aerodrome dan alert tidak tersangkut. */
+const HEARTBEAT_MS = 5_000;
 const evaluations = createEvaluationScheduler({
   minIntervalMs: evaluationIntervalFromEnv(process.env),
+  heartbeatMs: HEARTBEAT_MS,
   evaluate: async (airportId: string, timestamp: Date): Promise<void> => {
     await evaluateAirport(airportId, timestamp, liveTracks.snapshot(airportId));
   },

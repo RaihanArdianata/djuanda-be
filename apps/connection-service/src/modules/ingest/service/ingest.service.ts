@@ -8,6 +8,7 @@ import {
 import { logger } from "@repo/logger";
 import { sql } from "drizzle-orm";
 import { publishMovementRecorded } from "../../messaging/movement.producer";
+import { createPublishBuffer } from "../lib/publish-buffer";
 import { publishTrackBatch } from "./track.producer";
 
 type TrackRow = typeof aeroswarmTracks.$inferInsert;
@@ -15,6 +16,8 @@ type AlertRow = typeof aeroswarmAlerts.$inferInsert;
 type MovementRow = typeof aeroswarmMovements.$inferInsert;
 
 const FLUSH_INTERVAL_MS = 500;
+/** Track dikirim ke alert-service sesering ini, terpisah dari penulisan database yang lebih lambat. */
+const PUBLISH_INTERVAL_MS = 100;
 const MAX_BUFFER = 500;
 const INGEST_SECRET: string = process.env.AEROSWARM_INGEST_SECRET || "";
 
@@ -67,6 +70,18 @@ export function assertExpectedAirport(event: { airportId?: string }): void {
 }
 
 const trackBuffer: TrackRow[] = [];
+// Track yang menunggu dikirim ke alert-service. Terpisah dari trackBuffer: pengiriman tidak boleh
+// menunggu antrean penulisan database (jarak jauh, bisa lambat) agar alert tetap real-time.
+const publishBuffer = createPublishBuffer<unknown>({
+  intervalMs: PUBLISH_INTERVAL_MS,
+  publish: publishTrackBatch,
+  onError: (err: unknown, tracks: number): void => {
+    logger.error(
+      { err, tracks },
+      "track publish to asmgcs.tracks failed — alert pipeline missed them",
+    );
+  },
+});
 const alertBuffer: AlertRow[] = [];
 const movementBuffer: MovementRow[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +199,7 @@ export function enqueueTrackEvent(
   event: FusedTrackEventLike,
   opts?: EnqueueOptions,
 ): Promise<void> {
+  publishBuffer.add(event);
   trackBuffer.push({
     fusedAt: new Date(event.fusedAt),
     trackId: event.trackId,
@@ -306,14 +322,6 @@ export async function flush(): Promise<void> {
   try {
     if (tracks.length) {
       await db.insert(aeroswarmTracks).values(tracks).onConflictDoNothing();
-      try {
-        await publishTrackBatch(tracks.map((row) => row.data));
-      } catch (err) {
-        logger.error(
-          { err, tracks: tracks.length },
-          "track publish to asmgcs.tracks failed — tracks persisted, alert pipeline missed them",
-        );
-      }
     }
     if (alerts.length)
       await db.insert(aeroswarmAlerts).values(alerts).onConflictDoNothing();

@@ -38,6 +38,9 @@ const evaluations = createEvaluationScheduler({
   },
 });
 let skippedStale = 0;
+/** Selisih waktu event dan waktu diproses pada pesan terakhir: indikator antrean Kafka. */
+let lastConsumeLagMs = 0;
+let maxConsumeLagMs = 0;
 let statsTimer: ReturnType<typeof setInterval> | null = null;
 
 export interface TrackUpdatedEvent {
@@ -134,6 +137,10 @@ async function handleTrackMessage(
   const event = raw as TrackUpdatedEvent;
   const track = toMovementTrack(event);
 
+  const lagMs = Date.now() - track.timestamp.getTime();
+  lastConsumeLagMs = lagMs;
+  maxConsumeLagMs = Math.max(maxConsumeLagMs, lagMs);
+
   // Event lama (konsumen sedang mengejar antrean) bukan situasi live: tidak dievaluasi, supaya
   // tidak ada alert sejam setelah kejadian dan antrean cepat habis.
   if (Date.now() - track.timestamp.getTime() > MAX_EVENT_AGE_MS) {
@@ -220,10 +227,13 @@ export async function startTrackConsumer(): Promise<void> {
       {
         liveTracks: liveTracks.size,
         skippedStale,
+        // Dari event dibuat sampai diterima di sini; besar berarti antrean Kafka atau hop sebelumnya lambat.
+        consumeLagMs: { last: lastConsumeLagMs, max: maxConsumeLagMs },
         evaluation: evaluations.stats(),
       },
       "track consumer stats",
     );
+    maxConsumeLagMs = 0;
   }, 60_000);
   statsTimer.unref?.();
 }

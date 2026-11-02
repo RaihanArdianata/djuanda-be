@@ -22,6 +22,10 @@ export interface EvaluationStats {
   requested: number;
   runs: number;
   failures: number;
+  /** Lama evaluasi terakhir (ms). */
+  lastMs: number;
+  /** Evaluasi terlama sejak statistik terakhir dibaca dengan `drainMax` (ms). */
+  maxMs: number;
 }
 
 interface AirportState {
@@ -45,7 +49,13 @@ export function createEvaluationScheduler(opts: {
 }): EvaluationScheduler {
   const clock = opts.clock ?? Date.now;
   const airports = new Map<string, AirportState>();
-  const counters: EvaluationStats = { requested: 0, runs: 0, failures: 0 };
+  const counters: EvaluationStats = {
+    requested: 0,
+    runs: 0,
+    failures: 0,
+    lastMs: 0,
+    maxMs: 0,
+  };
   let stopped = false;
   let heartbeat: ReturnType<typeof setInterval> | null = null;
 
@@ -70,6 +80,7 @@ export function createEvaluationScheduler(opts: {
     state.pending = false;
     state.lastStartAt = clock();
     counters.runs++;
+    const startedAt = clock();
     try {
       await opts.evaluate(airportId, state.latest);
     } catch (err) {
@@ -77,6 +88,8 @@ export function createEvaluationScheduler(opts: {
       counters.failures++;
       logger.error({ err, airportId }, "alert evaluation failed");
     } finally {
+      counters.lastMs = clock() - startedAt;
+      counters.maxMs = Math.max(counters.maxMs, counters.lastMs);
       state.running = false;
       if (state.pending) schedule(airportId, state);
     }
@@ -109,7 +122,11 @@ export function createEvaluationScheduler(opts: {
         state.timer = null;
       }
     },
-    stats: (): EvaluationStats => ({ ...counters }),
+    stats: (): EvaluationStats => {
+      const snapshot = { ...counters };
+      counters.maxMs = 0; // maksimum dihitung per jendela pembacaan
+      return snapshot;
+    },
   };
 
   if (opts.heartbeatMs && opts.heartbeatMs > 0) {

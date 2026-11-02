@@ -21,6 +21,7 @@ import {
   stopAsterixFeeds,
 } from "./modules/feed/asterix-feed";
 import { feedMetrics, registerStatMetrics } from "./modules/feed/feed-metrics";
+import { createIdentityMemory } from "./modules/feed/identity-memory";
 import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.producer";
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
@@ -256,8 +257,16 @@ setInterval(() => {
   }
 }, 60_000).unref?.();
 
+// ASTERIX menyertakan callsign hanya sesekali; ingat yang terakhir supaya update tanpa identitas
+// tidak menimpanya (label kembali ke kode Mode-S, termasuk saat track lost).
+const identityMemory = createIdentityMemory();
+setInterval(() => identityMemory.sweep(), 60_000).unref?.();
+
 startAsterixFeeds({
-  fuse: fuser ? (event: FusedTrackEvent) => fuser.ingest(event) : undefined,
+  fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
+    const filled = identityMemory.fill(event);
+    return fuser ? fuser.ingest(filled) : filled;
+  },
   persist: (event: FusedTrackEventLike): void => {
     enqueueTrackEvent(event, { awaitFlush: false })
       .then(() => feedMetrics.tracksPersisted.inc())

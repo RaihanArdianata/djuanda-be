@@ -82,6 +82,30 @@ describe("deriveOnGround", () => {
   });
 });
 
+describe("negative altitude", () => {
+  it("is clamped to 0 instead of being shown as below sea level", () => {
+    const out = applySurfaceState(fused({ onGround: true, alt: -100, gs: 62 }));
+    expect(out.position?.alt).toBe(0);
+  });
+
+  it("leaves zero and positive altitudes, and missing ones, alone", () => {
+    const zero = fused({ onGround: true, alt: 0, gs: 0 });
+    expect(applySurfaceState(zero)).toBe(zero);
+    expect(
+      applySurfaceState(fused({ onGround: false, alt: 1200, gs: 150 })).position
+        ?.alt,
+    ).toBe(1200);
+    expect(
+      applySurfaceState(fused({ onGround: true, gs: 0 })).position?.alt,
+    ).toBeUndefined();
+  });
+
+  it("still derives the ground state from the clamped value", () => {
+    const out = applySurfaceState(fused({ onGround: false, alt: -100, gs: 4 }));
+    expect(out.position).toMatchObject({ alt: 0, onGround: true });
+  });
+});
+
 describe("applySurfaceState", () => {
   it("writes the derived value into position.onGround", () => {
     const out = applySurfaceState(fused({ onGround: false, alt: 0, gs: 4 }));

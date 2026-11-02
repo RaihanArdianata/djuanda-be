@@ -34,6 +34,10 @@ import {
   replayWebsocketHandlers,
 } from "./modules/history/service/replay-socket";
 import {
+  createPrimaryFeedGate,
+  dedupeWindowFromEnv,
+} from "./modules/ingest/lib/primary-feed-gate";
+import {
   enqueueMovementEvent,
   enqueueTrackEvent,
   type FusedTrackEventLike,
@@ -240,6 +244,18 @@ const onFlightPlan = (event: FlightPlanEvent): void => {
     });
 };
 
+// Feed UDP langsung adalah jalur utama; topic Kafka AeroSwarm (data yang sama) hanya cadangan.
+const primaryFeedGate = createPrimaryFeedGate(dedupeWindowFromEnv(process.env));
+let lastDuplicatesDropped = 0;
+setInterval(() => {
+  primaryFeedGate.sweep();
+  const stats = primaryFeedGate.stats();
+  if (stats.dropped !== lastDuplicatesDropped) {
+    lastDuplicatesDropped = stats.dropped;
+    logger.info(stats, "kafka ingest: duplicates of the direct feed dropped");
+  }
+}, 60_000).unref?.();
+
 startAsterixFeeds({
   fuse: fuser ? (event: FusedTrackEvent) => fuser.ingest(event) : undefined,
   persist: (event: FusedTrackEventLike): void => {
@@ -255,6 +271,7 @@ startAsterixFeeds({
     ...liveRuntime.feedHandlers,
     onTrack: (event: FusedTrackEvent): void => {
       feedMetrics.tracksDecoded.inc();
+      primaryFeedGate.seen(event.identity?.icao24);
       liveRuntime.feedHandlers.onTrack?.(event);
       movements.evaluate(event);
     },
@@ -314,7 +331,7 @@ registerHealthProbe({
   startAftnFeeds({ onFlightPlan });
 })();
 
-startIngestKafkaConsumer().catch((err) => {
+startIngestKafkaConsumer({ gate: primaryFeedGate }).catch((err) => {
   logger.error(
     { err },
     "kafka ingest consumer failed to start — http/websocket ingest are unaffected",

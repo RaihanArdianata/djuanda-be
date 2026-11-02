@@ -92,6 +92,19 @@ async function getEnabledRules(airportId: string): Promise<AlertRule[]> {
   return rules;
 }
 
+/**
+ * Evaluasi seluruh rule atas track segar bandara ini (dari memori, bukan Redis). Dipanggil oleh
+ * penjadwal paling sering sekali per interval, bukan per pesan track.
+ */
+export async function evaluateAirport(
+  airportId: string,
+  timestamp: Date,
+  tracks: MovementTrack[],
+): Promise<void> {
+  // Juga saat tidak ada track: hunian aerodrome harus kembali "kosong" dan alert lama dibersihkan.
+  await evaluateMovement({ airportId, timestamp, tracks });
+}
+
 export async function processTrackUpdate(track: MovementTrack): Promise<void> {
   const input: DetectionInput = {
     airportId: track.airportId,

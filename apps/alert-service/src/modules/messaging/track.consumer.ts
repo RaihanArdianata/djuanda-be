@@ -6,16 +6,39 @@ import {
   type AlertTrackHistoryPoint,
   recordAlertTrackHistory,
 } from "../alert/service/alert.service";
-import { processTrackUpdate } from "../engine/alert.engine";
+import { evaluateAirport } from "../engine/alert.engine";
 import {
   appendPostHistory,
   getActiveAlertIdsForMovementTrack,
   type PostHistoryAppendResult,
 } from "../engine/alert-post-history";
+import {
+  createEvaluationScheduler,
+  evaluationIntervalFromEnv,
+  maxEventAgeFromEnv,
+} from "../engine/evaluation-scheduler";
+import { createLiveTracks, trackMaxAgeFromEnv } from "../engine/live-tracks";
 import { pushTrackHistory } from "../engine/track-history";
 import type { MovementTrack } from "../engine/types";
 
 let consumer: Consumer | null = null;
+
+// Posisi terakhir track yang masih hidup, di memori. Evaluasi alert membaca ini (bukan seluruh Redis)
+// dan berjalan paling sering sekali per interval, jadi laju pesan track tidak lagi menentukan
+// seberapa jauh konsumen tertinggal.
+const liveTracks = createLiveTracks(trackMaxAgeFromEnv(process.env));
+const MAX_EVENT_AGE_MS = maxEventAgeFromEnv(process.env);
+/** Evaluasi ulang tanpa pesan baru, supaya hunian aerodrome dan alert tidak tersangkut. */
+const HEARTBEAT_MS = 5_000;
+const evaluations = createEvaluationScheduler({
+  minIntervalMs: evaluationIntervalFromEnv(process.env),
+  heartbeatMs: HEARTBEAT_MS,
+  evaluate: async (airportId: string, timestamp: Date): Promise<void> => {
+    await evaluateAirport(airportId, timestamp, liveTracks.snapshot(airportId));
+  },
+});
+let skippedStale = 0;
+let statsTimer: ReturnType<typeof setInterval> | null = null;
 
 export interface TrackUpdatedEvent {
   eventType: "TRACK_UPDATED";
@@ -110,9 +133,28 @@ async function handleTrackMessage(
 
   const event = raw as TrackUpdatedEvent;
   const track = toMovementTrack(event);
+
+  // Event lama (konsumen sedang mengejar antrean) bukan situasi live: tidak dievaluasi, supaya
+  // tidak ada alert sejam setelah kejadian dan antrean cepat habis.
+  if (Date.now() - track.timestamp.getTime() > MAX_EVENT_AGE_MS) {
+    skippedStale++;
+    if (skippedStale === 1 || skippedStale % 10_000 === 0) {
+      logger.warn(
+        { skippedStale, maxEventAgeMs: MAX_EVENT_AGE_MS },
+        "track consumer: skipping events older than the live window (catching up)",
+      );
+    }
+    return;
+  }
+
   pushTrackHistory(track);
+  if (event.data.lifecycle === "dropped") {
+    liveTracks.remove(track.airportId, track.trackId);
+  } else {
+    liveTracks.upsert(track);
+  }
   await trackUpdated(track);
-  await processTrackUpdate(track);
+  evaluations.request(track.airportId, track.timestamp);
 
   // Setelah evaluate, tambahkan posisi ini ke post-history alert aktif
   // dan langsung persist ke tabel alert_track_history.
@@ -171,9 +213,25 @@ export async function startTrackConsumer(): Promise<void> {
     },
     "track consumer started",
   );
+
+  // Angka ini menjawab "kenapa alert telat": track hidup, evaluasi per menit, dan event lama yang dilewati.
+  statsTimer = setInterval(() => {
+    logger.info(
+      {
+        liveTracks: liveTracks.size,
+        skippedStale,
+        evaluation: evaluations.stats(),
+      },
+      "track consumer stats",
+    );
+  }, 60_000);
+  statsTimer.unref?.();
 }
 
 export async function stopTrackConsumer(): Promise<void> {
+  if (statsTimer) clearInterval(statsTimer);
+  statsTimer = null;
+  evaluations.stop();
   if (!consumer) return;
   await consumer
     .disconnect()

@@ -42,14 +42,33 @@ export function deriveOnGround(event: FusedTrackEvent): boolean | undefined {
   return undefined;
 }
 
-/** Event yang `position.onGround`-nya sudah dinormalkan; event yang sama bila tidak ada yang berubah. */
-export function applySurfaceState(event: FusedTrackEvent): FusedTrackEvent {
-  if (event.lifecycle === "dropped" || !event.position) return event;
-  const derived = deriveOnGround(event);
-  if (derived === undefined || derived === event.position.onGround) {
+/**
+ * Ketinggian barometrik dari feed bisa sedikit di bawah nol di bandara dataran rendah (mis. -100 ft
+ * saat tekanan lebih tinggi dari standar). Itu bukan ketinggian sungguhan: dibulatkan ke 0.
+ */
+export function clampAltitude(event: FusedTrackEvent): FusedTrackEvent {
+  const alt = event.position?.alt;
+  if (event.position === undefined || alt === undefined || alt >= 0) {
     return event;
   }
-  return { ...event, position: { ...event.position, onGround: derived } };
+  return { ...event, position: { ...event.position, alt: 0 } };
+}
+
+/**
+ * Event yang ketinggiannya tidak negatif dan `position.onGround`-nya sudah dinormalkan; event
+ * yang sama bila tidak ada yang berubah.
+ */
+export function applySurfaceState(input: FusedTrackEvent): FusedTrackEvent {
+  if (input.lifecycle === "dropped" || !input.position) return input;
+  const event = clampAltitude(input);
+  const derived = deriveOnGround(event);
+  if (derived === undefined || derived === event.position?.onGround) {
+    return event;
+  }
+  return {
+    ...event,
+    position: { ...event.position, onGround: derived },
+  } as FusedTrackEvent;
 }
 
 export interface SurfaceStateStore {

@@ -26,8 +26,10 @@ export const getCurrent = catchAsync(async (c) => {
     });
   }
 
-  return success(c, result, {
+  const { sync, ...data } = result;
+  return success(c, data, {
     message: "Current weather observation fetched successfully",
+    sync,
   });
 });
 
@@ -62,8 +64,10 @@ export const getForecast = catchAsync(async (c) => {
     });
   }
 
-  return success(c, result, {
+  const { sync, ...data } = result;
+  return success(c, data, {
     message: "Weather forecast fetched successfully",
+    sync,
   });
 });
 
@@ -78,8 +82,10 @@ const getProductObservation = (kind: "METAR" | "SPECI"): typeof getCurrent =>
       });
     }
 
-    return success(c, result, {
+    const { sync, ...data } = result;
+    return success(c, data, {
       message: `${kind} weather observation fetched successfully`,
+      sync,
     });
   });
 
@@ -95,5 +101,27 @@ export const syncWeather = catchAsync(async (c) => {
     });
   }
 
-  return success(c, result, { message: "Weather sync finished" });
+  if (Object.values(result.results).some((status) => status === "failed")) {
+    return c.json(
+      {
+        data: result.sync,
+        error: {
+          code: "WEATHER_PROVIDER_ERROR",
+          message: result.sync.lastSyncError ?? "Weather provider failed",
+        },
+        meta: { code: 502, status: "ERROR" as const },
+      },
+      502,
+    );
+  }
+
+  return success(
+    c,
+    {
+      ...result.sync,
+      retryAfterSec: result.retryAfterSec,
+      results: result.results,
+    },
+    { message: "Weather sync finished" },
+  );
 });

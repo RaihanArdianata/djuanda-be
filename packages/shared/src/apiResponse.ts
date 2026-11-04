@@ -10,7 +10,11 @@ import type {
 export const success = <T>(
   c: Context,
   data: T,
-  options?: { code?: ContentfulStatusCode; message?: string },
+  options?: {
+    code?: ContentfulStatusCode;
+    message?: string;
+    sync?: unknown;
+  },
   withPagination?: {
     page: number;
     size: number;
@@ -21,6 +25,7 @@ export const success = <T>(
   const code = options?.code ?? 200;
   const body: ApiSuccessResponse<T> = {
     data,
+    ...(options?.sync !== undefined && { sync: options.sync }),
     error: null,
     meta: {
       code,

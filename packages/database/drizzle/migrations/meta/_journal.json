@@ -169,6 +169,13 @@
       "when": 1793465644674,
       "tag": "0023_cooing_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793803745630,
+      "tag": "0024_chubby_ares",
+      "breakpoints": true
     }
   ]
 }

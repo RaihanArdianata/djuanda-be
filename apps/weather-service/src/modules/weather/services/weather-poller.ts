@@ -11,7 +11,14 @@ import {
   fetchLatestBmkgSpeci,
   fetchLatestBmkgTaf,
 } from "../provider/bmkg.provider";
-import { saveForecast, saveObservation } from "./weather.service";
+import {
+  getWeatherSyncMetadata,
+  saveForecast,
+  saveObservation,
+  setWeatherSyncFailed,
+  setWeatherSyncStarted,
+  setWeatherSyncSucceeded,
+} from "./weather.service";
 
 // Converts an interval in ms into a wall-clock cron expression, e.g.
 // 1_800_000 (30 min) -> "*/30 * * * *", 3_600_000 (60 min) -> "0 * * * *".
@@ -48,7 +55,7 @@ let metarTask: ScheduledTask | null = null;
 let speciTask: ScheduledTask | null = null;
 let tafTask: ScheduledTask | null = null;
 
-export const pollMetar = async (): Promise<void> => {
+export const pollMetar = async (): Promise<boolean> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "metar polling started");
@@ -60,7 +67,7 @@ export const pollMetar = async (): Promise<void> => {
         { station, durationMs: Date.now() - startedAt, result: "no-data" },
         "metar polling finished",
       );
-      return;
+      return false;
     }
 
     const parsed = parseMetar(item.rawOb);
@@ -91,25 +98,28 @@ export const pollMetar = async (): Promise<void> => {
       kind: "METAR",
       observedAt: new Date(item.obsTime).toISOString(),
       stale: isObservationStale(new Date(item.obsTime)),
+      sync: await getWeatherSyncMetadata(station),
     });
+    return true;
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },
       "metar polling cycle failed",
     );
+    await setWeatherSyncFailed(err, station);
     // Re-throw so node-cron records this as a failed run in lastRun()
     // instead of silently reporting it as a successful execution.
     throw err;
   }
 };
 
-export const pollSpeci = async (): Promise<void> => {
+export const pollSpeci = async (): Promise<boolean> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "speci polling started");
   try {
     const item = await fetchLatestBmkgSpeci();
-    if (!item) return;
+    if (!item) return false;
     const parsed = parseMetar(item.rawOb);
     await saveObservation({
       station: item.icaoId,
@@ -126,21 +136,24 @@ export const pollSpeci = async (): Promise<void> => {
       kind: "SPECI",
       observedAt: new Date(item.obsTime).toISOString(),
       stale: isObservationStale(new Date(item.obsTime)),
+      sync: await getWeatherSyncMetadata(station),
     });
     logger.info(
       { station, durationMs: Date.now() - startedAt, result: "saved" },
       "speci polling finished",
     );
+    return true;
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },
       "speci polling cycle failed",
     );
+    await setWeatherSyncFailed(err, station);
     throw err;
   }
 };
 
-export const pollTaf = async (): Promise<void> => {
+export const pollTaf = async (): Promise<boolean> => {
   const station = env.WEATHER_STATION_ICAO;
   const startedAt = Date.now();
   logger.info({ station }, "taf polling started");
@@ -152,7 +165,7 @@ export const pollTaf = async (): Promise<void> => {
         { station, durationMs: Date.now() - startedAt, result: "no-data" },
         "taf polling finished",
       );
-      return;
+      return false;
     }
 
     const parsed = parseTaf(item.rawTaf, [
@@ -186,12 +199,15 @@ export const pollTaf = async (): Promise<void> => {
       validFrom: new Date(item.validTimeFrom).toISOString(),
       validTo: new Date(item.validTimeTo).toISOString(),
       stale: isForecastStale(new Date(item.validTimeTo)),
+      sync: await getWeatherSyncMetadata(station),
     });
+    return true;
   } catch (err) {
     logger.error(
       { err, station, durationMs: Date.now() - startedAt },
       "taf polling cycle failed",
     );
+    await setWeatherSyncFailed(err, station);
     throw err;
   }
 };
@@ -203,6 +219,7 @@ export interface ManualSyncResult {
   /** Detik tersisa sebelum sync manual berikutnya boleh jalan; 0 bila baru saja jalan. */
   retryAfterSec: number;
   results: Record<"metar" | "speci" | "taf", "ok" | "failed">;
+  sync: Awaited<ReturnType<typeof getWeatherSyncMetadata>>;
 }
 
 /**
@@ -216,17 +233,40 @@ export const syncWeatherNow = async (
   if (now - lastManualSyncAt < SYNC_COOLDOWN_MS) return null;
   lastManualSyncAt = now;
 
+  const station = env.WEATHER_STATION_ICAO;
+  const startedAt = new Date(now);
+  await setWeatherSyncStarted(station, startedAt);
+
   const [metar, speci, taf] = await Promise.allSettled([
     pollMetar(),
     pollSpeci(),
     pollTaf(),
   ]);
-  const status = (r: PromiseSettledResult<void>): "ok" | "failed" =>
-    r.status === "fulfilled" ? "ok" : "failed";
+  const status = (r: PromiseSettledResult<boolean>): "ok" | "failed" =>
+    r.status === "fulfilled" && r.value ? "ok" : "failed";
+  const results = {
+    metar: status(metar),
+    speci: status(speci),
+    taf: status(taf),
+  };
+  const failed = Object.entries(results)
+    .filter(([, value]) => value === "failed")
+    .map(([feed]) => feed)
+    .join(", ");
+
+  if (failed) {
+    await setWeatherSyncFailed(`Weather provider failed: ${failed}`, station);
+  } else {
+    await setWeatherSyncSucceeded(station);
+  }
+
+  const sync = await getWeatherSyncMetadata(station);
+  await publishToTopic("weather.updated", { station, sync });
 
   return {
     retryAfterSec: SYNC_COOLDOWN_MS / 1000,
-    results: { metar: status(metar), speci: status(speci), taf: status(taf) },
+    results,
+    sync,
   };
 };
 

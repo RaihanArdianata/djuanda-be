@@ -5,6 +5,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -108,5 +109,24 @@ export const weatherForecasts = pgTable(
   ],
 );
 
+export const weatherSyncMetadata = pgTable(
+  "weather_sync_metadata",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    station: text("station").notNull(),
+    lastSuccessfulSyncAt: timestamp("last_successful_sync_at", {
+      withTimezone: true,
+    }),
+    lastSyncStatus: text("last_sync_status").notNull().default("NEVER"),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    lastSyncError: text("last_sync_error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [uniqueIndex("weather_sync_metadata_station_idx").on(t.station)],
+);
+
 export type WeatherObservation = InferSelectModel<typeof weatherObservations>;
 export type WeatherForecast = InferSelectModel<typeof weatherForecasts>;
+export type WeatherSyncMetadata = InferSelectModel<typeof weatherSyncMetadata>;

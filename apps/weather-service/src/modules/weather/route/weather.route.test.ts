@@ -27,6 +27,10 @@ const getObservationHistory = mock();
 const getObservationHistoryCount = mock();
 const getActiveForecast = mock();
 const getLatestObservation = mock();
+const getWeatherSyncMetadata = mock();
+const setWeatherSyncStarted = mock();
+const setWeatherSyncSucceeded = mock();
+const setWeatherSyncFailed = mock();
 
 mock.module("../services/weather.service", () => ({
   getCurrentObservation,
@@ -34,6 +38,10 @@ mock.module("../services/weather.service", () => ({
   getObservationHistoryCount,
   getActiveForecast,
   getLatestObservation,
+  getWeatherSyncMetadata,
+  setWeatherSyncStarted,
+  setWeatherSyncSucceeded,
+  setWeatherSyncFailed,
   saveObservation: mock(),
   saveForecast: mock(),
 }));
@@ -66,6 +74,12 @@ const sampleObservation = {
   },
   stale: false,
   staleSince: null,
+  sync: {
+    lastSuccessfulSyncAt: null,
+    lastSyncStatus: "NEVER",
+    lastAttemptAt: null,
+    lastSyncError: null,
+  },
 };
 
 const sampleForecast = {
@@ -76,6 +90,12 @@ const sampleForecast = {
   raw: "TAF WARR 080500Z 0806/0818 09008KT 9000 SCT018",
   forecast: { periods: [], partial: false },
   stale: false,
+  sync: {
+    lastSuccessfulSyncAt: null,
+    lastSyncStatus: "NEVER",
+    lastAttemptAt: null,
+    lastSyncError: null,
+  },
 };
 
 beforeEach(() => {
@@ -97,6 +117,7 @@ describe("GET /current", () => {
     expect(body.meta.status).toBe("SUCCESS");
     expect(body.data.station).toBe("WARR");
     expect(body.data.stale).toBe(false);
+    expect(body.sync).toEqual(sampleObservation.sync);
     expect(getCurrentObservation).toHaveBeenCalledWith(undefined);
   });
 
@@ -165,6 +186,7 @@ describe("GET /forecast", () => {
     expect(res.status).toBe(200);
     expect(body.data.station).toBe("WARR");
     expect(body.data.forecast.periods).toEqual([]);
+    expect(body.sync).toEqual(sampleForecast.sync);
   });
 
   it("returns 404 with a NOT_FOUND error when no forecast has been recorded yet", async () => {

@@ -11,10 +11,10 @@
         "test:coverage": "bun test --coverage --coverage-reporter=text"
     },
     "dependencies": {
-        "@aeroswarm/codec": "^0.1.10",
-        "@aeroswarm/core": "^0.2.12",
-        "@aeroswarm/ingest": "^0.1.6",
-        "@aeroswarm/live-server": "^0.1.4",
+        "@aeroswarm/codec": "^0.1.13",
+        "@aeroswarm/core": "^0.2.13",
+        "@aeroswarm/ingest": "^0.1.7",
+        "@aeroswarm/live-server": "^0.1.5",
         "@aeroswarm/replay-server": "^0.2.3",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",

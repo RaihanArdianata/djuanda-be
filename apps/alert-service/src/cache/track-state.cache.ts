@@ -2,6 +2,19 @@ import { logger } from "@repo/logger";
 import type { MovementTrack } from "../modules/engine/types";
 import { redis } from "../redis/client";
 
+function restoreTrackState(raw: string): MovementTrack {
+  const track = JSON.parse(raw) as MovementTrack & {
+    timestamp: string | number | Date;
+  };
+  return {
+    ...track,
+    timestamp:
+      track.timestamp instanceof Date
+        ? track.timestamp
+        : new Date(track.timestamp),
+  };
+}
+
 export function trackKey(airportId: string, trackId: string): string {
   return `track:${airportId}:${trackId}`;
 }
@@ -26,7 +39,7 @@ export async function getTrackState(
   try {
     const raw = await redis.get(trackKey(airportId, trackId));
     if (!raw) return null;
-    return JSON.parse(raw) as MovementTrack;
+    return restoreTrackState(raw);
   } catch (err) {
     logger.warn({ err, airportId, trackId }, "getTrackState failed");
     return null;
@@ -56,7 +69,7 @@ export async function getAllTrackStates(
     const values = await redis.mget(...keys);
     return values
       .filter((v: string | null): v is string => v !== null)
-      .map((v: string) => JSON.parse(v) as MovementTrack);
+      .map(restoreTrackState);
   } catch (err) {
     logger.warn({ err, airportId }, "getAllTrackStates failed");
     return [];

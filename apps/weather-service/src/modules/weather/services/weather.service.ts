@@ -4,6 +4,7 @@ import {
   type TafParsedData,
   weatherForecasts,
   weatherObservations,
+  weatherSyncMetadata,
 } from "@repo/database";
 import { and, desc, eq } from "drizzle-orm";
 import { env } from "@/config/env";
@@ -18,6 +19,7 @@ export interface CurrentObservationResult {
   parsed: MetarParsedData;
   stale: boolean;
   staleSince: string | null;
+  sync: WeatherSyncMetadataResult;
 }
 
 export interface ForecastResult {
@@ -28,9 +30,117 @@ export interface ForecastResult {
   raw: string;
   forecast: TafParsedData;
   stale: boolean;
+  sync: WeatherSyncMetadataResult;
 }
 
 export type ObservationKind = "METAR" | "SPECI";
+export type WeatherSyncStatus = "NEVER" | "SYNCING" | "SUCCESS" | "FAILED";
+
+export interface WeatherSyncMetadataResult {
+  lastSuccessfulSyncAt: string | null;
+  lastSyncStatus: WeatherSyncStatus;
+  lastAttemptAt: string | null;
+  lastSyncError: string | null;
+}
+
+const emptySyncMetadata: WeatherSyncMetadataResult = {
+  lastSuccessfulSyncAt: null,
+  lastSyncStatus: "NEVER",
+  lastAttemptAt: null,
+  lastSyncError: null,
+};
+
+const safeSyncError = (error: unknown): string => {
+  const message =
+    error instanceof Error ? error.message : "Weather sync failed";
+  return message.replace(/\s+/g, " ").slice(0, 200);
+};
+
+export async function getWeatherSyncMetadata(
+  station: string = env.WEATHER_STATION_ICAO,
+): Promise<WeatherSyncMetadataResult> {
+  const row = await db.query.weatherSyncMetadata.findFirst({
+    where: eq(weatherSyncMetadata.station, station),
+  });
+  return row
+    ? {
+        lastSuccessfulSyncAt: row.lastSuccessfulSyncAt?.toISOString() ?? null,
+        lastSyncStatus: row.lastSyncStatus as WeatherSyncStatus,
+        lastAttemptAt: row.lastAttemptAt?.toISOString() ?? null,
+        lastSyncError: row.lastSyncError,
+      }
+    : emptySyncMetadata;
+}
+
+export async function setWeatherSyncStarted(
+  station: string = env.WEATHER_STATION_ICAO,
+  at: Date = new Date(),
+): Promise<void> {
+  await db
+    .insert(weatherSyncMetadata)
+    .values({
+      station,
+      lastSyncStatus: "SYNCING",
+      lastAttemptAt: at,
+      updatedAt: at,
+    })
+    .onConflictDoUpdate({
+      target: weatherSyncMetadata.station,
+      set: { lastSyncStatus: "SYNCING", lastAttemptAt: at, updatedAt: at },
+    });
+}
+
+export async function setWeatherSyncSucceeded(
+  station: string = env.WEATHER_STATION_ICAO,
+  at: Date = new Date(),
+): Promise<void> {
+  await db
+    .insert(weatherSyncMetadata)
+    .values({
+      station,
+      lastSuccessfulSyncAt: at,
+      lastSyncStatus: "SUCCESS",
+      lastAttemptAt: at,
+      lastSyncError: null,
+      updatedAt: at,
+    })
+    .onConflictDoUpdate({
+      target: weatherSyncMetadata.station,
+      set: {
+        lastSuccessfulSyncAt: at,
+        lastSyncStatus: "SUCCESS",
+        lastAttemptAt: at,
+        lastSyncError: null,
+        updatedAt: at,
+      },
+    });
+}
+
+export async function setWeatherSyncFailed(
+  error: unknown,
+  station: string = env.WEATHER_STATION_ICAO,
+  at: Date = new Date(),
+): Promise<void> {
+  const message = safeSyncError(error);
+  await db
+    .insert(weatherSyncMetadata)
+    .values({
+      station,
+      lastSyncStatus: "FAILED",
+      lastAttemptAt: at,
+      lastSyncError: message,
+      updatedAt: at,
+    })
+    .onConflictDoUpdate({
+      target: weatherSyncMetadata.station,
+      set: {
+        lastSyncStatus: "FAILED",
+        lastAttemptAt: at,
+        lastSyncError: message,
+        updatedAt: at,
+      },
+    });
+}
 
 interface SaveObservationParams {
   station: string;
@@ -107,6 +217,7 @@ export async function getLatestObservation(
   }
 
   const stale = isObservationStale(observation.observedAt);
+  const sync = await getWeatherSyncMetadata(resolvedStation);
 
   return {
     station: observation.station,
@@ -116,6 +227,7 @@ export async function getLatestObservation(
     parsed: observation.parsed,
     stale,
     staleSince: stale ? observation.observedAt.toISOString() : null,
+    sync,
   };
 }
 
@@ -137,6 +249,7 @@ export async function getObservationHistory(
     limit: params.size,
     offset: (params.page - 1) * params.size,
   });
+  const sync = await getWeatherSyncMetadata(resolvedStation);
 
   return observations.map((observation) => {
     const stale = isObservationStale(observation.observedAt);
@@ -148,6 +261,7 @@ export async function getObservationHistory(
       parsed: observation.parsed,
       stale,
       staleSince: stale ? observation.observedAt.toISOString() : null,
+      sync,
     };
   });
 }
@@ -189,5 +303,6 @@ export async function getActiveForecast(
     raw: forecast.raw,
     forecast: forecast.parsed,
     stale: isForecastStale(forecast.validTo),
+    sync: await getWeatherSyncMetadata(resolvedStation),
   };
 }

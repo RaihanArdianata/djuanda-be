@@ -5,13 +5,31 @@ const fetchLatestBmkgSpeci = mock();
 const fetchLatestBmkgTaf = mock();
 const saveObservation = mock();
 const saveForecast = mock();
+const getWeatherSyncMetadata = mock(() =>
+  Promise.resolve({
+    lastSuccessfulSyncAt: null,
+    lastSyncStatus: "NEVER",
+    lastAttemptAt: null,
+    lastSyncError: null,
+  }),
+);
+const setWeatherSyncFailed = mock();
+const setWeatherSyncStarted = mock();
+const setWeatherSyncSucceeded = mock();
 
 mock.module("../provider/bmkg.provider", () => ({
   fetchLatestBmkgMetar,
   fetchLatestBmkgSpeci,
   fetchLatestBmkgTaf,
 }));
-mock.module("./weather.service", () => ({ saveObservation, saveForecast }));
+mock.module("./weather.service", () => ({
+  saveObservation,
+  saveForecast,
+  getWeatherSyncMetadata,
+  setWeatherSyncFailed,
+  setWeatherSyncStarted,
+  setWeatherSyncSucceeded,
+}));
 mock.module("../../messaging/weather.producer", () => ({
   publishWeatherEvent: mock(),
 }));
@@ -57,6 +75,10 @@ beforeEach(() => {
   fetchLatestBmkgTaf.mockReset();
   saveObservation.mockReset();
   saveForecast.mockReset();
+  getWeatherSyncMetadata.mockClear();
+  setWeatherSyncFailed.mockReset();
+  setWeatherSyncStarted.mockReset();
+  setWeatherSyncSucceeded.mockReset();
 });
 
 describe("pollMetar", () => {
@@ -84,7 +106,7 @@ describe("pollMetar", () => {
     fetchLatestBmkgMetar.mockResolvedValue(null);
 
     // Should resolve, not throw -- a provider outage must not stop the poller.
-    await expect(pollMetar()).resolves.toBeUndefined();
+    await expect(pollMetar()).resolves.toBe(false);
     expect(saveObservation).not.toHaveBeenCalled();
   });
 
@@ -148,7 +170,7 @@ describe("pollTaf", () => {
   it("does not save anything when the provider fails gracefully (returns null)", async () => {
     fetchLatestBmkgTaf.mockResolvedValue(null);
 
-    await expect(pollTaf()).resolves.toBeUndefined();
+    await expect(pollTaf()).resolves.toBe(false);
     expect(saveForecast).not.toHaveBeenCalled();
   });
 
@@ -176,9 +198,46 @@ describe("syncWeatherNow", () => {
 
     const t0 = 1_000_000_000_000;
     const first = await syncWeatherNow(t0);
-    expect(first?.results).toEqual({ metar: "ok", speci: "ok", taf: "failed" });
+    expect(first?.results).toEqual({
+      metar: "failed",
+      speci: "failed",
+      taf: "failed",
+    });
 
     expect(await syncWeatherNow(t0 + 5_000)).toBeNull();
     expect(await syncWeatherNow(t0 + 31_000)).not.toBeNull();
+  });
+
+  it("marks a complete manual sync successful only when all feeds return data", async () => {
+    fetchLatestBmkgMetar.mockResolvedValue({
+      icaoId: "WARR",
+      obsTime: 1_800_000_000,
+      rawOb: metarItem.rawOb,
+      reportId: "metar-1",
+      providerRaw: {},
+    });
+    fetchLatestBmkgSpeci.mockResolvedValue({
+      icaoId: "WARR",
+      obsTime: 1_800_000_000,
+      rawOb: metarItem.rawOb,
+      reportId: "speci-1",
+      providerRaw: {},
+    });
+    fetchLatestBmkgTaf.mockResolvedValue({
+      icaoId: "WARR",
+      issueTime: tafItem.issueTime,
+      validTimeFrom: tafItem.validTimeFrom * 1000,
+      validTimeTo: tafItem.validTimeTo * 1000,
+      rawTaf: tafItem.rawTAF,
+      reportId: "taf-1",
+      providerRaw: {},
+    });
+
+    const result = await syncWeatherNow(2_000_000_000_000);
+
+    expect(result?.results).toEqual({ metar: "ok", speci: "ok", taf: "ok" });
+    expect(setWeatherSyncStarted).toHaveBeenCalledTimes(1);
+    expect(setWeatherSyncSucceeded).toHaveBeenCalledTimes(1);
+    expect(setWeatherSyncFailed).not.toHaveBeenCalled();
   });
 });

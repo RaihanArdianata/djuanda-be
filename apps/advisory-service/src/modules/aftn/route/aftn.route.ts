@@ -7,8 +7,8 @@ import {
 } from "../validator/aftn.validator";
 
 const app = new Hono()
-  .get("/", validate(listAftnQuerySchema), list)
   .get("/latest", validate(latestAftnQuerySchema), latest)
+  .get("/", validate(listAftnQuerySchema), list)
   .get("/:id", detail);
 
 export default app;

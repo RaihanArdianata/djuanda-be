@@ -6,6 +6,7 @@ export type Meta = {
 
 export type ApiSuccessResponse<T> = {
   data: T;
+  sync?: unknown;
   error: null;
   meta: Meta & {
     status: "SUCCESS";

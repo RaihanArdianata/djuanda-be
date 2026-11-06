@@ -5,7 +5,10 @@
     "": {
       "name": "backend-djuanda",
       "dependencies": {
-        "@aeroswarm/codec": "^0.1.12",
+        "@aeroswarm/codec": "^0.1.13",
+        "@aeroswarm/core": "^0.2.13",
+        "@aeroswarm/ingest": "^0.1.7",
+        "@aeroswarm/live-server": "^0.1.5",
         "bcryptjs": "^3.0.3",
       },
       "devDependencies": {
@@ -115,10 +118,10 @@
       "name": "@repo/connection-service",
       "version": "0.0.0",
       "dependencies": {
-        "@aeroswarm/codec": "^0.1.12",
-        "@aeroswarm/core": "^0.2.12",
-        "@aeroswarm/ingest": "^0.1.6",
-        "@aeroswarm/live-server": "^0.1.4",
+        "@aeroswarm/codec": "^0.1.13",
+        "@aeroswarm/core": "^0.2.13",
+        "@aeroswarm/ingest": "^0.1.7",
+        "@aeroswarm/live-server": "^0.1.5",
         "@aeroswarm/replay-server": "^0.2.3",
         "@repo/database": "workspace:*",
         "@repo/logger": "workspace:*",
@@ -311,16 +314,17 @@
     },
   },
   "overrides": {
-    "@aeroswarm/codec": "^0.1.12",
+    "@aeroswarm/codec": "^0.1.13",
+    "@aeroswarm/core": "^0.2.13",
   },
   "packages": {
-    "@aeroswarm/codec": ["@aeroswarm/codec@0.1.12", "", {}, "sha512-1Cj6oSN154BLlG197vLUi5ihWjBMXprQit893BdW5XU23QGP8fVDP5LrvbA7CsBNICi1Lh+72ug/I1JKMmEHOQ=="],
+    "@aeroswarm/codec": ["@aeroswarm/codec@0.1.13", "", {}, "sha512-iHyL9YhbNrxlCMHaF1Fe1h5FxFFnAF3I0ZoK9kTuRbbALvP6D7ljxBZxGBOfqFFTvrz+/BayR7PtD1CCJHzWwQ=="],
 
-    "@aeroswarm/core": ["@aeroswarm/core@0.2.12", "", { "dependencies": { "dotenv": "^16.6.1", "ioredis": "^5.6.1", "kafkajs": "^2.2.4", "pino": "^9.7.0", "pino-pretty": "^13.0.0", "prom-client": "^15.1.3", "zod": "^4.4.3" } }, "sha512-Iz1FJXTVmR/kafbatkR+xGMCW4C10d1lV7oqV2xBOKfodbSPmyhUZlOC3ULr9aYCERpA0vyYJUkwjjxLhC97bg=="],
+    "@aeroswarm/core": ["@aeroswarm/core@0.2.13", "", { "dependencies": { "dotenv": "^16.6.1", "ioredis": "^5.6.1", "kafkajs": "^2.2.4", "pino": "^9.7.0", "pino-pretty": "^13.0.0", "prom-client": "^15.1.3", "zod": "^4.4.3" } }, "sha512-YZH32t4//y1BRSJrdGQR8RX+fOQhA8bYqY3Tl14oG0M/fJj4bc1UyDMKbTqNsDe22EeKkU518NUthxJEi0Z7pQ=="],
 
-    "@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.6", "", { "dependencies": { "@aeroswarm/codec": "^0.1.8", "@aeroswarm/core": "^0.2.12" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-wowQE4+nUME+snrN3szLSPdNK7ywiX/NhF5aLViHv/HHgw0hIBWJRY22EoSO3f3XyWcQLrBHDWS0WMU6dxDJHw=="],
+    "@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.7", "", { "dependencies": { "@aeroswarm/codec": "^0.1.13", "@aeroswarm/core": "^0.2.13" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-hchxskKeXBVZAVuB2V7oqF1ZUW6DjSD9W3bnoSaOvQkNw6qA4aHuVwjZmNuL5aEQdE+SJ0RMq2wLoCzs/+4SCQ=="],
 
-    "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.4", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "zod": "^4.4.3" } }, "sha512-SuIPhZS4ImJAtyDUDKJbMFoRr05ZsdGr53myrWSsyl1BAvhhRRdnWm22loLTFCQIW5M6Tu75Y3CbI/0MCLw3PA=="],
+    "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.5", "", { "dependencies": { "@aeroswarm/core": "^0.2.13", "zod": "^4.4.3" } }, "sha512-GxQgK6iRqFVaAIGSj/4a+quxq4QjWnWy61WOArstwjGelJ9qPYWzadzBaiS6wg/IwUoIZhnvij8OI9LkyY1ZqA=="],
 
     "@aeroswarm/replay-server": ["@aeroswarm/replay-server@0.2.3", "", { "dependencies": { "@aeroswarm/core": "^0.2.12", "postgres": "^3.4.7", "ws": "^8.16.0" }, "peerDependencies": { "hono": ">=4.0.0" }, "optionalPeers": ["hono"] }, "sha512-fheLJuaEL1tbr1eH4J6NCoR5xbZ9lc4u0WsZLvJlum/qvmzsSc0YzQSiVKXrHZ8Mks/lresNJlNrgS177NvDRw=="],
 

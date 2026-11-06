@@ -176,6 +176,13 @@
       "when": 1793803745630,
       "tag": "0024_chubby_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793982368745,
+      "tag": "0025_aeroswarm_tracks_icao24_index",
+      "breakpoints": true
     }
   ]
 }

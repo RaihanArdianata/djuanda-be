@@ -21,6 +21,7 @@ import {
   rotateRefreshToken,
   saveRefreshToken,
 } from "../service/auth.service";
+import { allowsConcurrentSessions } from "../service/session-policy";
 import type {
   loginSchemaType,
   refreshTokenSchemaType,
@@ -100,19 +101,22 @@ export const login = catchAsync(async (c) => {
     new Date(tmpExp * 1000),
   );
 
-  const newSession = await createUserSession({
-    expiresAt: new Date(tmpExp * 1000),
-    refreshTokenHash: sha256Hash(token),
-    userId: findUser.id,
-    deviceInfo: c.req.header("User-Agent") || "",
-    ipAddress:
-      c.req.header("X-Forwarded-For") ||
-      c.req.header("CF-Connecting-IP") ||
-      c.req.header("True-Client-IP") ||
-      c.req.header("X-Real-IP") ||
-      getConnInfo(c).remote.address ||
-      "",
-  });
+  const newSession = await createUserSession(
+    {
+      expiresAt: new Date(tmpExp * 1000),
+      refreshTokenHash: sha256Hash(token),
+      userId: findUser.id,
+      deviceInfo: c.req.header("User-Agent") || "",
+      ipAddress:
+        c.req.header("X-Forwarded-For") ||
+        c.req.header("CF-Connecting-IP") ||
+        c.req.header("True-Client-IP") ||
+        c.req.header("X-Real-IP") ||
+        getConnInfo(c).remote.address ||
+        "",
+    },
+    { allowConcurrent: allowsConcurrentSessions(findUser.role?.name) },
+  );
 
   logger.debug(
     `User ${findUser.id} logged in. Session ID: ${newSession.id}, IP: ${newSession.ipAddress}, Device: ${newSession.deviceInfo}`,

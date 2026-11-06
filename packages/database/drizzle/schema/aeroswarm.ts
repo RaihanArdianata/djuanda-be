@@ -1,4 +1,4 @@
-import type { InferSelectModel } from "drizzle-orm";
+import { type InferSelectModel, sql } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -37,6 +37,12 @@ export const aeroswarmTracks = pgTable(
     fusedAtIdx: index("aeroswarm_tracks_fused_at_idx").on(t.fusedAt),
     trackFusedAtIdx: index("aeroswarm_tracks_track_fused_at_idx").on(
       t.trackId,
+      t.fusedAt,
+    ),
+    // Jejak setelah restart (TRAIL_BACKFILL_MS) dicari per alamat Mode-S di jsonb. Di produksi buat dulu dengan
+    // drizzle/manual/0025_aeroswarm_tracks_icao24_fused.sql (CONCURRENTLY); migrasinya memakai IF NOT EXISTS.
+    icao24FusedIdx: index("idx_aeroswarm_tracks_icao24_fused").on(
+      sql`(${t.data}->'identity'->>'icao24')`,
       t.fusedAt,
     ),
   }),

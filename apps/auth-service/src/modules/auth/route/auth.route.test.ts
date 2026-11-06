@@ -103,6 +103,43 @@ const json = (body: unknown) => ({
   body: JSON.stringify(body),
 });
 
+describe("POST /auth/login sessions", () => {
+  const loginAs = async (roleName: string) => {
+    getUser.mockResolvedValue({
+      id: "u2",
+      email: "who@example.com",
+      username: "who",
+      name: "Who",
+      passwordHash: validPasswordHash,
+      status: "ACTIVE",
+      role: { id: 2, name: roleName },
+      permissions: [],
+    });
+    createUserSession.mockResolvedValue({ id: "session-2" });
+    saveRefreshToken.mockResolvedValue({ id: "token-2" });
+    return authRoute.request(
+      "/login",
+      json({ identifier: "who@example.com", password: validPassword }),
+    );
+  };
+
+  it("lets the guest role keep several sessions at once", async () => {
+    const res = await loginAs("Guest");
+    expect(res.status).toBe(200);
+    expect(createUserSession.mock.calls[0]?.[1]).toEqual({
+      allowConcurrent: true,
+    });
+  });
+
+  it("keeps one session per account for every other role", async () => {
+    const res = await loginAs("Admin");
+    expect(res.status).toBe(200);
+    expect(createUserSession.mock.calls[0]?.[1]).toEqual({
+      allowConcurrent: false,
+    });
+  });
+});
+
 describe("POST /auth/login", () => {
   it("returns tokens and user profile on valid credentials", async () => {
     const user = {

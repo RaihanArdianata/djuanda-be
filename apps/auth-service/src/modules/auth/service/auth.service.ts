@@ -230,7 +230,13 @@ export async function getUserSession(
 
 export async function createUserSession(
   data: Omit<CreateUserSessionInput, "id" | "createdAt">,
+  options: { allowConcurrent?: boolean } = {},
 ): Promise<UserSessionType> {
+  if (options.allowConcurrent) {
+    const [result] = await db.insert(userSessions).values(data).returning();
+    return result;
+  }
+
   const existingSession = await getUserSession(data.userId);
   logger.debug(
     `Existing session for user ${data.userId}: ${existingSession.isLoggedIn ? "active" : "none"} session found ${existingSession.isLoggedIn ? `with ID ${existingSession.session?.id}` : ""}`,

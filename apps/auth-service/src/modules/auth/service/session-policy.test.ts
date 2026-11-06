@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allowsConcurrentSessions } from "./auth.service";
+import { allowsConcurrentSessions } from "./session-policy";
 
 describe("allowsConcurrentSessions", () => {
   test("guest may have several sessions by default, whatever the case", () => {

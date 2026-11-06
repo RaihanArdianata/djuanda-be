@@ -32,5 +32,8 @@
   "dependencies": {
     "@aeroswarm/codec": "^0.1.12",
     "bcryptjs": "^3.0.3"
+  },
+  "overrides": {
+    "@aeroswarm/codec": "^0.1.12"
   }
 }

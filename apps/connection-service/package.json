@@ -11,7 +11,7 @@
         "test:coverage": "bun test --coverage --coverage-reporter=text"
     },
     "dependencies": {
-        "@aeroswarm/codec": "^0.1.10",
+        "@aeroswarm/codec": "^0.1.12",
         "@aeroswarm/core": "^0.2.12",
         "@aeroswarm/ingest": "^0.1.6",
         "@aeroswarm/live-server": "^0.1.4",

@@ -14,6 +14,8 @@
     "test:coverage": "turbo run test:coverage",
     "db:generate": "bun --env-file=../../.env run --cwd packages/database db:generate",
     "db:migrate": "bun --env-file=../../.env run --cwd packages/database db:migrate",
+
+    "db:manual": "bun --env-file=../../.env run --cwd packages/database run-manual-sql.ts",
     "seed": "bun --env-file=../../.env run --cwd packages/database seed",
     "db:local:reset": "docker compose -f docker-compose.yml -f docker-compose.local.yml rm -fsv postgres && docker volume rm backend-djuanda-postgres-data",
     "db:local:up": "docker compose --env-file .env.development -f docker-compose.yml -f docker-compose.local.yml up -d pgbouncer postgres",

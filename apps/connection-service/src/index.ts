@@ -107,7 +107,7 @@ const liveRuntime = createLiveRuntime({
   movementPhases,
   surfaceStates,
 });
-// Area peminat track dari profil bandara (aturan ALERT_AREA di halaman aturan alert): menggantikan INTEREST_BBOX dan berubah
+// Area cakupan surveilans dari profil bandara (aturan ALERT_AREA di halaman aturan alert): menggantikan INTEREST_BBOX dan berubah
 // tanpa restart. Tanpa aturan atau tanpa interestRadiusNm, INTEREST_BBOX dari env tetap berlaku.
 const interestAirportId: string = process.env.AEROSWARM_AIRPORT_ID ?? "WARR";
 const stopInterestSync: () => void = startInterestSync({

@@ -1,7 +1,7 @@
 import type { Bbox } from "@aeroswarm/live-server";
 
 /**
- * Area peminat track dari profil bandara: kotak di sekeliling titik pusat (aturan `ALERT_AREA`: `centerLatitude`, `centerLongitude`,
+ * Area cakupan surveilans dari profil bandara: kotak di sekeliling titik pusat (aturan `ALERT_AREA`: `centerLatitude`, `centerLongitude`,
  * `interestRadiusNm`) menggantikan `INTEREST_BBOX` dari env, dan berubah tanpa restart begitu operator mengubah aturannya.
  * Tanpa `interestRadiusNm` (atau aturan mati/tidak ada) dipakai `INTEREST_BBOX` dari env bila ada.
  */

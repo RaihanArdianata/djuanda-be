@@ -62,7 +62,7 @@ const defaultRules = [
         airCeilingFt:
           "Tinggi kubah area udara di atas titik pusat (ft). Area udara berbentuk kubah: setinggi ini di atas pusat dan mengecil ke tepi radius. Pesawat di atas kubah tidak ikut aturan alert. Kosong = tanpa batas tinggi. Bawaan di seed 10000.",
         interestRadiusNm:
-          "Radius area peminat track (NM): kotak di sekeliling titik pusat tempat gambaran udara disimpan. Track di luar kotak dibuang kecuali sedang menuju ke dalamnya, dan pesawat yang sudah keluar dari kotak dihapus. Harus lebih besar dari radius area udara supaya semua yang dinilai alert ada di gambaran. Kosong = pakai INTEREST_BBOX dari env (bila ada). Berlaku tanpa restart.",
+          "Radius area cakupan surveilans (NM): kotak di sekeliling titik pusat tempat gambaran udara disimpan. Track di luar kotak dibuang kecuali sedang menuju ke dalamnya, dan pesawat yang sudah keluar dari kotak dihapus. Harus lebih besar dari radius area udara supaya semua yang dinilai alert ada di gambaran. Kosong = pakai INTEREST_BBOX dari env (bila ada). Berlaku tanpa restart.",
       },
       notes:
         "Tanpa titik pusat (kosong dan ALERT_AREA_CENTER tidak diisi), semua target dievaluasi tanpa batas area. Nonaktifkan aturan ini untuk mematikan batas area.",

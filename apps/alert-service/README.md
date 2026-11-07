@@ -152,6 +152,45 @@ Setiap aturan di tabel `alert_rules` memiliki kolom `configuration` JSON. Contoh
 - `requireAltitude`: bawaan `true`; track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. `false` mengembalikan perilaku lama (hanya jarak horizontal).
 - `includeSurface`: bawaan `false`. `true` menyalakan **STCA darat**, dinilai terpisah dari STCA udara (alert-nya membawa `data.domain` = `AIR` atau `SURFACE`): dua target di darat, dengan `surfaceMinimumSeparationMeters` (bawaan 50 m) dan `surfacePredictionTimeSeconds` (bawaan 10 detik). Pasangan campuran udara-darat tidak dinilai (urusan aturan incursion).
 
+### ALERT_AREA
+
+Bukan pendeteksi: aturan konfigurasi **area alert bandara**. Alert hanya berlaku untuk target di dalam area; target di luar tidak ikut aturan apa pun (STCA, incursion, deviasi). Dua zona dari satu titik pusat (ARP):
+
+```json
+{
+  "centerLatitude": -7.3797,
+  "centerLongitude": 112.7868,
+  "groundRadiusM": 5000,
+  "airRadiusNm": 15
+}
+```
+
+- `groundRadiusM` (bawaan 5000): radius area darat, untuk target di darat.
+- `airRadiusNm` (bawaan 15): radius area udara, untuk pesawat di udara.
+- `airCeilingFt` (bawaan di seed 10000; kosong = tanpa batas tinggi): tinggi **kubah** area udara di atas pusat. Area udara berbentuk setengah elipsoid: setinggi plafon di atas pusat dan mengecil ke tepi radius, jadi pesawat yang tinggi di dekat pusat maupun yang rendah di tepi bisa sama-sama di dalam atau di luar menurut posisinya. Pesawat di atas kubah tidak ikut aturan alert. Ketinggian yang tidak dilaporkan dihitung 0 ft.
+- `interestRadiusNm` (bawaan di seed 20): radius **area peminat track** di `connection-service`; kotak di sekeliling pusat tempat gambaran udara disimpan (menggantikan `INTEREST_BBOX` bila diisi, berlaku tanpa restart). Harus lebih besar dari `airRadiusNm`.
+- Pusat dari `centerLatitude` / `centerLongitude`, atau dari env `ALERT_AREA_CENTER="lat,lon"` bila kosong. Tanpa pusat tidak ada batas area. Menonaktifkan aturan ini juga mematikan batas area.
+- Untuk aturan yang belum ada di database, isi tanpa menyentuh aturan lain: `SEED_RULE_TYPES=ALERT_AREA bun run --cwd packages/database seed:alerts` (seed penuh menimpa konfigurasi aturan yang tidak ditandai `preserveConfiguration`). Tanpa aturan, `ALERT_AREA_CENTER` saja sudah cukup untuk menyalakan batas area dengan radius bawaan.
+- Jumlah target yang dikeluarkan dihitung di metrik `alert_tracks_outside_area_total`. Alert cuaca tidak terpengaruh.
+
+### ALERT_ENGINE
+
+Bukan pendeteksi: penyetelan engine alert yang bisa diubah operator tanpa restart. Env yang sama menjadi nilai awal, isian aturan menggantikannya, dan yang dikosongkan kembali ke env.
+
+```json
+{
+  "twinRadiusM": 60,
+  "twinMaxSpeedDiffKt": 15,
+  "staleGraceSeconds": 20,
+  "occupancyStickyMs": 5000
+}
+```
+
+- `twinRadiusM` (`ALERT_TWIN_RADIUS_M`): track tanpa nama sedekat ini dengan track bernama dianggap pesawat yang sama; 0 mematikan penilaian dari posisi.
+- `twinMaxSpeedDiffKt` (`ALERT_TWIN_MAX_SPEED_DIFF_KT`): selisih kecepatan paling besar untuk itu.
+- `staleGraceSeconds` (`ALERT_STALE_GRACE_SECONDS`): masa tenggang sebelum alert yang kandidatnya hilang dibersihkan.
+- `occupancyStickyMs` (`ALERT_OCCUPANCY_STICKY_MS`): lama runway/taxiway tetap terisi setelah target terakhir terlihat.
+
 ### RUNWAY_INCURSION
 
 ```json

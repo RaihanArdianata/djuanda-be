@@ -276,3 +276,20 @@ describe("the runway rule on what the filter leaves", () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe("configure", () => {
+  it("changes the thresholds while running", () => {
+    const f = createSameAircraftFilter();
+    const named = track({ trackId: "n", callsign: "BTK241" });
+    const nameless = track({
+      trackId: "x",
+      latitude: -7.381,
+      longitude: 112.78,
+    }); // about 110 m away
+    expect(ids(f.apply("WARR", [named, nameless]))).toEqual(["n", "x"]);
+    f.configure({ ...DEFAULT_SAME_AIRCRAFT, twinRadiusM: 200 });
+    expect(ids(f.apply("WARR", [named, nameless]))).toEqual(["n"]);
+    f.configure({ ...DEFAULT_SAME_AIRCRAFT, twinRadiusM: 0 });
+    expect(ids(f.apply("WARR", [named, nameless]))).toEqual(["n", "x"]);
+  });
+});

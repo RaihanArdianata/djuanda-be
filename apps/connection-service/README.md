@@ -121,7 +121,7 @@ ground station (CAT23) diteruskan sebagai `source.status`.
 - State ada di memori satu proses: jalankan **satu instance**.
 - Jalur live tidak bergantung pada database; DB yang mati hanya menghentikan penyimpanan.
 - Pengaturan: `STALE_AFTER_MS`, `LOST_AFTER_MS`, `TRACK_REMOVE_AFTER_MS`, `TRACK_SWEEP_MS`,
-  `WS_DEFAULT_UPDATE_HZ`, `WS_HEARTBEAT_MS`, `INTEREST_BBOX`, `INTEREST_LOOKAHEAD_MIN`
+  `WS_DEFAULT_UPDATE_HZ`, `WS_HEARTBEAT_MS`, `INTEREST_BBOX` (digantikan oleh `interestRadiusNm` pada aturan `ALERT_AREA` bila diisi, dibaca tiap menit tanpa restart; butuh `@aeroswarm/live-server` yang punya `setInterest`), `INTEREST_LOOKAHEAD_MIN`
   (lihat `.env.example`). Nilai tidak valid memberi peringatan dan memakai default.
 
 ## Endpoint HTTP/WS

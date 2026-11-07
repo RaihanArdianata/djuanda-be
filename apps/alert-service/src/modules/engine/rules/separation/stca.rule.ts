@@ -1,32 +1,7 @@
+import { isAirborne } from "../../airborne";
 import type { AlertCandidate, AlertContext, DetectionRule } from "../../types";
 
 const DEFAULT_HORIZON_SECONDS = 60;
-
-/** Track tanpa flag onGround tapi altitude MSL di atas ini jelas airborne (sama dengan aturan incursion). */
-const AIRBORNE_ALTITUDE_FT = 500;
-
-/** Di bawah kecepatan ini (dan rendah), target tidak mungkin sedang terbang. */
-const MIN_AIRBORNE_SPEED_KT = 40;
-
-/**
- * STCA adalah peringatan konflik di UDARA. Target di darat (taksi, parkir, kendaraan) tidak ikut:
- * konflik di permukaan ditangani aturan incursion, dan ambang pemisahan STCA (bawaan 3 NM) jauh
- * lebih besar dari jarak antar target di apron, sehingga dua target yang diam pun memicu alert.
- * Tanpa flag onGround, target dianggap di udara hanya bila altitudenya jelas di atas permukaan.
- * Flag onGround=false tidak dipercaya mentah-mentah: sumber MLAT/radar kadang tidak menandai
- * kendaraan/pesawat taksi sebagai surface, jadi target yang rendah dan lambat tetap dianggap di darat.
- */
-function isAirborne(track: AlertContext["tracks"][0]): boolean {
-  if (track.onGround === true) return false;
-  const lowAndSlow =
-    track.altitude !== undefined &&
-    track.altitude <= AIRBORNE_ALTITUDE_FT &&
-    track.groundSpeed !== undefined &&
-    track.groundSpeed < MIN_AIRBORNE_SPEED_KT;
-  if (lowAndSlow) return false;
-  if (track.onGround === false) return true;
-  return track.altitude !== undefined && track.altitude > AIRBORNE_ALTITUDE_FT;
-}
 
 /** Pemisahan vertikal minimum bawaan (ft) bila aturan tidak mengisinya; `0` atau `null` di konfigurasi mematikan pemeriksaan vertikal. */
 const DEFAULT_MIN_VERTICAL_FT = 1000;

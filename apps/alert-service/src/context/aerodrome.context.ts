@@ -9,7 +9,7 @@ import {
   getAerodromeGeometry,
   setAerodromeGeometry,
 } from "@/cache/context.cache";
-import { alertServiceEnv } from "@/config/env";
+import { engineSettings } from "@/config/engine-settings";
 import { pointInPolygon } from "../modules/engine/rules/geometry/geometry";
 import type {
   AerodromeContextData,
@@ -236,7 +236,7 @@ function computeOccupancy(
 
     const last = lastOccupiedAt.get(stickyKey);
     const sticky =
-      last !== undefined && now - last < alertServiceEnv.occupancyStickyMs;
+      last !== undefined && now - last < engineSettings.occupancyStickyMs;
     if (!sticky) lastOccupiedAt.delete(stickyKey);
 
     return {

@@ -101,11 +101,14 @@ export interface SameAircraftFilter {
   apply(airportId: string, tracks: MovementTrack[]): MovementTrack[];
   /** How many tracks were dropped as duplicates since the start. */
   readonly merged: number;
+  /** Change the thresholds while running (an operator edited the engine settings). */
+  configure(next: SameAircraftOptions): void;
 }
 
 export function createSameAircraftFilter(
-  options: SameAircraftOptions = DEFAULT_SAME_AIRCRAFT,
+  initial: SameAircraftOptions = DEFAULT_SAME_AIRCRAFT,
 ): SameAircraftFilter {
+  let options = initial;
   /** `airport|aircraft key` -> the track id kept for it. */
   const chosen = new Map<string, string>();
   let merged = 0;
@@ -173,6 +176,9 @@ export function createSameAircraftFilter(
   }
 
   return {
+    configure(next: SameAircraftOptions): void {
+      options = next;
+    },
     get merged(): number {
       return merged;
     },

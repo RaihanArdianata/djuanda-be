@@ -61,6 +61,12 @@ import {
   startTrackProducer,
   stopTrackProducer,
 } from "./modules/ingest/service/track.producer";
+import {
+  type InterestTarget,
+  startInterestSync,
+} from "./modules/live/interest-area";
+import { fetchAreaRule } from "./modules/live/interest-area.db";
+import { liveConfigFromEnv } from "./modules/live/live-config";
 import { createLiveRuntime } from "./modules/live/live-runtime";
 import {
   type LiveSocketData,
@@ -100,6 +106,16 @@ const liveRuntime = createLiveRuntime({
   authenticate: (token: string) => verifyToken(token),
   movementPhases,
   surfaceStates,
+});
+// Area peminat track dari profil bandara (aturan ALERT_AREA di halaman aturan alert): menggantikan INTEREST_BBOX dan berubah
+// tanpa restart. Tanpa aturan atau tanpa interestRadiusNm, INTEREST_BBOX dari env tetap berlaku.
+const interestAirportId: string = process.env.AEROSWARM_AIRPORT_ID ?? "WARR";
+const stopInterestSync: () => void = startInterestSync({
+  // setInterest existe di @aeroswarm/live-server yang lebih baru; versi lama dilewati dengan peringatan.
+  target: liveRuntime.state as unknown as InterestTarget,
+  fallback: liveConfigFromEnv(process.env).interestBbox,
+  fetchRule: () => fetchAreaRule(interestAirportId),
+  log: logger,
 });
 const liveHandlers = liveSocketHandlers(liveRuntime.live);
 const asLiveSocket = (
@@ -395,6 +411,7 @@ const shutdown = async (signal: string): Promise<never> => {
     `${signal} received, shutting down connection-service gracefully`,
   );
   server.stop();
+  stopInterestSync();
   liveRuntime.stop();
   movements.stop();
   if (fusionSweep) clearInterval(fusionSweep);

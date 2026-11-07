@@ -17,7 +17,11 @@ import {
   getActiveAlertTtl,
   setActiveAlert,
 } from "../../cache/alert-state.cache";
-import { alertServiceEnv } from "../../config/env";
+import {
+  applyEngineSettings,
+  ENGINE_RULE_TYPE,
+  engineSettings,
+} from "../../config/engine-settings";
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getAirportTracks } from "../../context/surveillance.context";
 import {
@@ -27,6 +31,12 @@ import {
 } from "../alert/service/alert.service";
 import { broadcastAerodromeStatus } from "./aerodrome-status.service";
 import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
+import {
+  ALERT_AREA_RULE_TYPE,
+  alertAreaFrom,
+  CONFIG_ONLY_RULE_TYPES,
+  tracksInAlertArea,
+} from "./alert-area";
 import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
@@ -81,22 +91,35 @@ export interface DetectionResult {
 const RULES_CACHE_TTL_MS = 30_000;
 const rulesCache = new Map<string, { rules: AlertRule[]; expiresAt: number }>();
 
+/** Pembacaan yang sedang berjalan per bandara: evaluasi paralel saat cache kedaluwarsa memakai satu query, bukan satu per evaluasi. */
+const rulesInFlight = new Map<string, Promise<AlertRule[]>>();
+
 /** Rules jarang berubah — query DB tiap track message cuma menambah latency
  *  per pesan dan memperparah consumer lag. Cache pendek per airport. */
 async function getEnabledRules(airportId: string): Promise<AlertRule[]> {
   const cached = rulesCache.get(airportId);
   if (cached && cached.expiresAt > Date.now()) return cached.rules;
-  const rules = await db
+  const pending = rulesInFlight.get(airportId);
+  if (pending) return pending;
+
+  const load = db
     .select()
     .from(alertRules)
     .where(
       and(eq(alertRules.airportId, airportId), eq(alertRules.enabled, true)),
-    );
-  rulesCache.set(airportId, {
-    rules,
-    expiresAt: Date.now() + RULES_CACHE_TTL_MS,
-  });
-  return rules;
+    )
+    .then((rules) => {
+      rulesCache.set(airportId, {
+        rules,
+        expiresAt: Date.now() + RULES_CACHE_TTL_MS,
+      });
+      return rules;
+    })
+    .finally(() => {
+      rulesInFlight.delete(airportId);
+    });
+  rulesInFlight.set(airportId, load);
+  return load;
 }
 
 /**
@@ -143,6 +166,8 @@ function collectCandidates(
   const candidates: AlertCandidate[] = [];
 
   for (const rule of rules) {
+    // Aturan konfigurasi (mis. ALERT_AREA) tidak mendeteksi apa pun.
+    if (CONFIG_ONLY_RULE_TYPES.has(rule.type)) continue;
     const detector = detectionRules.find((d) => d.type === rule.type);
     if (!detector) {
       logger.warn({ type: rule.type }, "no detector registered for rule type");
@@ -302,7 +327,7 @@ async function clearStaleAlerts(
   const activeEntityKeys = new Set(candidates.map(buildEntityKey));
   const activeRefs = await getActiveAlertRefs(airportId);
   const refreshThreshold =
-    ACTIVE_ALERT_TTL_SECONDS - alertServiceEnv.staleGraceSeconds;
+    ACTIVE_ALERT_TTL_SECONDS - engineSettings.staleGraceSeconds;
 
   for (const ref of activeRefs) {
     if (!ref.entityKey || activeEntityKeys.has(ref.entityKey)) continue;
@@ -423,9 +448,26 @@ export async function sweepExpiredAlerts(): Promise<void> {
 
 /** Satu pesawat satu track: lihat same-aircraft.ts. ALERT_TWIN_RADIUS_M=0 mematikan penilaian berdasar posisi. */
 const sameAircraft = createSameAircraftFilter(sameAircraftFromEnv(process.env));
+
+/** Pengaturan engine dari aturan `ALERT_ENGINE` (atau env bila aturannya tidak ada), diterapkan tiap aturan dibaca. */
+function applyEngineRule(rules: AlertRule[]): void {
+  const rule = rules.find((r) => r.type === ENGINE_RULE_TYPE);
+  const settings = applyEngineSettings(
+    rule?.configuration as Record<string, unknown> | undefined,
+  );
+  sameAircraft.configure({
+    twinRadiusM: settings.twinRadiusM,
+    twinMaxSpeedDiffKt: settings.twinMaxSpeedDiffKt,
+  });
+}
 const twinTracksMerged = createCounter(
   "alert_twin_tracks_merged_total",
   "Tracks of an aircraft that was already in the picture (another sensor), left out of alert evaluation",
+);
+
+const tracksOutsideArea = createCounter(
+  "alert_tracks_outside_area_total",
+  "Tracks outside the airport alert area (ground or air radius), left out of alert evaluation",
 );
 
 export const evaluateMovement = async (
@@ -433,11 +475,23 @@ export const evaluateMovement = async (
 ): Promise<DetectionResult> => {
   // Radar, ADS-B, dan MLAT yang belum menyatu menghasilkan beberapa track untuk satu pesawat; aturan akan
   // membandingkannya satu sama lain (incursion terhadap dirinya sendiri). Aturan hanya melihat satu track per pesawat.
+  const rules = await getEnabledRules(received.airportId);
+  applyEngineRule(rules);
   const tracks = sameAircraft.apply(received.airportId, received.tracks);
   if (tracks.length < received.tracks.length) {
     twinTracksMerged.inc(received.tracks.length - tracks.length);
   }
-  const input: DetectionInput = { ...received, tracks };
+  // Alert hanya berlaku di area bandara: target di luar zona darat atau udaranya tidak ikut aturan apa pun.
+  const area = alertAreaFrom(
+    rules.find((r) => r.type === ALERT_AREA_RULE_TYPE)?.configuration as
+      | Record<string, unknown>
+      | undefined,
+  );
+  const inArea = area ? tracksInAlertArea(tracks, area) : tracks;
+  if (inArea.length < tracks.length) {
+    tracksOutsideArea.inc(tracks.length - inArea.length);
+  }
+  const input: DetectionInput = { ...received, tracks: inArea };
   // Occupancy dibroadcast secepat mungkin — terpisah dari query rules dan
   // context HTTP lain (weather/advisory bisa timeout detik-an dan menahan
   // broadcast kalau ditunggu). Promise yang sama dipakai ulang oleh
@@ -455,8 +509,6 @@ export const evaluateMovement = async (
   void aerodromePromise.then((aerodrome) =>
     broadcastAerodromeStatus(input.airportId, aerodrome),
   );
-
-  const rules = await getEnabledRules(input.airportId);
 
   if (rules.length === 0) {
     logger.warn(

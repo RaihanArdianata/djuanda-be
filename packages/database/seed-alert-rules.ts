@@ -14,6 +14,8 @@ const defaultRules = [
     configuration: {
       predictionTimeSeconds: 60,
       minimumHorizontalSeparationNm: 3,
+      minimumVerticalSeparationFt: 1000,
+      requireAltitude: true,
     },
     documentation: {
       parameters: {
@@ -22,7 +24,9 @@ const defaultRules = [
         minimumHorizontalSeparationNm:
           "Jarak horizontal minimum (nautical miles) antara dua track.",
         minimumVerticalSeparationFt:
-          "Jarak vertikal minimum (feet) antara dua track — opsional.",
+          "Jarak vertikal minimum (feet): dua track yang selisih tingginya sama atau lebih dari ini tidak memicu STCA walau dekat secara horizontal. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
+        requireAltitude:
+          "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:
           "true = target di darat ikut dihitung (bawaan false: konflik di darat ditangani aturan incursion).",
       },

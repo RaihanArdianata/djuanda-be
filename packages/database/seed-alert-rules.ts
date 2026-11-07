@@ -7,6 +7,65 @@ const airportId: string = process.env.AEROSWARM_AIRPORT_ID ?? "WARR";
 // biome-ignore-start lint/suspicious/noConsole: seed output
 const defaultRules = [
   {
+    type: "ALERT_ENGINE",
+    enabled: true,
+    // Penyetelan engine milik operator, jadi seed ulang tidak menimpa isian pengguna.
+    preserveConfiguration: true,
+    description:
+      "Penyetelan engine alert: penyatuan track kembar antar sensor, masa tenggang alert stale, dan masa tahan status terisi permukaan. Bukan pendeteksi.",
+    configuration: {
+      twinRadiusM: 60,
+      twinMaxSpeedDiffKt: 15,
+      staleGraceSeconds: 20,
+      occupancyStickyMs: 5000,
+    },
+    documentation: {
+      parameters: {
+        twinRadiusM:
+          "Radar, ADS-B, dan MLAT yang belum menyatu menghasilkan beberapa track untuk satu pesawat. Track tanpa nama sedekat ini (meter) dengan track bernama dari jenis yang sama dianggap pesawat yang sama dan tidak dihitung dua kali. 0 = tidak dinilai dari posisi (hanya dari callsign). Bawaan 60.",
+        twinMaxSpeedDiffKt:
+          "Selisih kecepatan paling besar (knot) agar dua track dianggap pesawat yang sama. Bawaan 15.",
+        staleGraceSeconds:
+          "Alert aktif yang kandidatnya tidak terlihat lagi baru dibersihkan setelah masa ini (detik). Meredam kedip dari jitter posisi di batas area. Bawaan 20.",
+        occupancyStickyMs:
+          "Runway atau taxiway tetap berstatus terisi selama ini (ms) setelah target terakhir terlihat di dalamnya. Meredam kedip status di batas poligon. Bawaan 5000.",
+      },
+      notes:
+        "Nilai env ALERT_TWIN_RADIUS_M, ALERT_TWIN_MAX_SPEED_DIFF_KT, ALERT_STALE_GRACE_SECONDS, dan ALERT_OCCUPANCY_STICKY_MS menjadi nilai awal; isian di sini menggantikannya tanpa restart, dan yang dikosongkan kembali ke env.",
+    },
+  },
+  {
+    type: "ALERT_AREA",
+    enabled: true,
+    // Pusat dan radius adalah ketentuan bandara, jadi seed ulang tidak menimpa isian pengguna.
+    preserveConfiguration: true,
+    description:
+      "Area alert bandara: alert hanya berlaku untuk target di dalam radius darat atau radius udara dari titik pusat bandara. Aturan ini tidak membuat alert sendiri.",
+    configuration: {
+      centerLatitude: -7.3797,
+      centerLongitude: 112.7868,
+      groundRadiusM: 5000,
+      airRadiusNm: 15,
+      interestRadiusNm: 20,
+    },
+    documentation: {
+      parameters: {
+        centerLatitude:
+          "Lintang titik pusat bandara (ARP), derajat desimal. Juanda (WARR): -7.3797.",
+        centerLongitude:
+          "Bujur titik pusat bandara (ARP), derajat desimal. Juanda (WARR): 112.7868.",
+        groundRadiusM:
+          "Radius area darat (meter): target di darat (taksi, parkir, kendaraan, lepas landas dan mendarat) di luar radius ini tidak ikut aturan alert apa pun. Bawaan 5000.",
+        airRadiusNm:
+          "Radius area udara (NM): pesawat di udara di luar radius ini tidak ikut aturan alert apa pun. Bawaan 15.",
+        interestRadiusNm:
+          "Radius area peminat track (NM): kotak di sekeliling titik pusat tempat gambaran udara disimpan. Track di luar kotak dibuang kecuali sedang menuju ke dalamnya, dan pesawat yang sudah keluar dari kotak dihapus. Harus lebih besar dari radius area udara supaya semua yang dinilai alert ada di gambaran. Kosong = pakai INTEREST_BBOX dari env (bila ada). Berlaku tanpa restart.",
+      },
+      notes:
+        "Tanpa titik pusat (kosong dan ALERT_AREA_CENTER tidak diisi), semua target dievaluasi tanpa batas area. Nonaktifkan aturan ini untuk mematikan batas area.",
+    },
+  },
+  {
     type: "STCA",
     enabled: true,
     description:
@@ -361,8 +420,16 @@ const defaultRules = [
   },
 ];
 
+// Mengisi hanya jenis tertentu, mis. `SEED_RULE_TYPES=ALERT_AREA`, tanpa menyentuh aturan lain (seed penuh menimpa konfigurasi
+// aturan yang tidak ditandai preserveConfiguration).
+const onlyTypes = (process.env.SEED_RULE_TYPES ?? "")
+  .split(",")
+  .map((t) => t.trim())
+  .filter(Boolean);
+
 async function seed(): Promise<void> {
   for (const rule of defaultRules) {
+    if (onlyTypes.length > 0 && !onlyTypes.includes(rule.type)) continue;
     const existing = await db
       .select({ id: alertRules.id })
       .from(alertRules)

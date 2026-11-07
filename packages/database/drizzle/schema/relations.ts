@@ -4,6 +4,7 @@ import {
   relations,
 } from "drizzle-orm";
 import type * as schema from "../schema";
+import { alertActions, alerts, alertTrackHistory } from "./alerts";
 import { credentials } from "./auth";
 import { permissions, rolePermissions, userRoles } from "./rbac";
 import { users } from "./users";
@@ -38,6 +39,18 @@ export const usersRelations = relations(users, ({ one }) => ({
   credentials: one(credentials, {
     fields: [users.id],
     references: [credentials.userId],
+  }),
+}));
+
+export const alertsRelations = relations(alerts, ({ many }) => ({
+  trackHistory: many(alertTrackHistory),
+  actions: many(alertActions),
+}));
+
+export const alertActionsRelations = relations(alertActions, ({ one }) => ({
+  alert: one(alerts, {
+    fields: [alertActions.alertId],
+    references: [alerts.alertId],
   }),
 }));
 

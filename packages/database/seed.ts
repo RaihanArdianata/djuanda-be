@@ -1,7 +1,7 @@
 // biome-ignore-start lint/suspicious/noConsole: seed output
 
 import { bcryptHash } from "@repo/shared/utils/hashing";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import {
   credentials,
   db,
@@ -86,18 +86,36 @@ async function upsertUser(values: {
   username: string;
   roleId?: number;
 }): Promise<{ id: string }> {
-  const [created] = await db
-    .insert(users)
-    .values(values)
-    .onConflictDoUpdate({
-      target: users.email,
-      set: {
+  const existing = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      or(
+        eq(users.email, values.email),
+        eq(users.username, values.username),
+        eq(users.phone, values.phone),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    const [updated] = await db
+      .update(users)
+      .set({
+        email: values.email,
         name: values.name,
         phone: values.phone,
         username: values.username,
         roleId: values.roleId,
-      },
-    })
+      })
+      .where(eq(users.id, existing[0].id))
+      .returning({ id: users.id });
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(users)
+    .values(values)
     .returning({ id: users.id });
 
   return created;
@@ -149,6 +167,24 @@ async function seed(): Promise<void> {
     "Ubah konfigurasi & aktif/nonaktifkan alert rule",
   );
 
+  const permAlertClear = await getOrCreatePermission(
+    "Clear Alerts",
+    "ALERT.CLEAR",
+    "Clear / tutup alert",
+  );
+
+  const permAlertVerify = await getOrCreatePermission(
+    "Verify Alerts",
+    "ALERT.VERIFY",
+    "Verifikasi status alert (valid / false alarm)",
+  );
+
+  const permAlertDelete = await getOrCreatePermission(
+    "Delete Alerts",
+    "ALERT.DELETE",
+    "Hapus alert",
+  );
+
   const grant = (roleId: number, permissionId: string): Promise<unknown> =>
     db
       .insert(rolePermissions)
@@ -160,17 +196,22 @@ async function seed(): Promise<void> {
     await grant(role.id, permAlertView.id);
     await grant(role.id, permAlertCreate.id);
     await grant(role.id, permAlertEdit.id);
+    await grant(role.id, permAlertClear.id);
+    await grant(role.id, permAlertVerify.id);
+    await grant(role.id, permAlertDelete.id);
   }
 
-  // Operator (role USER) minimal perlu lihat + acknowledge/clear alert.
+  // Operator (role USER) minimal perlu lihat + acknowledge/clear/verify alert.
   await grant(roleUser.id, permAlertView.id);
   await grant(roleUser.id, permAlertCreate.id);
+  await grant(roleUser.id, permAlertClear.id);
+  await grant(roleUser.id, permAlertVerify.id);
 
   const superadmin = await upsertUser({
     email: superadminEmail,
-    name: "Super Admin",
-    phone: "081234567890",
-    username: "superadmin",
+    name: "Super Admin Test",
+    phone: "081234567899",
+    username: "superadmin test",
   });
 
   const superadminHash = await bcryptHash(superadminPassword);

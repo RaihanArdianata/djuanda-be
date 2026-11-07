@@ -1,30 +1,67 @@
 import ApiError from "@repo/shared/api-error";
 import { failure, success } from "@repo/shared/api-response";
 import { catchAsync } from "@repo/shared/catch-async";
+import { z } from "zod";
 import {
   type DetectionResult,
   evaluateMovement,
 } from "../../engine/alert.engine";
 import {
   acknowledgeAlertService,
+  bulkClearAlertsService,
   clearAlertService,
+  deleteAlertService,
   exportAlertsService,
   getActiveAlerts,
+  getAlertActionsService,
   getAlertById,
   getAlertTrackHistory,
   getAllAlerts,
+  verifyAlertService,
 } from "../service/alert.service";
 import {
   acknowledgeAlertSchema,
+  bulkClearAlertSchema,
   clearAlertSchema,
+  deleteAlertSchema,
   detectSchema,
   exportAlertSchema,
   listAlertInputSchema,
+  verifyAlertSchema,
 } from "../validator/alert.validator";
+
+function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const { fieldErrors } = z.flattenError(result.error);
+    const fields: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(fieldErrors)) {
+      if (v) fields[k] = v as string[];
+    }
+    throw new ApiError("VALIDATION_ERROR", { fields });
+  }
+  return result.data;
+}
+
+const getActor = (c: {
+  get: (key: string) => unknown;
+}): { id?: string; name?: string; username?: string } => {
+  const user = c.get("user") as
+    | { id?: string; name?: string; username?: string }
+    | undefined;
+  const jwt = c.get("jwtPayload") as
+    | { id?: string; username?: string; name?: string }
+    | undefined;
+  return {
+    id: user?.id ?? jwt?.id,
+    name: user?.name ?? jwt?.name,
+    username: user?.username ?? jwt?.username,
+  };
+};
 
 export const listAlertsController = catchAsync(async (c) => {
   const query = c.req.query();
-  const parsed = listAlertInputSchema.parse({
+  const parsed = parseOrThrow(listAlertInputSchema, {
     ...query,
     page: query.page,
     limit: query.limit ?? query.size,
@@ -46,7 +83,7 @@ export const listAlertsController = catchAsync(async (c) => {
 
 export const listActiveAlertsController = catchAsync(async (c) => {
   const query = c.req.query();
-  const parsed = listAlertInputSchema.parse({
+  const parsed = parseOrThrow(listAlertInputSchema, {
     ...query,
     page: query.page,
     limit: query.limit ?? query.size,
@@ -88,9 +125,10 @@ export const getAlertTrackHistoryController = catchAsync(async (c) => {
 export const acknowledgeAlertController = catchAsync(async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
-  const input = acknowledgeAlertSchema.parse(body);
+  const input = parseOrThrow(acknowledgeAlertSchema, body);
+  const actor = getActor(c);
 
-  const alert = await acknowledgeAlertService(id, input);
+  const alert = await acknowledgeAlertService(id, input, actor);
 
   if (!alert) {
     return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
@@ -101,10 +139,16 @@ export const acknowledgeAlertController = catchAsync(async (c) => {
 
 export const clearAlertController = catchAsync(async (c) => {
   const { id } = c.req.param();
-  const body = await c.req.json();
-  const input = clearAlertSchema.parse(body);
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  const input = parseOrThrow(clearAlertSchema, body);
+  const actor = getActor(c);
 
-  const alert = await clearAlertService(id, input);
+  const alert = await clearAlertService(id, input, actor);
 
   if (!alert) {
     return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
@@ -113,9 +157,67 @@ export const clearAlertController = catchAsync(async (c) => {
   return success(c, alert, { message: "Alert cleared successfully" });
 });
 
+export const bulkClearAlertController = catchAsync(async (c) => {
+  const body = await c.req.json();
+  const input = parseOrThrow(bulkClearAlertSchema, body);
+  const actor = getActor(c);
+
+  const result = await bulkClearAlertsService(input, actor);
+
+  return success(c, result, { message: "Bulk clear processed successfully" });
+});
+
+export const verifyAlertController = catchAsync(async (c) => {
+  const { id } = c.req.param();
+  const body = await c.req.json();
+  const input = parseOrThrow(verifyAlertSchema, body);
+  const actor = getActor(c);
+
+  const alert = await verifyAlertService(id, input, actor);
+
+  if (!alert) {
+    return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
+  }
+
+  return success(c, alert, { message: "Alert verified successfully" });
+});
+
+export const getAlertActionsController = catchAsync(async (c) => {
+  const { id } = c.req.param();
+  const actions = await getAlertActionsService(id);
+
+  if (!actions) {
+    return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
+  }
+
+  return success(c, actions, {
+    message: "Alert actions fetched successfully",
+  });
+});
+
+export const deleteAlertController = catchAsync(async (c) => {
+  const { id } = c.req.param();
+  let body = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
+  }
+  const input = parseOrThrow(deleteAlertSchema, body);
+  const actor = getActor(c);
+
+  const deleted = await deleteAlertService(id, input, actor);
+
+  if (!deleted) {
+    return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
+  }
+
+  return success(c, null, { message: "Alert deleted successfully" });
+});
+
 export const detectAlertController = catchAsync(async (c) => {
   const body = await c.req.json();
-  const input = detectSchema.parse(body);
+  const input = parseOrThrow(detectSchema, body);
 
   const result: DetectionResult = await evaluateMovement({
     airportId: input.airportId,

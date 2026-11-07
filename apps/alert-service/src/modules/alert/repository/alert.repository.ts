@@ -1,9 +1,12 @@
 import {
   type Alert,
+  type AlertAction,
   type AlertTrackHistory,
+  alertActions,
   alerts,
   alertTrackHistory,
   db,
+  type NewAlert,
 } from "@repo/database";
 import {
   and,
@@ -13,6 +16,7 @@ import {
   gte,
   ilike,
   inArray,
+  isNull,
   lte,
   type SQL,
   sql,
@@ -26,6 +30,7 @@ const SORTABLE_COLUMNS = {
   type: alerts.type,
   severity: alerts.severity,
   status: alerts.status,
+  verificationStatus: alerts.verificationStatus,
 } as const;
 
 export type AlertSortableColumn = keyof typeof SORTABLE_COLUMNS;
@@ -44,6 +49,12 @@ const buildFilters = (params: ListAlertsInput): SQL | undefined => {
         })()
       : undefined,
     params.status ? eq(alerts.status, params.status) : undefined,
+    params.verificationStatus
+      ? eq(alerts.verificationStatus, params.verificationStatus)
+      : undefined,
+    params.clearedBy ? eq(alerts.clearedBy, params.clearedBy) : undefined,
+    params.verifiedBy ? eq(alerts.verifiedBy, params.verifiedBy) : undefined,
+    params.includeDeleted ? undefined : isNull(alerts.deletedAt),
     params.trackId ? eq(alerts.trackId, params.trackId) : undefined,
     params.relatedTrackId
       ? eq(alerts.relatedTrackId, params.relatedTrackId)
@@ -135,15 +146,20 @@ export const findAlertByAlertId = async (
 ): Promise<Alert | undefined> =>
   await db.query.alerts.findFirst({ where: eq(alerts.alertId, alertId) });
 
+export type InsertAlertValues = Omit<
+  NewAlert,
+  "id" | "createdAt" | "updatedAt"
+>;
+
 export const createAlert = async (
-  values: Omit<Alert, "id" | "createdAt" | "updatedAt">,
+  values: InsertAlertValues,
 ): Promise<Alert> => {
   const [row] = await db.insert(alerts).values(values).returning();
   return row;
 };
 
 export const upsertAlertByAlertId = async (
-  values: Omit<Alert, "id" | "createdAt" | "updatedAt">,
+  values: InsertAlertValues,
 ): Promise<Alert> => {
   const existing = await findAlertByAlertId(values.alertId);
 
@@ -185,16 +201,22 @@ export const acknowledgeAlert = async (
   return row;
 };
 
+export interface ClearAlertRepoParams {
+  clearedBy?: string;
+  reason?: string;
+}
+
 export const clearAlert = async (
   id: string,
-  clearedBy?: string,
+  params?: ClearAlertRepoParams,
 ): Promise<Alert | undefined> => {
   const [row] = await db
     .update(alerts)
     .set({
       status: "CLEARED",
       clearedAt: new Date(),
-      clearedBy: clearedBy ?? null,
+      clearedBy: params?.clearedBy ?? null,
+      clearReason: params?.reason ?? null,
       updatedAt: new Date(),
     })
     .where(eq(alerts.id, id))
@@ -204,19 +226,102 @@ export const clearAlert = async (
 
 export const clearAlertByAlertId = async (
   alertId: string,
-  clearedBy?: string,
+  params?: ClearAlertRepoParams,
 ): Promise<Alert | undefined> => {
   const [row] = await db
     .update(alerts)
     .set({
       status: "CLEARED",
       clearedAt: new Date(),
-      clearedBy: clearedBy ?? null,
+      clearedBy: params?.clearedBy ?? null,
+      clearReason: params?.reason ?? null,
       updatedAt: new Date(),
     })
     .where(eq(alerts.alertId, alertId))
     .returning();
   return row;
+};
+
+export interface VerifyAlertRepoParams {
+  status: "VERIFIED" | "FALSE_ALARM" | "UNVERIFIED";
+  note?: string;
+  verifiedBy?: string;
+}
+
+export const verifyAlert = async (
+  id: string,
+  params: VerifyAlertRepoParams,
+): Promise<Alert | undefined> => {
+  const [row] = await db
+    .update(alerts)
+    .set({
+      verificationStatus: params.status,
+      verifiedAt: new Date(),
+      verifiedBy: params.verifiedBy ?? null,
+      verificationNote: params.note ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(alerts.id, id))
+    .returning();
+  return row;
+};
+
+export const softDeleteAlert = async (
+  id: string,
+): Promise<Alert | undefined> => {
+  const [row] = await db
+    .update(alerts)
+    .set({
+      deletedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(alerts.id, id))
+    .returning();
+  return row;
+};
+
+export interface RecordAlertActionParams {
+  alertId: string;
+  action: "ACKNOWLEDGE" | "CLEAR" | "VERIFY" | "DELETE";
+  actorId?: string | null;
+  actorName?: string | null;
+  previousStatus?: string | null;
+  newStatus?: string | null;
+  previousVerificationStatus?: string | null;
+  newVerificationStatus?: string | null;
+  note?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export const recordAlertAction = async (
+  params: RecordAlertActionParams,
+): Promise<AlertAction> => {
+  const [row] = await db
+    .insert(alertActions)
+    .values({
+      alertId: params.alertId,
+      action: params.action,
+      actorId: params.actorId ?? null,
+      actorName: params.actorName ?? null,
+      previousStatus: params.previousStatus ?? null,
+      newStatus: params.newStatus ?? null,
+      previousVerificationStatus: params.previousVerificationStatus ?? null,
+      newVerificationStatus: params.newVerificationStatus ?? null,
+      note: params.note ?? null,
+      metadata: params.metadata ?? {},
+    })
+    .returning();
+  return row;
+};
+
+export const getAlertActions = async (
+  alertId: string,
+): Promise<AlertAction[]> => {
+  return db
+    .select()
+    .from(alertActions)
+    .where(eq(alertActions.alertId, alertId))
+    .orderBy(desc(alertActions.createdAt));
 };
 
 export const mergeAlertData = async (

@@ -16,7 +16,8 @@ export type AlertEventType =
   | "ALERT_CREATED"
   | "ALERT_UPDATED"
   | "ALERT_ACKNOWLEDGED"
-  | "ALERT_CLEARED";
+  | "ALERT_CLEARED"
+  | "ALERT_VERIFIED";
 
 export interface AlertEvent {
   eventType: AlertEventType;

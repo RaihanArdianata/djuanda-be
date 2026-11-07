@@ -53,7 +53,7 @@ dibaca `asterix-config.ts` (fungsi murni, dites). Event distamp `airportId` dari
 | `ASTERIX_FORCED_EDITIONS` | Paksa edition per kategori, format `21:2.4,48:1.21` — untuk feed yang edition-nya tidak auto-detect |
 | `RADAR_SITE_LAT` / `RADAR_SITE_LON` | Koordinat radar — **wajib untuk CAT048** (posisi polar/Cartesian relatif ke site; tanpa ini record tanpa lat/lon di-skip). Kosong dianggap tidak di-set |
 | `ASTERIX_FEEDS` | Array JSON untuk **banyak feed sekaligus** (beberapa UDP, beberapa TCP), jalan tambahan di atas `AEROSWARM_FEED_UDP_PORT` / `ASTERIX_TCP_*`. Lihat di bawah |
-| `ASTERIX_RADAR_SITES` | JSON `{"sac:sic":{"lat":..,"lon":..}}` — titik per sensor bila satu stream membawa beberapa radar; menimpa `RADAR_SITE_*` |
+| `ASTERIX_RADAR_SITES` | JSON `{"sac:sic":{"lat":..,"lon":..}}` — titik ANTENA per sensor bila satu stream membawa beberapa radar (jaringan multi-radar); menimpa `RADAR_SITE_*`. Satu `RADAR_SITE_*` untuk banyak radar menggeser semua radar lain. Radar tanpa titik tidak muncul di peta: target udara hampir seluruhnya dari CAT048. Hitungannya ada di `unlocated` pada status feed (`feeds`), dan setiap radar dicatat satu kali di log. `bun run radar-sites.ts <pcap>` di `aeroswarm-project/sample/tsrunner` mendaftar radar dan memperkirakan antenanya |
 
 #### Banyak feed (`ASTERIX_FEEDS`)
 

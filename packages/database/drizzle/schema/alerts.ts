@@ -1,4 +1,4 @@
-import type { InferSelectModel } from "drizzle-orm";
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import {
   boolean,
   doublePrecision,
@@ -28,6 +28,14 @@ export const alerts = pgTable(
     acknowledgedBy: text("acknowledged_by"),
     clearedAt: timestamp("cleared_at", { withTimezone: true }),
     clearedBy: text("cleared_by"),
+    clearReason: text("clear_reason"),
+    verificationStatus: text("verification_status")
+      .notNull()
+      .default("UNVERIFIED"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    verifiedBy: text("verified_by"),
+    verificationNote: text("verification_note"),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     notamId: text("notam_id"),
     ashtamId: text("ashtam_id"),
     aftnMessageId: text("aftn_message_id"),
@@ -45,6 +53,7 @@ export const alerts = pgTable(
     index("alerts_airport_triggered_idx").on(t.airportId, t.triggeredAt),
     index("alerts_type_idx").on(t.type, t.triggeredAt),
     index("alerts_track_idx").on(t.trackId, t.triggeredAt),
+    index("alerts_verification_status_idx").on(t.verificationStatus),
   ],
 );
 
@@ -72,7 +81,9 @@ export const alertRules = pgTable(
 );
 
 export type Alert = InferSelectModel<typeof alerts>;
+export type NewAlert = InferInsertModel<typeof alerts>;
 export type AlertRule = InferSelectModel<typeof alertRules>;
+export type NewAlertRule = InferInsertModel<typeof alertRules>;
 
 export const alertTrackHistory = pgTable(
   "alert_track_history",
@@ -110,3 +121,32 @@ export const alertTrackHistory = pgTable(
 );
 
 export type AlertTrackHistory = InferSelectModel<typeof alertTrackHistory>;
+
+export const alertActions = pgTable(
+  "alert_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    alertId: text("alert_id")
+      .notNull()
+      .references(() => alerts.alertId, { onDelete: "cascade" }),
+    action: text("action").notNull(), // "ACKNOWLEDGE" | "CLEAR" | "VERIFY" | "DELETE"
+    actorId: text("actor_id"),
+    actorName: text("actor_name"),
+    previousStatus: text("previous_status"),
+    newStatus: text("new_status"),
+    previousVerificationStatus: text("previous_verification_status"),
+    newVerificationStatus: text("new_verification_status"),
+    note: text("note"),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("alert_actions_alert_id_idx").on(t.alertId, t.createdAt),
+    index("alert_actions_created_at_idx").on(t.createdAt),
+  ],
+);
+
+export type AlertAction = InferSelectModel<typeof alertActions>;
+export type NewAlertAction = InferInsertModel<typeof alertActions>;

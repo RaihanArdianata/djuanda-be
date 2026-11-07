@@ -18,7 +18,7 @@ export type TrackWithSurface = CurrentTrack & { onGround?: boolean };
  * `false` (mis. MLAT tanpa penanda surface), sehingga alert menganggapnya terbang. Aturannya:
  *  - kendaraan selalu di darat;
  *  - flag `true` dipercaya;
- *  - rendah (<= 100 ft) dan lambat (< 40 kt) berarti di darat walaupun flag `false`;
+ *  - rendah (<= 100 ft, atau ketinggian tidak dilaporkan) dan lambat (< 40 kt) berarti di darat walaupun flag `false`;
  *  - flag `false` selain itu dipercaya;
  *  - tanpa flag: di atas 500 ft berarti di udara, selain itu tidak diketahui (undefined).
  */
@@ -30,9 +30,10 @@ export function deriveOnGround(event: FusedTrackEvent): boolean | undefined {
 
   const alt = event.position?.alt;
   const speed = event.velocity?.groundSpeed;
+  // An altitude the feed does not report counts as low: sensors that carry no altitude (many MLAT and radar reports)
+  // used to be given a placeholder 0 ft by the ingest, and a slow target without altitude is parked or taxiing.
   const lowAndSlow =
-    alt !== undefined &&
-    alt <= SURFACE_MAX_ALT_FT &&
+    (alt === undefined || alt <= SURFACE_MAX_ALT_FT) &&
     speed !== undefined &&
     speed < SURFACE_MAX_SPEED_KT;
   if (lowAndSlow) return true;

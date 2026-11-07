@@ -7,7 +7,7 @@
       "dependencies": {
         "@aeroswarm/codec": "^0.1.13",
         "@aeroswarm/core": "^0.2.13",
-        "@aeroswarm/ingest": "^0.1.7",
+        "@aeroswarm/ingest": "^0.1.8",
         "@aeroswarm/live-server": "^0.1.5",
         "bcryptjs": "^3.0.3",
       },
@@ -322,7 +322,7 @@
 
     "@aeroswarm/core": ["@aeroswarm/core@0.2.13", "", { "dependencies": { "dotenv": "^16.6.1", "ioredis": "^5.6.1", "kafkajs": "^2.2.4", "pino": "^9.7.0", "pino-pretty": "^13.0.0", "prom-client": "^15.1.3", "zod": "^4.4.3" } }, "sha512-YZH32t4//y1BRSJrdGQR8RX+fOQhA8bYqY3Tl14oG0M/fJj4bc1UyDMKbTqNsDe22EeKkU518NUthxJEi0Z7pQ=="],
 
-    "@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.7", "", { "dependencies": { "@aeroswarm/codec": "^0.1.13", "@aeroswarm/core": "^0.2.13" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-hchxskKeXBVZAVuB2V7oqF1ZUW6DjSD9W3bnoSaOvQkNw6qA4aHuVwjZmNuL5aEQdE+SJ0RMq2wLoCzs/+4SCQ=="],
+    "@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.8", "", { "dependencies": { "@aeroswarm/codec": "^0.1.13", "@aeroswarm/core": "^0.2.13" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-RPOKhWeZxFIY1TrF/jgTH509wL53+AXCd81T1TTaOPWDjqKFH2AuwWMZfmNkwP48E3ZYImjdsdtsRZDHqubWag=="],
 
     "@aeroswarm/live-server": ["@aeroswarm/live-server@0.1.5", "", { "dependencies": { "@aeroswarm/core": "^0.2.13", "zod": "^4.4.3" } }, "sha512-GxQgK6iRqFVaAIGSj/4a+quxq4QjWnWy61WOArstwjGelJ9qPYWzadzBaiS6wg/IwUoIZhnvij8OI9LkyY1ZqA=="],
 
@@ -1051,6 +1051,8 @@
     "@fast-csv/format/@types/node": ["@types/node@14.18.63", "", {}, "sha512-fAtCfv4jJg+ExtXhvCkCqUKZ+4ok/JQk01qDKhL5BDDoS3AxKXhV5/MAVUZyQnSEd2GT92fkgZl0pz0Q0AzcIQ=="],
 
     "@fast-csv/parse/@types/node": ["@types/node@14.18.63", "", {}, "sha512-fAtCfv4jJg+ExtXhvCkCqUKZ+4ok/JQk01qDKhL5BDDoS3AxKXhV5/MAVUZyQnSEd2GT92fkgZl0pz0Q0AzcIQ=="],
+
+    "@repo/connection-service/@aeroswarm/ingest": ["@aeroswarm/ingest@0.1.7", "", { "dependencies": { "@aeroswarm/codec": "^0.1.13", "@aeroswarm/core": "^0.2.13" }, "peerDependencies": { "kafkajs": "^2.2.4" }, "optionalPeers": ["kafkajs"] }, "sha512-hchxskKeXBVZAVuB2V7oqF1ZUW6DjSD9W3bnoSaOvQkNw6qA4aHuVwjZmNuL5aEQdE+SJ0RMq2wLoCzs/+4SCQ=="],
 
     "archiver/buffer-crc32": ["buffer-crc32@0.2.13", "", {}, "sha512-VO9Ht/+p3SN7SKWqcrgEzjGbRSJYTx+Q1pTQC0wrWqHx0vpJraQ6GtHx8tvcg1rlK1byhU5gccxgOgj7B0TDkQ=="],
 

@@ -56,6 +56,17 @@ describe("deriveOnGround", () => {
     expect(deriveOnGround(fused({ alt: 0, gs: 12 }))).toBe(true);
   });
 
+  it("treats a slow target whose altitude the feed does not report as on the ground", () => {
+    // Sensors without altitude used to get a placeholder 0 ft, which is what made this case work.
+    expect(deriveOnGround(fused({ onGround: false, gs: 5 }))).toBe(true);
+    expect(deriveOnGround(fused({ gs: 12 }))).toBe(true);
+  });
+
+  it("does not park a fast target just because its altitude is missing", () => {
+    expect(deriveOnGround(fused({ onGround: false, gs: 150 }))).toBe(false);
+    expect(deriveOnGround(fused({ gs: 150 }))).toBeUndefined();
+  });
+
   it("keeps a fast target airborne or unknown: the takeoff roll is not parked", () => {
     expect(deriveOnGround(fused({ onGround: false, alt: 0, gs: 106 }))).toBe(
       false,

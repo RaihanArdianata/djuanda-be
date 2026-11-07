@@ -183,6 +183,13 @@
       "when": 1793982368745,
       "tag": "0025_aeroswarm_tracks_icao24_index",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793993642030,
+      "tag": "0026_aeroswarm_tracks_typed_columns",
+      "breakpoints": true
     }
   ]
 }

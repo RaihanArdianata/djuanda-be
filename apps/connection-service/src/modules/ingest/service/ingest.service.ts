@@ -6,12 +6,15 @@ import {
   db,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { createCounter } from "@repo/shared/metrics";
 import { sql } from "drizzle-orm";
 import { publishMovementRecorded } from "../../messaging/movement.producer";
 import { createPublishBuffer } from "../lib/publish-buffer";
+import { createStoreFilter } from "./store-filter";
 import { publishTrackBatch } from "./track.producer";
+import { toTrackRow } from "./track-row";
 
-type TrackRow = typeof aeroswarmTracks.$inferInsert;
+type TrackRow = ReturnType<typeof toTrackRow>;
 type AlertRow = typeof aeroswarmAlerts.$inferInsert;
 type MovementRow = typeof aeroswarmMovements.$inferInsert;
 
@@ -20,6 +23,20 @@ const FLUSH_INTERVAL_MS = 500;
 const PUBLISH_INTERVAL_MS = 100;
 const MAX_BUFFER = 500;
 const INGEST_SECRET: string = process.env.AEROSWARM_INGEST_SECRET || "";
+
+/**
+ * Least time between two stored rows of one track (ms); 0 stores every update. The realtime picture and the alerts still get
+ * every update: only the database is thinned. See store-filter.ts.
+ */
+const STORE_MIN_INTERVAL_MS: number = ((): number => {
+  const raw = Number(process.env.TRACK_STORE_MIN_INTERVAL_MS ?? 1000);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 1000;
+})();
+const storeFilter = createStoreFilter({ minIntervalMs: STORE_MIN_INTERVAL_MS });
+const tracksThinned = createCounter(
+  "tracks_thinned_total",
+  "Track updates not written to the database because one was written for that track within TRACK_STORE_MIN_INTERVAL_MS",
+);
 
 const INGEST_LOG_MAX = 200;
 
@@ -114,17 +131,25 @@ export interface FusedTrackEventLike {
   fusedAt: number;
   // No index signatures on the nested objects: a typed FusedTrackEvent from
   // @aeroswarm/ingest must be assignable (interfaces have no implicit one).
+  protocol?: string;
+  dataSource?: { sac: number; sic: number };
   identity?: {
+    icao24?: string;
+    callsign?: string;
     targetType?: string;
     vehicleFleet?: number;
+    aircraftType?: string;
   };
   position?: {
+    lat?: number;
+    lon?: number;
     alt?: number;
     onGround?: boolean;
   };
   velocity?: {
     groundSpeed?: number;
   };
+  details?: { trackNumber?: number };
   [key: string]: unknown;
 }
 
@@ -200,18 +225,11 @@ export function enqueueTrackEvent(
   opts?: EnqueueOptions,
 ): Promise<void> {
   publishBuffer.add(event);
-  trackBuffer.push({
-    fusedAt: new Date(event.fusedAt),
-    trackId: event.trackId,
-    airportId: event.airportId ?? null,
-    lifecycle: event.lifecycle ?? null,
-    targetType: event.identity?.targetType ?? null,
-    vehicleFleet: event.identity?.vehicleFleet ?? null,
-    altitudeFt: event.position?.alt ?? null,
-    groundSpeedKt: event.velocity?.groundSpeed ?? null,
-    onGround: event.position?.onGround ?? null,
-    data: event,
-  });
+  if (!storeFilter.shouldStore(event)) {
+    tracksThinned.inc();
+    return Promise.resolve();
+  }
+  trackBuffer.push(toTrackRow(event));
   return opts?.awaitFlush === false ? applyBackpressure() : scheduleFlush();
 }
 

@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
@@ -23,6 +24,17 @@ export const aeroswarmTracks = pgTable(
     altitudeFt: doublePrecision("altitude_ft"),
     groundSpeedKt: doublePrecision("ground_speed_kt"),
     onGround: boolean("on_ground"),
+    // Filled from the event when it is stored; rows from before these columns existed keep NULL here (the same facts are
+    // in `data`). Absent in the event = NULL, never a placeholder.
+    icao24: text("icao24"),
+    callsign: text("callsign"),
+    aircraftType: text("aircraft_type"),
+    lat: doublePrecision("lat"),
+    lon: doublePrecision("lon"),
+    trackNumber: integer("track_number"),
+    protocol: text("protocol"),
+    sac: smallint("sac"),
+    sic: smallint("sic"),
     data: jsonb("data").notNull(),
   },
   (t) => ({

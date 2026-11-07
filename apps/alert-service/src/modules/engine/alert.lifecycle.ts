@@ -55,6 +55,11 @@ export async function publishAlertCleared(alert: Alert): Promise<void> {
   await publishAlertEvent(toAlertEvent(alert, "ALERT_CLEARED"));
 }
 
+export async function publishAlertVerified(alert: Alert): Promise<void> {
+  await broadcastAlert(alert, "ALERT_VERIFIED");
+  await publishAlertEvent(toAlertEvent(alert, "ALERT_VERIFIED"));
+}
+
 export async function acknowledgeAlert(
   id: string,
   acknowledgedBy?: string,
@@ -66,9 +71,11 @@ export async function acknowledgeAlert(
 
 export async function clearAlert(
   id: string,
-  clearedBy?: string,
+  params?: { clearedBy?: string; reason?: string } | string,
 ): Promise<Alert | undefined> {
-  let alert = await repoClearAlert(id, clearedBy);
+  const clearParams =
+    typeof params === "string" ? { clearedBy: params } : params;
+  let alert = await repoClearAlert(id, clearParams);
   if (alert) {
     const { main, related } = flushPostHistory(alert.alertId);
     alert =
@@ -84,9 +91,11 @@ export async function clearAlert(
 
 export async function clearAlertByAlertId(
   alertId: string,
-  clearedBy?: string,
+  params?: { clearedBy?: string; reason?: string } | string,
 ): Promise<Alert | undefined> {
-  let alert = await repoClearAlertByAlertId(alertId, clearedBy);
+  const clearParams =
+    typeof params === "string" ? { clearedBy: params } : params;
+  let alert = await repoClearAlertByAlertId(alertId, clearParams);
   if (alert) {
     const { main, related } = flushPostHistory(alert.alertId);
     alert =

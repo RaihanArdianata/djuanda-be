@@ -32,8 +32,8 @@
   "dependencies": {
     "@aeroswarm/codec": "^0.1.13",
     "@aeroswarm/core": "^0.2.13",
-    "@aeroswarm/ingest": "^0.1.9",
-    "@aeroswarm/live-server": "^0.1.6",
+    "@aeroswarm/ingest": "^0.1.11",
+    "@aeroswarm/live-server": "^0.1.7",
     "bcryptjs": "^3.0.3"
   },
   "overrides": {

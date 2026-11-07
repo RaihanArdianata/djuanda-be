@@ -5,7 +5,8 @@ import type { MovementTrack } from "./types";
 /**
  * Area alert bandara: alert hanya berlaku untuk target di sekitar bandara. Dua zona dari satu titik pusat (ARP):
  *  - zona darat: lingkaran berjari-jari `groundRadiusM` (meter) untuk target di darat (taksi, parkir, kendaraan, lepas landas/mendarat);
- *  - zona udara: lingkaran berjari-jari `airRadiusNm` (NM) untuk pesawat di udara.
+ *  - zona udara: KUBAH untuk pesawat di udara: alasnya lingkaran berjari-jari `airRadiusNm` (NM), tingginya `airCeilingFt` (ft) di atas
+ *    pusat dan mengecil ke tepi (setengah elipsoid: (jarak/radius)² + (tinggi/plafon)² <= 1). Tanpa `airCeilingFt` tidak ada batas tinggi.
  * Target di luar zonanya tidak ikut aturan apa pun (bukan STCA, incursion, atau deviasi). Tanpa pusat (belum diisi di konfigurasi
  * aturan `ALERT_AREA` maupun `ALERT_AREA_CENTER`), semua target dievaluasi seperti sebelumnya.
  *
@@ -24,6 +25,7 @@ export const DEFAULT_GROUND_RADIUS_M = 5_000;
 export const DEFAULT_AIR_RADIUS_NM = 15;
 
 const METERS_PER_NM = 1852;
+const METERS_PER_FT = 0.3048;
 const EARTH_RADIUS_M = 6_371_008.8;
 
 export interface AlertArea {
@@ -31,6 +33,8 @@ export interface AlertArea {
   centerLongitude: number;
   groundRadiusM: number;
   airRadiusM: number;
+  /** Tinggi kubah udara di atas pusat (meter); null = tanpa batas tinggi. */
+  airCeilingM: number | null;
 }
 
 const positive = (value: unknown, fallback: number): number =>
@@ -69,6 +73,12 @@ export function alertAreaFrom(
     groundRadiusM: positive(config?.groundRadiusM, DEFAULT_GROUND_RADIUS_M),
     airRadiusM:
       positive(config?.airRadiusNm, DEFAULT_AIR_RADIUS_NM) * METERS_PER_NM,
+    airCeilingM:
+      typeof config?.airCeilingFt === "number" &&
+      Number.isFinite(config.airCeilingFt) &&
+      config.airCeilingFt > 0
+        ? config.airCeilingFt * METERS_PER_FT
+        : null,
   };
 }
 
@@ -85,14 +95,21 @@ function distanceFromCenterM(track: MovementTrack, area: AlertArea): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Target di dalam zonanya: zona udara untuk pesawat di udara, zona darat untuk selebihnya. */
+/**
+ * Target di dalam zonanya: zona darat (lingkaran) untuk target di darat; untuk pesawat di udara kubah udara, yaitu di dalam radius
+ * dan, bila ada plafon, di bawah lengkung kubah. Ketinggian yang tidak dilaporkan dihitung 0 (hanya jarak yang menentukan).
+ */
 export function isInAlertArea(
   track: MovementTrack,
   area: AlertArea,
   airborne: boolean,
 ): boolean {
-  const radius = airborne ? area.airRadiusM : area.groundRadiusM;
-  return distanceFromCenterM(track, area) <= radius;
+  const d = distanceFromCenterM(track, area);
+  if (!airborne) return d <= area.groundRadiusM;
+  if (d > area.airRadiusM) return false;
+  if (area.airCeilingM === null) return true;
+  const heightM = Math.max(0, track.altitude ?? 0) * METERS_PER_FT;
+  return (d / area.airRadiusM) ** 2 + (heightM / area.airCeilingM) ** 2 <= 1;
 }
 
 /** Target yang ada di dalam zonanya masing-masing; yang di luar tidak ikut aturan apa pun. */

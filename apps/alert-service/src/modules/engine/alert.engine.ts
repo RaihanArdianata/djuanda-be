@@ -91,22 +91,35 @@ export interface DetectionResult {
 const RULES_CACHE_TTL_MS = 30_000;
 const rulesCache = new Map<string, { rules: AlertRule[]; expiresAt: number }>();
 
+/** Pembacaan yang sedang berjalan per bandara: evaluasi paralel saat cache kedaluwarsa memakai satu query, bukan satu per evaluasi. */
+const rulesInFlight = new Map<string, Promise<AlertRule[]>>();
+
 /** Rules jarang berubah — query DB tiap track message cuma menambah latency
  *  per pesan dan memperparah consumer lag. Cache pendek per airport. */
 async function getEnabledRules(airportId: string): Promise<AlertRule[]> {
   const cached = rulesCache.get(airportId);
   if (cached && cached.expiresAt > Date.now()) return cached.rules;
-  const rules = await db
+  const pending = rulesInFlight.get(airportId);
+  if (pending) return pending;
+
+  const load = db
     .select()
     .from(alertRules)
     .where(
       and(eq(alertRules.airportId, airportId), eq(alertRules.enabled, true)),
-    );
-  rulesCache.set(airportId, {
-    rules,
-    expiresAt: Date.now() + RULES_CACHE_TTL_MS,
-  });
-  return rules;
+    )
+    .then((rules) => {
+      rulesCache.set(airportId, {
+        rules,
+        expiresAt: Date.now() + RULES_CACHE_TTL_MS,
+      });
+      return rules;
+    })
+    .finally(() => {
+      rulesInFlight.delete(airportId);
+    });
+  rulesInFlight.set(airportId, load);
+  return load;
 }
 
 /**

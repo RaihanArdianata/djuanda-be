@@ -94,8 +94,20 @@ export function startInterestSync(options: InterestSyncOptions): () => void {
   let current = options.fallback;
   let warned = false;
   let stopped = false;
+  // Satu pembacaan pada satu waktu: bila database lambat, putaran berikutnya dilewati, bukan ditumpuk.
+  let running = false;
 
   const tick = async (): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await apply();
+    } finally {
+      running = false;
+    }
+  };
+
+  const apply = async (): Promise<void> => {
     let next: Bbox | undefined;
     try {
       next =

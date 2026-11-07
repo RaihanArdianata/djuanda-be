@@ -46,6 +46,7 @@ const defaultRules = [
       centerLongitude: 112.7868,
       groundRadiusM: 5000,
       airRadiusNm: 15,
+      airCeilingFt: 10000,
       interestRadiusNm: 20,
     },
     documentation: {
@@ -58,6 +59,8 @@ const defaultRules = [
           "Radius area darat (meter): target di darat (taksi, parkir, kendaraan, lepas landas dan mendarat) di luar radius ini tidak ikut aturan alert apa pun. Bawaan 5000.",
         airRadiusNm:
           "Radius area udara (NM): pesawat di udara di luar radius ini tidak ikut aturan alert apa pun. Bawaan 15.",
+        airCeilingFt:
+          "Tinggi kubah area udara di atas titik pusat (ft). Area udara berbentuk kubah: setinggi ini di atas pusat dan mengecil ke tepi radius. Pesawat di atas kubah tidak ikut aturan alert. Kosong = tanpa batas tinggi. Bawaan di seed 10000.",
         interestRadiusNm:
           "Radius area peminat track (NM): kotak di sekeliling titik pusat tempat gambaran udara disimpan. Track di luar kotak dibuang kecuali sedang menuju ke dalamnya, dan pesawat yang sudah keluar dari kotak dihapus. Harus lebih besar dari radius area udara supaya semua yang dinilai alert ada di gambaran. Kosong = pakai INTEREST_BBOX dari env (bila ada). Berlaku tanpa restart.",
       },

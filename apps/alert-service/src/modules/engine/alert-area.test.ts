@@ -146,3 +146,52 @@ describe("tracksInAlertArea", () => {
     ).toEqual(["near", "nearAir"]);
   });
 });
+
+describe("the air zone is a dome when there is a ceiling", () => {
+  const dome = alertAreaFrom(
+    { ...CENTER, groundRadiusM: 5000, airRadiusNm: 15, airCeilingFt: 10000 },
+    {},
+  );
+  if (!dome) throw new Error("area");
+  const flyingAt = (dLat: number, altitude: number | undefined) =>
+    track({
+      onGround: false,
+      altitude,
+      groundSpeed: 200,
+      latitude: CENTER.centerLatitude + dLat,
+    });
+
+  it("has no ceiling unless one is set", () => {
+    expect(alertAreaFrom(CENTER, {})?.airCeilingM).toBeNull();
+    expect(
+      alertAreaFrom({ ...CENTER, airCeilingFt: -1 }, {})?.airCeilingM,
+    ).toBeNull();
+    expect(dome.airCeilingM).toBeCloseTo(10000 * 0.3048, 3);
+    // without a ceiling a very high aircraft over the airport is still inside
+    const open = alertAreaFrom({ ...CENTER, airRadiusNm: 15 }, {});
+    if (!open) throw new Error("area");
+    expect(isInAlertArea(flyingAt(0.01, 40000), open, true)).toBe(true);
+  });
+
+  it("keeps an aircraft under the dome and leaves out one above it", () => {
+    expect(isInAlertArea(flyingAt(0.01, 3000), dome, true)).toBe(true);
+    expect(isInAlertArea(flyingAt(0.01, 25000), dome, true)).toBe(false);
+    // right above the centre the dome is as high as the ceiling
+    expect(isInAlertArea(flyingAt(0, 9500), dome, true)).toBe(true);
+    expect(isInAlertArea(flyingAt(0, 10500), dome, true)).toBe(false);
+  });
+
+  it("is lower towards the edge: the same altitude is inside near the centre and outside near the rim", () => {
+    // 5000 ft: inside near the centre; at about 14.4 NM (0.24 degrees) the dome is only about 2800 ft high
+    expect(isInAlertArea(flyingAt(0.02, 5000), dome, true)).toBe(true);
+    expect(isInAlertArea(flyingAt(0.24, 5000), dome, true)).toBe(false);
+    expect(isInAlertArea(flyingAt(0.24, 500), dome, true)).toBe(true);
+  });
+
+  it("counts an altitude that is not reported as 0 ft, and does not apply to targets on the ground", () => {
+    expect(isInAlertArea(flyingAt(0.01, undefined), dome, true)).toBe(true);
+    expect(
+      isInAlertArea(track({ altitude: 30000, onGround: true }), dome, false),
+    ).toBe(true);
+  });
+});

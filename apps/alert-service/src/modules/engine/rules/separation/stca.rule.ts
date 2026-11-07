@@ -28,6 +28,19 @@ function isAirborne(track: AlertContext["tracks"][0]): boolean {
   return track.altitude !== undefined && track.altitude > AIRBORNE_ALTITUDE_FT;
 }
 
+/** Pemisahan vertikal minimum bawaan (ft) bila aturan tidak mengisinya; `0` atau `null` di konfigurasi mematikan pemeriksaan vertikal. */
+const DEFAULT_MIN_VERTICAL_FT = 1000;
+
+function minimumVerticalFt(
+  config: Record<string, unknown>,
+): number | undefined {
+  const value = config.minimumVerticalSeparationFt;
+  if (value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value))
+    return DEFAULT_MIN_VERTICAL_FT;
+  return value > 0 ? value : undefined;
+}
+
 export const stcaRule: DetectionRule = {
   type: "STCA",
   // biome-ignore-start lint/complexity/noExcessiveCognitiveComplexity: STCA logic
@@ -41,10 +54,17 @@ export const stcaRule: DetectionRule = {
         : DEFAULT_HORIZON_SECONDS;
 
     // `includeSurface: true` mengembalikan perilaku lama (semua target, termasuk di darat).
-    const tracks =
+    const airborne =
       config.includeSurface === true
         ? ctx.tracks
         : ctx.tracks.filter(isAirborne);
+    // Target yang tidak melaporkan ketinggian (banyak track radar) tidak bisa dinilai pemisahan vertikalnya, dan flag udara/darat
+    // mereka tidak bisa dipercaya: tidak ikut STCA. `requireAltitude: false` mengembalikan perilaku lama.
+    const tracks =
+      config.requireAltitude === false
+        ? airborne
+        : airborne.filter((t) => t.altitude !== undefined);
+    const minVertical = minimumVerticalFt(config);
 
     const candidates: AlertCandidate[] = [];
     const seen = new Set<string>();
@@ -67,9 +87,6 @@ export const stcaRule: DetectionRule = {
 
         const distanceNm = haversineNm(predictedA, predictedB);
 
-        const minVertical = config.minimumVerticalSeparationFt as
-          | number
-          | undefined;
         if (minVertical !== undefined) {
           if (a.altitude === undefined || b.altitude === undefined) continue;
           const verticalDiff = Math.abs(a.altitude - b.altitude);

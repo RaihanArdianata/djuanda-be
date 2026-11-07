@@ -282,3 +282,61 @@ describe("stcaRule", () => {
     });
   });
 });
+
+describe("altitude and vertical separation", () => {
+  const cfg = { predictionTimeSeconds: 60, minimumHorizontalSeparationNm: 3 };
+  const run = (
+    tracks: (typeof trackA)[],
+    config: Record<string, unknown> = cfg,
+  ) => stcaRule.evaluate({ airportId: "WARR", timestamp: now, tracks }, config);
+
+  // A radar track that carries no altitude, next to an aircraft: converging inside the 3 NM threshold.
+  const noAltitude = {
+    ...trackA,
+    trackId: "R",
+    altitude: undefined as unknown as number,
+  };
+
+  test("a track with no reported altitude takes no part, it is not an aircraft at 0 ft", () => {
+    expect(run([noAltitude, trackB]).length).toBe(0);
+  });
+
+  test("requireAltitude: false brings the old behaviour back (horizontal only)", () => {
+    expect(
+      run([noAltitude, trackB], {
+        ...cfg,
+        requireAltitude: false,
+        minimumVerticalSeparationFt: null,
+      }).length,
+    ).toBe(1);
+  });
+
+  test("when the rule sets no vertical separation, 1000 ft is used", () => {
+    const high = { ...trackB, trackId: "H", altitude: 5000 };
+    expect(run([trackA, high]).length).toBe(0); // 2000 ft apart
+    const near = { ...trackB, trackId: "N", altitude: 3500 };
+    expect(run([trackA, near]).length).toBe(1); // 500 ft apart
+  });
+
+  test("minimumVerticalSeparationFt: 0 or null switches the vertical check off", () => {
+    const high = { ...trackB, trackId: "H", altitude: 9000 };
+    expect(
+      run([trackA, high], { ...cfg, minimumVerticalSeparationFt: null }).length,
+    ).toBe(1);
+    expect(
+      run([trackA, high], { ...cfg, minimumVerticalSeparationFt: 0 }).length,
+    ).toBe(1);
+  });
+
+  test("a configured vertical separation overrides the default", () => {
+    const apart = { ...trackB, trackId: "H", altitude: 4500 }; // 1500 ft apart
+    expect(
+      run([trackA, apart], { ...cfg, minimumVerticalSeparationFt: 2000 })
+        .length,
+    ).toBe(1);
+    expect(
+      run([trackA, apart], { ...cfg, minimumVerticalSeparationFt: 1000 })
+        .length,
+    ).toBe(0);
+  });
+});

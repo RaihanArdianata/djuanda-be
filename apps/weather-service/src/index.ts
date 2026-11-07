@@ -19,8 +19,12 @@ const server = Bun.serve({
 
 logger.info(`weather-service listening on http://localhost:${port}`);
 
-startWeatherProducer();
-startWeatherPolling();
+void (async (): Promise<void> => {
+  await startWeatherProducer().catch((err: unknown) =>
+    logger.error({ err }, "weather producer startup failed"),
+  );
+  startWeatherPolling();
+})().catch((err: unknown) => logger.error({ err }, "weather startup failed"));
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down weather-service gracefully`);

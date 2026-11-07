@@ -165,7 +165,7 @@ interface SaveForecastParams {
 
 export async function saveObservation(
   params: SaveObservationParams,
-): Promise<void> {
+): Promise<boolean> {
   const existing = await db.query.weatherObservations.findFirst({
     where: and(
       eq(weatherObservations.station, params.station),
@@ -174,11 +174,15 @@ export async function saveObservation(
       eq(weatherObservations.source, params.source),
     ),
   });
-  if (existing) return;
+  if (existing) return false;
+
   await db.insert(weatherObservations).values(params);
+  return true;
 }
 
-export async function saveForecast(params: SaveForecastParams): Promise<void> {
+export async function saveForecast(
+  params: SaveForecastParams,
+): Promise<boolean> {
   const existing = await db.query.weatherForecasts.findFirst({
     where: and(
       eq(weatherForecasts.station, params.station),
@@ -186,8 +190,10 @@ export async function saveForecast(params: SaveForecastParams): Promise<void> {
       eq(weatherForecasts.source, params.source),
     ),
   });
-  if (existing) return;
+  if (existing) return false;
+
   await db.insert(weatherForecasts).values(params);
+  return true;
 }
 
 export async function getCurrentObservation(

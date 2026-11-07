@@ -9,6 +9,8 @@ const passthroughMiddleware = async (
 ): Promise<void> => {
   await next();
 };
+const authenticationMiddleware = mock(passthroughMiddleware);
+const rbacMiddleware = mock(passthroughMiddleware);
 
 const authModule = await import("@repo/auth");
 
@@ -18,8 +20,8 @@ const authModule = await import("@repo/auth");
 // `mock.module` is process-global in bun:test.
 mock.module("@repo/auth", () => ({
   ...authModule,
-  authentication: passthroughMiddleware,
-  rbacMiddleware: passthroughMiddleware,
+  authentication: authenticationMiddleware,
+  rbacMiddleware,
 }));
 
 const getCurrentObservation = mock();
@@ -31,6 +33,7 @@ const getWeatherSyncMetadata = mock();
 const setWeatherSyncStarted = mock();
 const setWeatherSyncSucceeded = mock();
 const setWeatherSyncFailed = mock();
+const syncWeatherNow = mock();
 
 mock.module("../services/weather.service", () => ({
   getCurrentObservation,
@@ -45,6 +48,7 @@ mock.module("../services/weather.service", () => ({
   saveObservation: mock(),
   saveForecast: mock(),
 }));
+mock.module("../services/weather-poller", () => ({ syncWeatherNow }));
 
 // Imported dynamically, after the mocks above are registered, so the route
 // (via the controller) picks up the mocked auth middleware and service layer
@@ -104,6 +108,30 @@ beforeEach(() => {
   getObservationHistoryCount.mockReset();
   getActiveForecast.mockReset();
   getLatestObservation.mockReset();
+  authenticationMiddleware.mockClear();
+  rbacMiddleware.mockClear();
+  syncWeatherNow.mockReset();
+});
+
+describe("POST /sync", () => {
+  it("requires authentication but not RBAC permission", async () => {
+    syncWeatherNow.mockResolvedValue({
+      retryAfterSec: 30,
+      results: { metar: "ok", speci: "ok", taf: "ok" },
+      sync: {
+        lastSuccessfulSyncAt: null,
+        lastSyncStatus: "SUCCESS",
+        lastAttemptAt: null,
+        lastSyncError: null,
+      },
+    });
+
+    const res = await weatherRoute.request("/sync", { method: "POST" });
+
+    expect(res.status).toBe(200);
+    expect(authenticationMiddleware).toHaveBeenCalledTimes(1);
+    expect(rbacMiddleware).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /current", () => {

@@ -16,18 +16,20 @@ import {
 } from "../validator/weather.validator";
 
 // Sync manual hanya butuh login (bukan izin RBAC per-endpoint): tombol di panel
-// cuaca dipakai semua operator. Didaftarkan sebelum rbacMiddleware.
-const app = new Hono()
-  .use("/sync", authentication)
-  .post("/sync", syncWeather)
+// cuaca dipakai semua operator. Router terpisah supaya wildcard RBAC di route
+// lain tidak ikut memproses endpoint ini.
+const syncRoute = new Hono().use("/*", authentication).post("/", syncWeather);
+
+const protectedRoute = new Hono()
   .use("/*", authentication)
   .use("/*", rbacMiddleware)
   .get("/current", validate(getCurrentObservationSchema), getCurrent)
   .get("/history", validate(getObservationHistorySchema), getHistory)
-  .get("/forecast", validate(getForecastSchema), getForecast);
+  .get("/forecast", validate(getForecastSchema), getForecast)
+  .get("/metar", validate(getCurrentObservationSchema), getMetar)
+  .get("/speci", validate(getCurrentObservationSchema), getSpeci)
+  .get("/taf", validate(getForecastSchema), getForecast);
 
-app.get("/metar", validate(getCurrentObservationSchema), getMetar);
-app.get("/speci", validate(getCurrentObservationSchema), getSpeci);
-app.get("/taf", validate(getForecastSchema), getForecast);
+const app = new Hono().route("/sync", syncRoute).route("/", protectedRoute);
 
 export default app;

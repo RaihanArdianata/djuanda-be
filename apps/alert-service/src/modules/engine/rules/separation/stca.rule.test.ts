@@ -233,10 +233,42 @@ describe("stcaRule", () => {
       expect(run([takeoff, taxiing]).length).toBe(0);
     });
 
-    test("includeSurface brings the old behaviour back", () => {
+    test("includeSurface adds a separate STCA for the ground, with its own threshold in metres", () => {
+      // parkedA and parkedB are about 0.86 NM (1600 m) apart: far outside the default ground limit of 50 m ...
       expect(
         run([parkedA, parkedB], { ...cfg, includeSurface: true }).length,
-      ).toBe(1);
+      ).toBe(0);
+      // ... but inside a ground limit of 2000 m.
+      const results = run([parkedA, parkedB], {
+        ...cfg,
+        includeSurface: true,
+        surfaceMinimumSeparationMeters: 2000,
+      });
+      expect(results.length).toBe(1);
+      expect(results[0].data.domain).toBe("SURFACE");
+      expect(results[0].data.minimumSeparationMeters).toBeCloseTo(2000, 0);
+      expect(results[0].data.horizontalSeparationMeters).toBeGreaterThan(1000);
+    });
+
+    test("the air STCA is marked AIR, and the 3 NM limit does not apply on the ground", () => {
+      const air = stcaRule.evaluate(
+        { airportId: "WARR", timestamp: now, tracks: [trackA, trackB] },
+        { ...cfg, includeSurface: true },
+      );
+      expect(air.length).toBe(1);
+      expect(air[0].data.domain).toBe("AIR");
+    });
+
+    test("both STCA kinds can fire in the same picture, and an air and a ground target are never paired", () => {
+      const results = run([trackA, trackB, parkedA, parkedB], {
+        ...cfg,
+        includeSurface: true,
+        surfaceMinimumSeparationMeters: 2000,
+      });
+      expect(results.map((r) => r.data.domain).sort()).toEqual([
+        "AIR",
+        "SURFACE",
+      ]);
     });
 
     test("without an onGround flag, only a clearly airborne altitude counts", () => {

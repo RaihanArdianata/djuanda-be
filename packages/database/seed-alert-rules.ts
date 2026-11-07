@@ -16,6 +16,9 @@ const defaultRules = [
       minimumHorizontalSeparationNm: 3,
       minimumVerticalSeparationFt: 1000,
       requireAltitude: true,
+      includeSurface: false,
+      surfaceMinimumSeparationMeters: 50,
+      surfacePredictionTimeSeconds: 10,
     },
     documentation: {
       parameters: {
@@ -28,7 +31,11 @@ const defaultRules = [
         requireAltitude:
           "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:
-          "true = target di darat ikut dihitung (bawaan false: konflik di darat ditangani aturan incursion).",
+          "true = STCA darat ikut menyala: dua target di darat (taksi, parkir, kendaraan) dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Bawaan false (konflik di darat ditangani aturan incursion).",
+        surfaceMinimumSeparationMeters:
+          "STCA darat: jarak minimum (meter) antara dua target di darat. Bawaan 50. Hanya dipakai bila includeSurface true.",
+        surfacePredictionTimeSeconds:
+          "STCA darat: waktu prediksi ke depan (detik). Bawaan 10. Hanya dipakai bila includeSurface true.",
       },
       examples: [
         {

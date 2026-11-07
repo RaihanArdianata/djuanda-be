@@ -150,7 +150,7 @@ Setiap aturan di tabel `alert_rules` memiliki kolom `configuration` JSON. Contoh
 - `minimumHorizontalSeparationNm`: jarak horizontal minimum (nautical miles) sebelum dianggap konflik.
 - `minimumVerticalSeparationFt`: selisih tinggi minimum (ft); dua pesawat yang selisihnya sama atau lebih tidak dianggap konflik. Bawaan 1000 bila tidak diisi; `0` atau `null` mematikan pemeriksaan vertikal.
 - `requireAltitude`: bawaan `true`; track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. `false` mengembalikan perilaku lama (hanya jarak horizontal).
-- `includeSurface`: bawaan `false`; `true` menyertakan target di darat.
+- `includeSurface`: bawaan `false`. `true` menyalakan **STCA darat**, dinilai terpisah dari STCA udara (alert-nya membawa `data.domain` = `AIR` atau `SURFACE`): dua target di darat, dengan `surfaceMinimumSeparationMeters` (bawaan 50 m) dan `surfacePredictionTimeSeconds` (bawaan 10 detik). Pasangan campuran udara-darat tidak dinilai (urusan aturan incursion).
 
 ### RUNWAY_INCURSION
 

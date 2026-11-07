@@ -6,6 +6,7 @@ import {
   db,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { createCounter } from "@repo/shared/metrics";
 import { and, eq, lt } from "drizzle-orm";
 import {
   ACTIVE_ALERT_TTL_SECONDS,
@@ -29,6 +30,7 @@ import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
 import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
 import { detectionRules } from "./rules";
+import { createSameAircraftFilter, sameAircraftFromEnv } from "./same-aircraft";
 import {
   buildEntityKey,
   getTrackHistory,
@@ -419,9 +421,23 @@ export async function sweepExpiredAlerts(): Promise<void> {
   }
 }
 
+/** Satu pesawat satu track: lihat same-aircraft.ts. ALERT_TWIN_RADIUS_M=0 mematikan penilaian berdasar posisi. */
+const sameAircraft = createSameAircraftFilter(sameAircraftFromEnv(process.env));
+const twinTracksMerged = createCounter(
+  "alert_twin_tracks_merged_total",
+  "Tracks of an aircraft that was already in the picture (another sensor), left out of alert evaluation",
+);
+
 export const evaluateMovement = async (
-  input: DetectionInput,
+  received: DetectionInput,
 ): Promise<DetectionResult> => {
+  // Radar, ADS-B, dan MLAT yang belum menyatu menghasilkan beberapa track untuk satu pesawat; aturan akan
+  // membandingkannya satu sama lain (incursion terhadap dirinya sendiri). Aturan hanya melihat satu track per pesawat.
+  const tracks = sameAircraft.apply(received.airportId, received.tracks);
+  if (tracks.length < received.tracks.length) {
+    twinTracksMerged.inc(received.tracks.length - tracks.length);
+  }
+  const input: DetectionInput = { ...received, tracks };
   // Occupancy dibroadcast secepat mungkin — terpisah dari query rules dan
   // context HTTP lain (weather/advisory bisa timeout detik-an dan menahan
   // broadcast kalau ditunggu). Promise yang sama dipakai ulang oleh

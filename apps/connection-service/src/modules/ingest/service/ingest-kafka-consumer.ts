@@ -26,6 +26,7 @@ function getEventKeys(event: unknown): string[] | string {
 async function parseMessageValue(
   raw: Buffer | null,
   gate?: PrimaryFeedGate,
+  liveSink?: (event: FusedTrackEvent) => void,
 ): Promise<void> {
   if (!raw) return;
   let event: unknown;
@@ -112,6 +113,8 @@ async function parseMessageValue(
     const toStore =
       kind === "track" ? applySurfaceState(event as FusedTrackEvent) : event;
     await enqueueIngestEvent(toStore, { awaitFlush: false });
+    // Pesawat yang hanya datang lewat relay juga harus sampai ke gambaran udara klien, bukan hanya ke database dan layanan alert.
+    if (kind === "track") liveSink?.(toStore as FusedTrackEvent);
     recordIngestLog({
       source: "kafka",
       kind,
@@ -141,6 +144,8 @@ async function parseMessageValue(
 export interface IngestKafkaConsumerOptions {
   /** Penyaring event kembar dari jalur utama; tanpa ini semua event diterima. */
   gate?: PrimaryFeedGate;
+  /** Track yang lolos penyaring kembar diteruskan ke gambaran udara klien (lihat modules/live/relay-to-live.ts). */
+  liveSink?: (event: FusedTrackEvent) => void;
 }
 
 export async function startIngestKafkaConsumer(
@@ -178,7 +183,7 @@ export async function startIngestKafkaConsumer(
   await consumer.run({
     partitionsConsumedConcurrently: 3,
     eachMessage: async ({ message }: EachMessagePayload): Promise<void> => {
-      await parseMessageValue(message.value, options.gate);
+      await parseMessageValue(message.value, options.gate, options.liveSink);
     },
   });
 

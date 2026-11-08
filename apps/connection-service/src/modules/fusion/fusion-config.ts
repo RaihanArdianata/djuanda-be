@@ -61,6 +61,8 @@ function nonNegative(
 
 /** The sticky window of the fuser; needs @aeroswarm/live-server with `stickyMs` (older versions ignore it). */
 const DEFAULT_STICKY_MS = 10_000;
+/** How long a better sensor must report steadily before it takes the position over; needs `upgradeAfterMs` in @aeroswarm/live-server. */
+const DEFAULT_UPGRADE_AFTER_MS = 20_000;
 
 const isOff = (raw: string | undefined): boolean =>
   ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
@@ -78,6 +80,8 @@ const isOn = (raw: string | undefined): boolean =>
  *   FUSION_MAX_SOURCE_AGE_MS    sensor silent this long stops competing (5000)
  *   FUSION_FORGET_AFTER_MS      sensor forgotten after this long (600000)
  *   FUSION_STICKY_MS            among sensors of the same priority (e.g. many radars) the one shown stays this long (10000; 0 = off)
+ *   FUSION_UPGRADE_AFTER_MS     a better-ranked sensor (MLAT over radar, radar over relay) takes over only after reporting steadily this long, so an
+ *                               intermittent one does not make two parallel trail lines (20000; 0 = at once)
  *   FUSION_SPATIAL              also match tracks without a shared Mode-S address (false)
  *   FUSION_MATCH_RADIUS_M       ... within this distance (150)
  *   FUSION_MATCH_MAX_SKEW_MS    ... and this time difference (3000)
@@ -90,6 +94,13 @@ export function fusionConfigFromEnv(env: Env): FusionConfig {
     env,
     "FUSION_STICKY_MS",
     (d as { stickyMs?: number }).stickyMs ?? DEFAULT_STICKY_MS,
+    warnings,
+  );
+  const upgradeAfterMs = nonNegative(
+    env,
+    "FUSION_UPGRADE_AFTER_MS",
+    (d as { upgradeAfterMs?: number }).upgradeAfterMs ??
+      DEFAULT_UPGRADE_AFTER_MS,
     warnings,
   );
   return {
@@ -116,7 +127,7 @@ export function fusionConfigFromEnv(env: Env): FusionConfig {
         d.forgetAfterMs,
         warnings,
       ),
-      ...{ stickyMs },
+      ...{ stickyMs, upgradeAfterMs },
       spatial: isOn(env.FUSION_SPATIAL),
       matchRadiusM: positive(
         env,

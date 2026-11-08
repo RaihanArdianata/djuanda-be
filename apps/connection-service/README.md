@@ -200,3 +200,9 @@ GET /aero/trace?q=CTV718&token=<token>      (atau header Authorization: Bearer <
 | `gambaran-udara` | `tidak masuk`, `dihapus: exited/filtered/superseded` | ditolak atau dihapus oleh area cakupan surveilans (`INTEREST_BBOX` atau `interestRadiusNm`) atau digantikan track lain |
 
 Jawaban kosong (`matches: []`) berarti pesawat itu tidak pernah sampai ke layanan ini sejak ia mulai: feed tidak membawanya, atau laporannya dibuang sebelum identitasnya tercatat. Catatan ini hanya di memori (30 peralihan per pesawat, 5000 pesawat) dan hilang saat layanan restart. Catatan tahap `ingest` yang dibuang butuh `@aeroswarm/ingest` yang punya `onDrop`; tanpa itu hanya tahap yang diterima yang tercatat.
+
+## Jalur relay ke gambaran udara (`RELAY_TO_LIVE`)
+
+Ada dua jalur masuk track: feed ASTERIX langsung (didecode di sini) dan relay (topic Kafka AeroSwarm `AEROSWARM_INGEST_KAFKA_TOPIC`, WebSocket `/aero/ingest/ws`). Keduanya disimpan ke database dan dikirim ke `alert-service` lewat Kafka (`asmgcs.tracks`). Gambaran udara yang dikirim ke peta (`/ws/tracks/live`) dulu **hanya** diisi feed langsung, jadi pesawat yang hanya datang lewat relay terlihat oleh layanan alert (segmen aerodrome terisi, alert terpicu) tetapi tidak ada di peta.
+
+Sekarang track relay yang lolos penyaring kembar (`primary-feed-gate`: pesawat yang baru dilihat feed langsung dalam `INGEST_DEDUPE_WINDOW_MS` dibuang) juga diteruskan ke gambaran udara, lewat normalisasi dan fusi yang sama dengan feed langsung (satu pesawat tetap satu track berdasarkan alamat Mode-S). `RELAY_TO_LIVE=false` mematikannya. Endpoint `GET /aero/trace` menandai track ini dengan `diterima (relay)`. Rute HTTP `POST /aero/ingest` belum meneruskan ke gambaran udara.

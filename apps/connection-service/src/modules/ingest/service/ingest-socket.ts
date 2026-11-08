@@ -1,4 +1,9 @@
+import type { FusedTrackEvent } from "@aeroswarm/core";
 import { logger } from "@repo/logger";
+import {
+  isCoveredDuplicate,
+  type PrimaryFeedGate,
+} from "../lib/primary-feed-gate";
 import {
   AirportMismatchError,
   assertExpectedAirport,
@@ -9,6 +14,19 @@ import {
   isMovementEvent,
   isTrackEvent,
 } from "./ingest.service";
+
+/** Ke mana track WebSocket ingest diteruskan selain database: gambaran udara klien, setelah penyaring kembar jalur utama. */
+let liveRelay: {
+  gate?: PrimaryFeedGate;
+  sink?: (event: FusedTrackEvent) => void;
+} = {};
+
+export function registerIngestSocketLive(next: {
+  gate?: PrimaryFeedGate;
+  sink?: (event: FusedTrackEvent) => void;
+}): void {
+  liveRelay = next;
+}
 
 interface SendableSocket {
   send(data: string): void;
@@ -63,6 +81,9 @@ export function handleIngestSocketMessage(
 
   if (isTrackEvent(event)) {
     enqueueTrackEvent(event);
+    if (liveRelay.sink && !isCoveredDuplicate(liveRelay.gate, "track", event)) {
+      liveRelay.sink(event as unknown as FusedTrackEvent);
+    }
     return;
   }
   if (isAlertEvent(event)) {

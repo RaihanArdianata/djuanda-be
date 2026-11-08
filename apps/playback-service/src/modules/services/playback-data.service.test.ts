@@ -219,10 +219,13 @@ describe("aerodromeSnapshotEvents", () => {
     expect(event.data).toMatchObject({ status: null });
   });
 
-  it("tidak membawa geometri atau identitas track", () => {
+  it("membawa geometri tanpa identitas track", () => {
     const [event] = aerodromeSnapshotEvents([feature({})], "WARR", fromMs);
     const data = event.data as { features: object[] };
-    expect(data.features[0]).not.toHaveProperty("geometry");
+    expect(data.features[0]).toHaveProperty("geometry", {
+      type: "Polygon",
+      coordinates: [],
+    });
     expect(data).not.toHaveProperty("trackId");
     expect(data).not.toHaveProperty("icao24");
   });

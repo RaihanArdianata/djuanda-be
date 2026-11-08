@@ -207,7 +207,7 @@ export function aerodromeSnapshotFilter(airportId: string): SQL | undefined {
 }
 
 // aerodrome_features keeps no history, so this is the current state, sent once
-// at the start of the window. Geometry stays out: clients already have it.
+// at the start of the window.
 export function aerodromeSnapshotEvents(
   rows: (typeof aerodromeFeatures.$inferSelect)[],
   airportId: string,
@@ -228,6 +228,7 @@ export function aerodromeSnapshotEvents(
           name: row.name,
           status: row.status,
           properties: row.properties,
+          geometry: row.geometry,
         })),
       },
     },

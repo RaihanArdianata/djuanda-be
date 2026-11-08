@@ -5,6 +5,7 @@ import type {
   DetectionRule,
   MovementTrack,
 } from "../../types";
+import { readableName } from "../geometry/feature-name";
 import {
   distanceToPolylineMeters,
   haversineMeters,
@@ -87,7 +88,7 @@ function buildSurfaceCandidate(
   const relatedCallsign = relatedTrack
     ? (relatedTrack.callsign ?? relatedTrack.trackId)
     : undefined;
-  const featureName = surface.name ?? surface.id;
+  const featureName = readableName(surface.name);
   const featureStatus = surface.status ?? "ACTIVE";
   const relatedText = relatedCallsign
     ? ` yang sedang dipakai ${relatedCallsign}`
@@ -120,14 +121,14 @@ function buildSurfaceCandidate(
       relatedTrack,
       surface,
       surfaceId: surface.id,
-      surfaceName: featureName,
+      surfaceName: featureName ?? null,
       surfaceType: surface.type,
       surfaceStatus: featureStatus,
       callsign,
       relatedCallsign,
       distanceMeters,
       criticalMeters,
-      message: `${callsign} memasuki ${featureName}${relatedText}`,
+      message: `${callsign} memasuki ${featureName ?? "taxiway/apron"}${relatedText}`,
       latitude: track.latitude,
       longitude: track.longitude,
     },

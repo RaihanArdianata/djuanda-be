@@ -36,6 +36,7 @@ export function sampleReportResult(
         count: 2,
         details: [
           {
+            alertId: "STCA|WARR|a",
             type: "STCA",
             callsign: "LNI878",
             severity: "CRITICAL",
@@ -65,6 +66,7 @@ export function sampleReportResult(
             },
           },
           {
+            alertId: "STCA|WARR|b",
             type: "STCA",
             callsign: "LNI878",
             severity: "CRITICAL",
@@ -80,6 +82,7 @@ export function sampleReportResult(
         count: 1,
         details: [
           {
+            alertId: "RUNWAY_INCURSION|WARR|c",
             type: "RUNWAY_INCURSION",
             callsign: null,
             severity: "WARNING",

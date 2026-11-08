@@ -181,6 +181,16 @@ describe("runway incursion and deviation", () => {
   });
 });
 
+describe("alert id", () => {
+  it("carries the alert id so the front end can open the same alert", () => {
+    expect(
+      normalizeAlertRow(row("STCA", {}, { alert_id: "STCA|WARR|x" }))?.detail
+        .alertId,
+    ).toBe("STCA|WARR|x");
+    expect(normalizeAlertRow(row("STCA", {}))?.detail.alertId).toBeNull();
+  });
+});
+
 describe("distance text", () => {
   it("writes metres, switching to kilometres from 1000 m, and nautical miles", () => {
     expect(formatMeters(38.4)).toBe("38 m");

@@ -510,6 +510,7 @@ export async function getOperationalStatistics(
           .groupBy(sql`1`),
         tx.execute<AlertDetailRow>(sql`
           SELECT
+            ${alerts.alertId} AS alert_id,
             ${alerts.airportId} AS airport_id,
             ${alerts.type} AS type,
             ${alerts.severity} AS severity,

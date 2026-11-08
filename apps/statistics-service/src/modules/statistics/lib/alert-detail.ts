@@ -47,6 +47,8 @@ export interface AlertVerification {
 }
 
 export interface AlertDetail {
+  /** `alerts.alert_id`: dipakai FE untuk membuka alert yang sama di halaman Alert Management. */
+  alertId: string | null;
   type: string;
   callsign: string | null;
   severity: string;
@@ -58,6 +60,7 @@ export interface AlertDetail {
 
 /** Baris hasil query detail (kolom `detail_data` sudah berupa JSONB ringkas dari SQL). */
 export interface AlertDetailRow {
+  alert_id?: string | null;
   airport_id: string;
   type: string;
   severity: string;
@@ -509,6 +512,10 @@ export function normalizeAlertRow(
   const view = toDataView(row.detail_data);
 
   const detail: AlertDetail = {
+    alertId:
+      typeof row.alert_id === "string" && row.alert_id !== ""
+        ? row.alert_id
+        : null,
     type: row.type,
     callsign: view.callsign,
     severity: row.severity,

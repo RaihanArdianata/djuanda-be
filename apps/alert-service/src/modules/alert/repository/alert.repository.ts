@@ -18,6 +18,7 @@ import {
   inArray,
   isNull,
   lte,
+  or,
   type SQL,
   sql,
 } from "drizzle-orm";
@@ -36,6 +37,15 @@ const SORTABLE_COLUMNS = {
 export type AlertSortableColumn = keyof typeof SORTABLE_COLUMNS;
 
 const buildFilters = (params: ListAlertsInput): SQL | undefined => {
+  // Pencarian bebas: Alert ID / tipe / track / callsign (callsign tinggal di
+  // data jsonb, bukan kolom tersendiri). Query dipecah per spasi agar "Area
+  // Penetration" bisa cocok dengan tipe "AREA_PENETRATION": tiap token harus
+  // ditemukan (AND antar token), bebas di kolom mana (OR antar kolom).
+  const searchTokens = (params.q ?? "")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+
   const filters: (SQL | undefined)[] = [
     params.airportId ? eq(alerts.airportId, params.airportId) : undefined,
     params.type ? eq(alerts.type, params.type) : undefined,
@@ -61,7 +71,16 @@ const buildFilters = (params: ListAlertsInput): SQL | undefined => {
       : undefined,
     params.startDate ? gte(alerts.triggeredAt, params.startDate) : undefined,
     params.endDate ? lte(alerts.triggeredAt, params.endDate) : undefined,
-    params.q ? ilike(alerts.alertId, `%${params.q}%`) : undefined,
+    ...searchTokens.map(
+      (token) =>
+        or(
+          ilike(alerts.alertId, `%${token}%`),
+          ilike(alerts.type, `%${token}%`),
+          ilike(alerts.trackId, `%${token}%`),
+          ilike(sql`(${alerts.data} ->> 'callsign')`, `%${token}%`),
+          ilike(sql`(${alerts.data} -> 'track' ->> 'callsign')`, `%${token}%`),
+        ) as SQL,
+    ),
   ];
 
   const active = filters.filter(

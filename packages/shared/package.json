@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./alert-description": {
+      "types": "./src/alert-description.ts",
+      "default": "./src/alert-description.ts"
+    },
     "./alert-incident": {
       "types": "./src/alert-incident.ts",
       "default": "./src/alert-incident.ts"

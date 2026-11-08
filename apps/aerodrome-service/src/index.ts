@@ -10,6 +10,10 @@ import {
   startAerodromeProducer,
   stopAerodromeProducer,
 } from "./modules/messaging/aerodrome.producer";
+import {
+  startNotamExpirySweep,
+  stopNotamExpirySweep,
+} from "./modules/notam/notam-expiry.sweep";
 
 const server = Bun.serve({
   port: env.AERODROME_SERVICE_PORT,
@@ -22,9 +26,11 @@ logger.info(
 
 startAerodromeProducer();
 void startAerodromeConsumer();
+startNotamExpirySweep();
 
 const shutdown = async (signal: string): Promise<never> => {
   logger.info(`${signal} received, shutting down aerodrome-service gracefully`);
+  stopNotamExpirySweep();
   await stopAerodromeProducer();
   await stopAerodromeConsumer();
   server.stop();

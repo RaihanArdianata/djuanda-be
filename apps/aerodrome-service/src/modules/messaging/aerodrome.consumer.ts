@@ -106,6 +106,8 @@ export async function startAerodromeConsumer(): Promise<void> {
             status: toDbStatus(status),
             properties: {
               ...previous,
+              // Terbatas hanya selama NOTAM-nya membatasi; AVAILABLE/BLOCKED/CLOSED melepas tanda terbatas lama.
+              restricted: status === "RESTRICTED",
               notamId,
               notamStatus: status,
               notamEffectiveFrom: effectiveFrom,

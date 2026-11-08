@@ -1,3 +1,9 @@
+import {
+  admit,
+  type GatePoint,
+  type GateState,
+  newGateState,
+} from "./track-gate";
 import type { MovementTrack } from "./types";
 
 export interface TrackHistoryRecord {
@@ -25,6 +31,16 @@ const history = new Map<string, MovementTrack[]>();
 // Map dari trackId ke stable key supaya pemanggil yang punya trackId
 // (misal alert-post-history atau getTrackHistory) tetap bisa nemu bucket-nya.
 const trackIdToKey = new Map<string, string>();
+
+// Hitungan laporan yang ditolak berturut-turut per bucket (lihat track-gate).
+const gates = new Map<string, GateState>();
+
+const gatePoint = (t: MovementTrack): GatePoint => ({
+  latitude: t.latitude,
+  longitude: t.longitude,
+  groundSpeed: t.groundSpeed,
+  at: t.timestamp.getTime(),
+});
 
 function purgeOld(entries: MovementTrack[]): MovementTrack[] {
   const now = Date.now();
@@ -90,6 +106,15 @@ export function pushTrackHistory(track: MovementTrack): void {
   ) {
     return;
   }
+
+  // Hanya laporan yang masuk akal sebagai kelanjutan titik sebelumnya: satu jalur yang konsisten, bukan campuran semua sensor.
+  let gate = gates.get(key);
+  if (!gate) {
+    gate = newGateState();
+    gates.set(key, gate);
+  }
+  if (!admit(last ? gatePoint(last) : undefined, gatePoint(track), gate))
+    return;
 
   const next = purgeOld([...existing, track]);
   history.set(key, next);

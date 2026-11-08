@@ -74,7 +74,10 @@ function categoryStat(
   };
 }
 
-/** Semua detail alert dari kelima kategori, terbaru lebih dulu. */
+/**
+ * Semua detail alert dari kelima kategori. Alert satu kejadian berdampingan: kejadian terbaru di atas, dan di dalam kejadian
+ * alert terlama dahulu supaya urutannya terbaca sebagai kronologi.
+ */
 export function allAlertDetails(
   alerts: AlertSummary,
 ): Array<AlertDetail & { category: string }> {
@@ -84,7 +87,19 @@ export function allAlertDetails(
       rows.push({ ...detail, category: label });
     }
   }
-  return rows.sort((a, b) => b.time.localeCompare(a.time));
+  const latest = (d: AlertDetail): number =>
+    d.incident?.endAt ?? Date.parse(d.time);
+  return rows.sort((a, b) => {
+    const byIncident = latest(b) - latest(a);
+    if (byIncident !== 0) return byIncident;
+    if (a.incident && b.incident) {
+      return (
+        a.incident.number - b.incident.number ||
+        a.incident.position - b.incident.position
+      );
+    }
+    return b.time.localeCompare(a.time);
+  });
 }
 
 export function deriveReportStats(

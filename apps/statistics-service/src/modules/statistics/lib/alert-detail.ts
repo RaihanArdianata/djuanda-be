@@ -58,6 +58,18 @@ export interface AlertVerification {
   history: VerificationEntry[];
 }
 
+/** Kejadian tempat sebuah alert bergabung (alert yang sama digabung, lihat `groupIncidents`). */
+export interface IncidentRef {
+  /** Nomor kejadian pada periode itu, terlama = 1. */
+  number: number;
+  /** Jumlah alert di dalam kejadian. */
+  size: number;
+  /** Urutan alert di dalam kejadian, terlama = 1. */
+  position: number;
+  /** Akhir kejadian (epoch ms), untuk mengurutkan. */
+  endAt: number;
+}
+
 export interface AlertDetail {
   /** `alerts.alert_id`: dipakai FE untuk membuka alert yang sama di halaman Alert Management. */
   alertId: string | null;
@@ -68,6 +80,8 @@ export interface AlertDetail {
   time: string;
   description: string;
   verification: AlertVerification;
+  /** Kejadian tempat alert ini bergabung; kosong bila alert tidak punya Alert ID. */
+  incident?: IncidentRef | null;
 }
 
 /** Baris hasil query detail (kolom `detail_data` sudah berupa JSONB ringkas dari SQL). */
@@ -174,9 +188,13 @@ export function groupAlertDetails(
     ria: [],
     taia: [],
   };
+  const refs = incidentRefs(rows);
   for (const row of rows) {
     const normalized = normalizeAlertRow(row);
-    if (normalized) grouped[normalized.category].push(normalized.detail);
+    if (!normalized) continue;
+    const { detail } = normalized;
+    if (detail.alertId) detail.incident = refs.get(detail.alertId) ?? null;
+    grouped[normalized.category].push(detail);
   }
   return grouped;
 }
@@ -223,6 +241,28 @@ function toIncidentInput(row: AlertDetailRow): IncidentAlertInput | null {
         : (row.related_track_id ?? ""),
     verificationStatus: row.verification_status ?? "UNVERIFIED",
   };
+}
+
+/** Kejadian tiap alert pada periode itu, menurut Alert ID. Nomor mengikuti waktu mulai, terlama = 1. */
+export function incidentRefs(rows: AlertDetailRow[]): Map<string, IncidentRef> {
+  const inputs = rows
+    .map(toIncidentInput)
+    .filter((r): r is IncidentAlertInput => r !== null);
+  const incidents = [...groupIncidents(inputs)].sort(
+    (a, b) => a.startAt - b.startAt || a.id.localeCompare(b.id),
+  );
+  const refs = new Map<string, IncidentRef>();
+  incidents.forEach((incident, index) => {
+    incident.alertIds.forEach((alertId, position) => {
+      refs.set(alertId, {
+        number: index + 1,
+        size: incident.count,
+        position: position + 1,
+        endAt: incident.endAt,
+      });
+    });
+  });
+  return refs;
 }
 
 export function summarizeIncidents(

@@ -9,6 +9,10 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./alert-incident": {
+      "types": "./src/alert-incident.ts",
+      "default": "./src/alert-incident.ts"
+    },
     "./api-error": {
       "types": "./src/apiError.ts",
       "default": "./src/apiError.ts"

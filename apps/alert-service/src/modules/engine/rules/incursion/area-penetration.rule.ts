@@ -1,4 +1,5 @@
 import type { AlertCandidate, AlertContext, DetectionRule } from "../../types";
+import { readableName } from "../geometry/feature-name";
 import { pointInPolygon } from "../geometry/geometry";
 
 interface AreaConfig {
@@ -29,7 +30,7 @@ export const areaPenetrationRule: DetectionRule = {
 
         const alertId = `AREA_PENETRATION|${ctx.airportId}|${track.trackId}-${area.id}`;
         const callsign = track.callsign ?? track.trackId;
-        const featureName = area.name ?? area.id;
+        const featureName = readableName(area.name);
         const featureStatus = area.status ?? "RESTRICTED";
 
         candidates.push({
@@ -45,11 +46,11 @@ export const areaPenetrationRule: DetectionRule = {
             track,
             area,
             areaId: area.id,
-            areaName: featureName,
+            areaName: featureName ?? null,
             areaType: area.type,
             areaStatus: featureStatus,
             callsign,
-            message: `${callsign} entered restricted area ${featureName} (${featureStatus})`,
+            message: `${callsign} entered restricted area${featureName ? ` ${featureName}` : ""} (${featureStatus})`,
             latitude: track.latitude,
             longitude: track.longitude,
           },

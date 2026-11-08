@@ -5,6 +5,7 @@ import type {
   DetectionRule,
   MovementTrack,
 } from "../../types";
+import { readableName } from "../geometry/feature-name";
 import { pointInPolygon } from "../geometry/geometry";
 
 interface RunwayConfig {
@@ -48,7 +49,7 @@ function buildRunwayCandidate(
 ): AlertCandidate {
   const callsign = intruder.callsign ?? intruder.trackId;
   const occupantCallsign = occupant.callsign ?? occupant.trackId;
-  const featureName = runway.name ?? runway.id;
+  const featureName = readableName(runway.name);
   const featureStatus = runway.status ?? "ACTIVE";
 
   return {
@@ -66,12 +67,12 @@ function buildRunwayCandidate(
       relatedTrack: occupant,
       runway,
       runwayId: runway.id,
-      runwayName: featureName,
+      runwayName: featureName ?? null,
       runwayStatus: featureStatus,
       active: runway.active,
       callsign,
       relatedCallsign: occupantCallsign,
-      message: `${callsign} memasuki runway ${featureName} yang sedang dipakai ${occupantCallsign} (${featureStatus})`,
+      message: `${callsign} memasuki runway${featureName ? ` ${featureName}` : ""} yang sedang dipakai ${occupantCallsign} (${featureStatus})`,
       latitude: intruder.latitude,
       longitude: intruder.longitude,
     },

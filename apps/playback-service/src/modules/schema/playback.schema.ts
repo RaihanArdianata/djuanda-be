@@ -39,6 +39,7 @@ export const timelineEventTypeSchema = z.enum([
   "aircraft_movement",
   "weather_metar",
   "weather_taf",
+  "aftn",
   "notam",
   "ashtam",
   "aerodrome",

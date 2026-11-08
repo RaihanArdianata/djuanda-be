@@ -1,5 +1,6 @@
 import ExcelJs from "exceljs";
 import type { OperationalStatisticsResult } from "../service/statistics.service";
+import { type AlertDetail, formatAlertDate } from "./alert-detail";
 import {
   airportTitle,
   formatDateLong,
@@ -839,11 +840,36 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
 // Sheet 5 - Log Alert
 // ---------------------------------------------------------------------------
 
+const VERIFICATION_LABEL: Readonly<Record<string, string>> = {
+  UNVERIFIED: "Belum diverifikasi",
+  VERIFIED: "Terverifikasi",
+  FALSE_ALARM: "Alarm palsu",
+};
+
+function verificationLabel(status: string): string {
+  return VERIFICATION_LABEL[status.toUpperCase()] ?? status;
+}
+
+/** Satu baris per langkah, terlama dahulu: `2 November 2026 pukul 05:30:00 WIB · Sari · Belum diverifikasi → Alarm palsu — catatan`. */
+export function verificationHistoryText(
+  history: AlertDetail["verification"]["history"],
+): string {
+  if (history.length === 0) return DASH;
+  return history
+    .map((h) => {
+      const when = h.at ? (formatAlertDate(h.at) ?? h.at) : DASH;
+      const change = `${h.from ? verificationLabel(h.from) : DASH} → ${h.to ? verificationLabel(h.to) : DASH}`;
+      const note = h.note ? ` — ${h.note}` : "";
+      return `${when} · ${h.by ?? DASH} · ${change}${note}`;
+    })
+    .join(String.fromCharCode(10));
+}
+
 function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
   const { result } = ctx;
   const ws = wb.addWorksheet(SHEET.alertLog);
   configureSheet(ws, { tab: TAB.log, freezeRow: 5, printTitleRow: 5 });
-  setWidths(ws, [7, 22, 28, 16, 12, 70]);
+  setWidths(ws, [7, 22, 28, 16, 12, 70, 18, 20, 22, 36, 60]);
 
   const rows = allAlertDetails(result.alerts);
   writeTitleBlock(
@@ -860,6 +886,11 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
     "Callsign",
     "Keparahan",
     "Keterangan",
+    "Status Verifikasi",
+    "Diverifikasi Oleh",
+    "Waktu Verifikasi (WIB)",
+    "Catatan Verifikasi",
+    "Riwayat Verifikasi",
   ]);
 
   rows.forEach((d, i) => {
@@ -885,6 +916,17 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
           fillArgb: critical ? COLOR.criticalSoft : COLOR.warningSoft,
         },
         { value: d.description, wrap: true },
+        { value: verificationLabel(d.verification.status), align: "center" },
+        { value: d.verification.by ?? DASH },
+        d.verification.at
+          ? {
+              value: wallClockDate(d.verification.at) ?? d.verification.at,
+              fmt: FMT.dateTime,
+              align: "left",
+            }
+          : { value: DASH },
+        { value: d.verification.note ?? DASH, wrap: true },
+        { value: verificationHistoryText(d.verification.history), wrap: true },
       ],
       i % 2 === 1,
     );
@@ -900,7 +942,7 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
   } else {
     ws.autoFilter = {
       from: { row: 5, column: 2 },
-      to: { row: 5 + rows.length, column: 7 },
+      to: { row: 5 + rows.length, column: 12 },
     };
   }
 }

@@ -1,6 +1,14 @@
 import type { OperationalStatisticsResult } from "../service/statistics.service";
 
 /** Data contoh untuk menguji laporan Excel (dipakai tes workbook dan tes route). */
+const UNVERIFIED = {
+  status: "UNVERIFIED",
+  by: null,
+  at: null,
+  note: null,
+  history: [],
+};
+
 export function sampleReportResult(
   overrides: Partial<OperationalStatisticsResult> = {},
 ): OperationalStatisticsResult {
@@ -33,6 +41,28 @@ export function sampleReportResult(
             severity: "CRITICAL",
             time: "2026-11-02T05:10:00+07:00",
             description: "Kemungkinan konflik LNI878 dan LNI786",
+            verification: {
+              status: "VERIFIED",
+              by: "Budi",
+              at: "2026-11-02T06:00:00+07:00",
+              note: "Dikonfirmasi tower",
+              history: [
+                {
+                  at: "2026-11-02T05:30:00+07:00",
+                  by: "Sari",
+                  from: "UNVERIFIED",
+                  to: "FALSE_ALARM",
+                  note: "Tampak derau radar",
+                },
+                {
+                  at: "2026-11-02T06:00:00+07:00",
+                  by: "Budi",
+                  from: "FALSE_ALARM",
+                  to: "VERIFIED",
+                  note: "Dikonfirmasi tower",
+                },
+              ],
+            },
           },
           {
             type: "STCA",
@@ -40,6 +70,7 @@ export function sampleReportResult(
             severity: "CRITICAL",
             time: "2026-11-01T21:00:00+07:00",
             description: "Kemungkinan konflik LNI878 dan BTK6391",
+            verification: UNVERIFIED,
           },
         ],
       },
@@ -54,6 +85,7 @@ export function sampleReportResult(
             severity: "WARNING",
             time: "2026-11-01T10:30:00+07:00",
             description: "Memasuki runway 10/28",
+            verification: UNVERIFIED,
           },
         ],
       },

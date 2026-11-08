@@ -167,6 +167,25 @@ describe("buildOperationalReport", () => {
     expect(text(ws, "F8")).toBe("Warning");
   });
 
+  it("writes the verification of each alert next to its description, with the history one step per line", async () => {
+    const ws = sheet(await roundTrip(), "Log Alert");
+    expect(text(ws, "H5")).toBe("Status Verifikasi");
+    expect(text(ws, "L5")).toBe("Riwayat Verifikasi");
+    // newest first: the 2026-11-02 05:10 STCA is the verified one
+    expect(text(ws, "H6")).toBe("Terverifikasi");
+    expect(text(ws, "I6")).toBe("Budi");
+    expect(text(ws, "K6")).toBe("Dikonfirmasi tower");
+    const history = text(ws, "L6").split(String.fromCharCode(10));
+    expect(history).toHaveLength(2);
+    expect(history[0]).toContain("Sari");
+    expect(history[0]).toContain("Belum diverifikasi → Alarm palsu");
+    expect(history[1]).toContain("Alarm palsu → Terverifikasi");
+    // an alert nobody has looked at
+    expect(text(ws, "H7")).toBe("Belum diverifikasi");
+    expect(text(ws, "I7")).toBe("—");
+    expect(text(ws, "L7")).toBe("—");
+  });
+
   it("writes the movement log with one row per aircraft, hour and type", async () => {
     const ws = sheet(await roundTrip(), "Log Pergerakan");
     const types: string[] = [];

@@ -12,8 +12,10 @@ import {
   weatherForecasts,
   weatherObservations,
 } from "@repo/database";
-import { and, eq, gte, inArray, lte, or, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, ne, or, type SQL } from "drizzle-orm";
 import type { TimelineEvent } from "../schema/playback.schema";
+
+const ASHTAM_MOCK_SOURCE = "ashtam-mock";
 
 const AERODROME_SNAPSHOT_LAYERS: string[] = [
   "AERODROME",
@@ -46,6 +48,21 @@ export async function loadTimeline(
   const timeline = sources.flat();
   timeline.sort((a, b) => a.ts - b.ts);
   return timeline;
+}
+
+// NOTAM and ASHTAM tables are unique per source, so one message synced from
+// several providers is stored several times.
+export function latestPerKey<T extends { updatedAt: Date }>(
+  rows: T[],
+  keyOf: (row: T) => string,
+): T[] {
+  const latest = new Map<string, T>();
+  for (const row of rows) {
+    const key = keyOf(row);
+    const kept = latest.get(key);
+    if (!kept || row.updatedAt > kept.updatedAt) latest.set(key, row);
+  }
+  return [...latest.values()];
 }
 
 // A NOTAM or ASHTAM already in force when the window opens is shown at the
@@ -119,7 +136,10 @@ async function loadNotams(
     .from(notamMessages)
     .where(notamWindowFilter(airportId, from, to));
 
-  return rows.map((row) => notamRowToEvent(row, from.getTime()));
+  return latestPerKey(
+    rows,
+    (row) => `${row.series}/${row.number}/${row.year}`,
+  ).map((row) => notamRowToEvent(row, from.getTime()));
 }
 
 // ashtam_messages is keyed by FIR, not airport, so every ASHTAM in the window
@@ -128,6 +148,7 @@ export function ashtamWindowFilter(from: Date, to: Date): SQL | undefined {
   return and(
     lte(ashtamMessages.effectiveFrom, to),
     gte(ashtamMessages.effectiveTo, from),
+    ne(ashtamMessages.source, ASHTAM_MOCK_SOURCE),
   );
 }
 
@@ -173,7 +194,9 @@ async function loadAshtams(
     .from(ashtamMessages)
     .where(ashtamWindowFilter(from, to));
 
-  return rows.map((row) => ashtamRowToEvent(row, airportId, from.getTime()));
+  return latestPerKey(rows, (row) => row.providerId).map((row) =>
+    ashtamRowToEvent(row, airportId, from.getTime()),
+  );
 }
 
 export function aerodromeSnapshotFilter(airportId: string): SQL | undefined {

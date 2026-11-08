@@ -13,6 +13,7 @@ import {
   aftnWindowFilter,
   ashtamRowToEvent,
   ashtamWindowFilter,
+  latestPerKey,
   notamRowToEvent,
   notamWindowFilter,
 } from "./playback-data.service";
@@ -243,6 +244,36 @@ describe("aerodromeSnapshotFilter", () => {
       "APRON",
       "RESTRICTED",
     ]);
+  });
+});
+
+describe("latestPerKey", () => {
+  const stored = (key: string, updatedAt: string) => ({
+    key,
+    updatedAt: new Date(updatedAt),
+  });
+
+  it("menyisakan baris terbaru untuk tiap kunci", () => {
+    const older = stored("A1", "2026-11-01T00:00:00.000Z");
+    const newer = stored("A1", "2026-11-02T00:00:00.000Z");
+    const other = stored("A2", "2026-11-01T00:00:00.000Z");
+
+    const result = latestPerKey([older, other, newer], (row) => row.key);
+
+    expect(result).toHaveLength(2);
+    expect(result).toContain(newer);
+    expect(result).toContain(other);
+  });
+});
+
+describe("ashtamWindowFilter sumber data", () => {
+  it("mengecualikan baris dari sumber mock", () => {
+    const filter = ashtamWindowFilter(windowStart, windowEnd);
+    if (!filter) throw new Error("filter kosong");
+    const { sql, params } = new PgDialect().sqlToQuery(filter);
+
+    expect(sql).toContain('"ashtam_messages"."source" <> $3');
+    expect(params[2]).toBe("ashtam-mock");
   });
 });
 

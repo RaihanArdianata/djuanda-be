@@ -153,11 +153,15 @@ export const verifyIncidentsSchema = z
     verifiedBy: z.string().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.status === "FALSE_ALARM" && !value.reasonCode) {
+    if (
+      value.status === "FALSE_ALARM" &&
+      !value.reasonCode &&
+      !value.note?.trim()
+    ) {
       ctx.addIssue({
         code: "custom",
-        path: ["reasonCode"],
-        message: "Alasan wajib dipilih untuk False alert",
+        path: ["note"],
+        message: "Catatan wajib diisi untuk False alert",
       });
     }
     if (value.reasonCode === "OTHER" && !value.note?.trim()) {

@@ -41,7 +41,7 @@ describe("verifyIncidentsSchema", () => {
     ).toBe(true);
   });
 
-  it("requires a standard reason for a false alarm", () => {
+  it("requires a reason or a note for a false alarm", () => {
     expect(
       verifyIncidentsSchema.safeParse({ ...base, status: "FALSE_ALARM" })
         .success,
@@ -51,6 +51,13 @@ describe("verifyIncidentsSchema", () => {
         ...base,
         status: "FALSE_ALARM",
         reasonCode: "RADAR_NOISE",
+      }).success,
+    ).toBe(true);
+    expect(
+      verifyIncidentsSchema.safeParse({
+        ...base,
+        status: "FALSE_ALARM",
+        note: "kendaraan survei berizin",
       }).success,
     ).toBe(true);
   });

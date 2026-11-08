@@ -8,6 +8,7 @@ import {
   db,
   type NewAlert,
 } from "@repo/database";
+import type { IncidentAlertInput } from "@repo/shared/alert-incident";
 import {
   and,
   asc,
@@ -35,6 +36,15 @@ const SORTABLE_COLUMNS = {
 } as const;
 
 export type AlertSortableColumn = keyof typeof SORTABLE_COLUMNS;
+
+/** Alert ID dipisah koma menjadi satu filter; kosong berarti tanpa filter. */
+const alertIdsFilter = (raw: string | undefined): SQL | undefined => {
+  const ids = (raw ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? inArray(alerts.alertId, ids) : undefined;
+};
 
 const buildFilters = (params: ListAlertsInput): SQL | undefined => {
   // Pencarian bebas: Alert ID / tipe / track / callsign (callsign tinggal di
@@ -71,6 +81,7 @@ const buildFilters = (params: ListAlertsInput): SQL | undefined => {
       : undefined,
     params.startDate ? gte(alerts.triggeredAt, params.startDate) : undefined,
     params.endDate ? lte(alerts.triggeredAt, params.endDate) : undefined,
+    alertIdsFilter(params.alertIds),
     ...searchTokens.map(
       (token) =>
         or(
@@ -415,4 +426,136 @@ export const getAlertTrackHistory = async (
     else main.push(row);
   }
   return { main, related };
+};
+
+export interface IncidentSourceParams {
+  airportId?: string;
+  startDate: Date;
+  endDate: Date;
+}
+
+/** Kolom ringkas semua alert pada rentang itu, terlama dahulu, untuk dikelompokkan menjadi kejadian. */
+export const listIncidentSources = async (
+  params: IncidentSourceParams,
+): Promise<IncidentAlertInput[]> => {
+  const rows = await db
+    .select({
+      alertId: alerts.alertId,
+      type: alerts.type,
+      severity: alerts.severity,
+      status: alerts.status,
+      triggeredAt: alerts.triggeredAt,
+      trackId: alerts.trackId,
+      verificationStatus: alerts.verificationStatus,
+      callsign: sql<
+        string | null
+      >`coalesce(${alerts.data} ->> 'callsign', ${alerts.data} -> 'track' ->> 'callsign')`,
+      relatedCallsign: sql<string | null>`${alerts.data} ->> 'relatedCallsign'`,
+    })
+    .from(alerts)
+    .where(
+      and(
+        isNull(alerts.deletedAt),
+        gte(alerts.triggeredAt, params.startDate),
+        lte(alerts.triggeredAt, params.endDate),
+        params.airportId ? eq(alerts.airportId, params.airportId) : undefined,
+      ),
+    )
+    .orderBy(asc(alerts.triggeredAt));
+
+  return rows.map((r) => ({ ...r, triggeredAt: r.triggeredAt.getTime() }));
+};
+
+export const findAlertsByAlertIds = async (
+  alertIds: string[],
+): Promise<Alert[]> =>
+  alertIds.length === 0
+    ? []
+    : await db
+        .select()
+        .from(alerts)
+        .where(
+          and(inArray(alerts.alertId, alertIds), isNull(alerts.deletedAt)),
+        );
+
+/** Alert terakhir untuk entitas ini yang selesai sejak `since`; null bila tidak ada. Entitas dikenali dari `data.entityKey` yang disimpan saat alert dibuat. */
+export const findRecentlyClearedAlert = async (
+  airportId: string,
+  type: string,
+  entityKey: string,
+  since: Date,
+): Promise<Alert | undefined> => {
+  const [row] = await db
+    .select()
+    .from(alerts)
+    .where(
+      and(
+        eq(alerts.airportId, airportId),
+        eq(alerts.type, type),
+        eq(alerts.status, "CLEARED"),
+        isNull(alerts.deletedAt),
+        gte(alerts.clearedAt, since),
+        sql`${alerts.data} ->> 'entityKey' = ${entityKey}`,
+      ),
+    )
+    .orderBy(desc(alerts.clearedAt))
+    .limit(1);
+  return row;
+};
+
+/** Buka kembali alert yang selesai: aktif lagi, jejak penyelesaiannya dihapus, dan hitungan pembukaan ulang naik. */
+export const reopenAlert = async (id: string): Promise<Alert | undefined> => {
+  const [row] = await db
+    .update(alerts)
+    .set({
+      status: "ACTIVE",
+      clearedAt: null,
+      clearedBy: null,
+      clearReason: null,
+      updatedAt: new Date(),
+      data: sql`jsonb_set(${alerts.data}, '{reopenCount}', (coalesce((${alerts.data} ->> 'reopenCount')::int, 0) + 1)::text::jsonb)`,
+    })
+    .where(eq(alerts.id, id))
+    .returning();
+  return row;
+};
+
+/** Satu UPDATE untuk banyak alert sekaligus; mengembalikan baris yang berubah. */
+export const verifyAlertsBatch = async (
+  ids: string[],
+  params: VerifyAlertRepoParams,
+): Promise<Alert[]> =>
+  ids.length === 0
+    ? []
+    : await db
+        .update(alerts)
+        .set({
+          verificationStatus: params.status,
+          verifiedAt: new Date(),
+          verifiedBy: params.verifiedBy ?? null,
+          verificationNote: params.note ?? null,
+          updatedAt: new Date(),
+        })
+        .where(and(inArray(alerts.id, ids), isNull(alerts.deletedAt)))
+        .returning();
+
+/** Satu INSERT untuk banyak catatan aksi sekaligus. */
+export const recordAlertActionsBatch = async (
+  items: RecordAlertActionParams[],
+): Promise<void> => {
+  if (items.length === 0) return;
+  await db.insert(alertActions).values(
+    items.map((params) => ({
+      alertId: params.alertId,
+      action: params.action,
+      actorId: params.actorId ?? null,
+      actorName: params.actorName ?? null,
+      previousStatus: params.previousStatus ?? null,
+      newStatus: params.newStatus ?? null,
+      previousVerificationStatus: params.previousVerificationStatus ?? null,
+      newVerificationStatus: params.newVerificationStatus ?? null,
+      note: params.note ?? null,
+      metadata: params.metadata ?? {},
+    })),
+  );
 };

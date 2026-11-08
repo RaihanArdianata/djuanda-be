@@ -19,6 +19,11 @@ import {
   getAllAlerts,
   verifyAlertService,
 } from "../service/alert.service";
+import { listIncidentsService } from "../service/incident.service";
+import {
+  requestVerifyIncidents,
+  verifyJobStatusService,
+} from "../service/verify-incidents.service";
 import {
   acknowledgeAlertSchema,
   bulkClearAlertSchema,
@@ -27,7 +32,9 @@ import {
   detectSchema,
   exportAlertSchema,
   listAlertInputSchema,
+  listIncidentsSchema,
   verifyAlertSchema,
+  verifyIncidentsSchema,
 } from "../validator/alert.validator";
 
 function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown): T {
@@ -284,4 +291,42 @@ export const exportAlertsController = catchAsync(async (c) => {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+});
+
+export const listIncidentsController = catchAsync(async (c) => {
+  const input = parseOrThrow(listIncidentsSchema, c.req.query());
+  const result = await listIncidentsService(input);
+
+  return success(
+    c,
+    { items: result.items, summary: result.summary },
+    { message: "Incidents fetched successfully" },
+    {
+      page: input.page,
+      size: input.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / input.limit),
+    },
+  );
+});
+
+/** Verifikasi satu kejadian: diperiksa sekarang, dikerjakan di antrean (202); `jobId` untuk memantau kemajuannya. */
+export const verifyIncidentsController = catchAsync(async (c) => {
+  const body = await c.req.json();
+  const input = parseOrThrow(verifyIncidentsSchema, body);
+  const actor = getActor(c);
+
+  const result = await requestVerifyIncidents(input, actor);
+  return success(c, result, {
+    code: result.queued ? 202 : 200,
+    message: result.queued
+      ? "Verification queued"
+      : "Incident verified successfully",
+  });
+});
+
+export const verifyJobStatusController = catchAsync(async (c) => {
+  const { jobId } = c.req.param();
+  const status = await verifyJobStatusService(jobId);
+  return success(c, status, { message: "Verification job status fetched" });
 });

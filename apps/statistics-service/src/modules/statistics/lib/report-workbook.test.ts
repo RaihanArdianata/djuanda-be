@@ -236,6 +236,11 @@ describe("buildOperationalReport", () => {
         ria: { count: 0, details: [] },
         taia: { count: 0, details: [] },
         total: 0,
+        incidents: {
+          total: 0,
+          byCategory: { stca: 0, apa: 0, da: 0, ria: 0, taia: 0 },
+          needsAction: 0,
+        },
       },
       trend: [],
     });

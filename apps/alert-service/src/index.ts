@@ -1,6 +1,11 @@
 import { pool } from "@repo/database";
 import { logger } from "@repo/logger";
 import { app } from "./app";
+import { closeVerifyIncidentsQueue } from "./modules/alert/queue/verify-incidents.queue";
+import {
+  startVerifyIncidentsWorker,
+  stopVerifyIncidentsWorker,
+} from "./modules/alert/queue/verify-incidents.worker";
 import { sweepExpiredAlerts } from "./modules/engine/alert.engine";
 import {
   startAdvisoryConsumer,
@@ -53,6 +58,7 @@ await safeStart("advisory consumer", startAdvisoryConsumer);
 await safeStart("weather consumer", startWeatherConsumer);
 await safeStart("aerodrome consumer", startAerodromeConsumer);
 await safeStart("track consumer", startTrackConsumer);
+await safeStart("verify incidents worker", startVerifyIncidentsWorker);
 
 // Jaring pengaman: expire alert ACTIVE > 5 menit meski airport-nya berhenti
 // menerima track update sama sekali (evaluateMovement per-track tidak akan
@@ -67,6 +73,8 @@ const shutdown = async (signal: string): Promise<never> => {
   clearInterval(sweepTimer);
   server.stop();
   await stopTrackConsumer();
+  await stopVerifyIncidentsWorker();
+  await closeVerifyIncidentsQueue();
   await stopAerodromeConsumer();
   await stopWeatherConsumer();
   await stopAdvisoryConsumer();

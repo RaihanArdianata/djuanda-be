@@ -69,3 +69,22 @@ export async function publishAlertEvent(event: AlertEvent): Promise<void> {
     );
   }
 }
+
+/** Banyak event dalam satu pengiriman (verifikasi massal), bukan satu pengiriman per event. */
+export async function publishAlertEvents(events: AlertEvent[]): Promise<void> {
+  if (!producer || events.length === 0) return;
+  try {
+    await producer.send({
+      topic: alertServiceEnv.kafkaAlertTopic,
+      messages: events.map((event) => ({
+        key: event.data.alertId,
+        value: JSON.stringify(event),
+      })),
+    });
+  } catch (err) {
+    logger.warn(
+      { err, count: events.length },
+      "failed to publish alert events",
+    );
+  }
+}

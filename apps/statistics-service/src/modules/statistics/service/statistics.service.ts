@@ -5,8 +5,11 @@ import {
   type AlertDetail,
   type AlertDetailRow,
   type AlertDetailsByCategory,
+  type AlertIncidentSummary,
   groupAlertDetails,
   KNOWN_ALERT_TYPES,
+  NO_INCIDENTS,
+  summarizeIncidents,
 } from "../lib/alert-detail";
 import {
   computePeriodBuckets,
@@ -274,11 +277,14 @@ export interface AlertSummary {
   ria: AlertCategorySummary;
   taia: AlertCategorySummary;
   total: number;
+  /** Alert yang sama digabung menjadi kejadian. */
+  incidents: AlertIncidentSummary;
 }
 
 export function buildAlertSummary(
   totals: AlertTotals,
   details: AlertDetailsByCategory,
+  incidents: AlertIncidentSummary = NO_INCIDENTS,
 ): AlertSummary {
   return {
     stca: { count: totals.stca, details: details.stca },
@@ -287,6 +293,7 @@ export function buildAlertSummary(
     ria: { count: totals.ria, details: details.ria },
     taia: { count: totals.taia, details: details.taia },
     total: totals.total,
+    incidents,
   };
 }
 
@@ -510,6 +517,8 @@ export async function getOperationalStatistics(
           .groupBy(sql`1`),
         tx.execute<AlertDetailRow>(sql`
           SELECT
+            ${alerts.alertId} AS alert_id,
+            ${alerts.trackId} AS track_id,
             ${alerts.airportId} AS airport_id,
             ${alerts.type} AS type,
             ${alerts.severity} AS severity,
@@ -687,6 +696,7 @@ export async function getOperationalStatistics(
   const alertTotals = buildAlertSummary(
     sumAlertTotals(alertTrendRows),
     groupAlertDetails((alertDetailResult as { rows: AlertDetailRow[] }).rows),
+    summarizeIncidents((alertDetailResult as { rows: AlertDetailRow[] }).rows),
   );
   const totalAircraft = movementTotals.aircraft;
   const totalTakeoff = movementTotals.takeoff;

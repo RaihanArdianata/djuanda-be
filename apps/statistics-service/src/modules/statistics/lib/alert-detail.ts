@@ -27,6 +27,11 @@ export const ALERT_TYPE_TO_CATEGORY: Readonly<
 
 export const KNOWN_ALERT_TYPES = Object.keys(ALERT_TYPE_TO_CATEGORY);
 
+import {
+  groupIncidents,
+  type IncidentAlertInput,
+} from "@repo/shared/alert-incident";
+
 /** Satu langkah riwayat verifikasi (dari `alert_actions`, aksi VERIFY), terlama dahulu. */
 export interface VerificationEntry {
   /** Waktu langkah (Asia/Jakarta, ISO dengan +07:00). */
@@ -47,6 +52,8 @@ export interface AlertVerification {
 }
 
 export interface AlertDetail {
+  /** `alerts.alert_id`: dipakai FE untuk membuka alert yang sama di halaman Alert Management. */
+  alertId: string | null;
   type: string;
   callsign: string | null;
   severity: string;
@@ -58,10 +65,12 @@ export interface AlertDetail {
 
 /** Baris hasil query detail (kolom `detail_data` sudah berupa JSONB ringkas dari SQL). */
 export interface AlertDetailRow {
+  alert_id?: string | null;
   airport_id: string;
   type: string;
   severity: string;
   related_track_id: string | null;
+  track_id?: string | null;
   /** Berasal dari `alerts.triggered_at` (Asia/Jakarta). */
   time: string;
   detail_data: unknown;
@@ -509,6 +518,10 @@ export function normalizeAlertRow(
   const view = toDataView(row.detail_data);
 
   const detail: AlertDetail = {
+    alertId:
+      typeof row.alert_id === "string" && row.alert_id !== ""
+        ? row.alert_id
+        : null,
     type: row.type,
     callsign: view.callsign,
     severity: row.severity,
@@ -546,4 +559,78 @@ export function groupAlertDetails(
     if (normalized) grouped[normalized.category].push(normalized.detail);
   }
   return grouped;
+}
+
+// ---------------------------------------------------------------------------
+// Kejadian (incident): alert yang sama digabung, supaya hitungan tidak membengkak oleh pemicuan ulang
+// ---------------------------------------------------------------------------
+
+export interface AlertIncidentSummary {
+  /** Jumlah kejadian setelah alert yang sama digabung (callsign lintas jenis, rantai 15 menit, STCA per pasangan). */
+  total: number;
+  /** Kejadian yang memuat jenis itu; kejadian lintas jenis dihitung sekali di tiap jenisnya. */
+  byCategory: Record<AlertCategoryKey, number>;
+  /** Kejadian yang masih punya alert belum dinilai. */
+  needsAction: number;
+}
+
+export const NO_INCIDENTS: AlertIncidentSummary = {
+  total: 0,
+  byCategory: { stca: 0, apa: 0, da: 0, ria: 0, taia: 0 },
+  needsAction: 0,
+};
+
+function toIncidentInput(row: AlertDetailRow): IncidentAlertInput | null {
+  const category = categoryOfAlertType(row.type);
+  const at = Date.parse(row.time);
+  if (!category || Number.isNaN(at)) return null;
+  const view = toDataView(row.detail_data);
+  const data = parseData(row.detail_data);
+  return {
+    alertId:
+      typeof row.alert_id === "string" && row.alert_id !== ""
+        ? row.alert_id
+        : `${row.type}|${row.time}|${view.callsign ?? ""}`,
+    type: row.type,
+    severity: row.severity,
+    status: "CLEARED",
+    triggeredAt: at,
+    callsign: view.callsign,
+    relatedCallsign: readString(data, "relatedCallsign"),
+    trackId:
+      typeof row.track_id === "string"
+        ? row.track_id
+        : (row.related_track_id ?? ""),
+    verificationStatus: row.verification_status ?? "UNVERIFIED",
+  };
+}
+
+export function summarizeIncidents(
+  rows: AlertDetailRow[],
+): AlertIncidentSummary {
+  const inputs = rows
+    .map(toIncidentInput)
+    .filter((r): r is IncidentAlertInput => r !== null);
+  const incidents = groupIncidents(inputs);
+  const byCategory: Record<AlertCategoryKey, number> = {
+    stca: 0,
+    apa: 0,
+    da: 0,
+    ria: 0,
+    taia: 0,
+  };
+  for (const incident of incidents) {
+    const seen = new Set<AlertCategoryKey>();
+    for (const type of Object.keys(incident.typeCounts)) {
+      const category = categoryOfAlertType(type);
+      if (category) seen.add(category);
+    }
+    for (const category of seen) byCategory[category]++;
+  }
+  return {
+    total: incidents.length,
+    byCategory,
+    needsAction: incidents.filter((i) => i.verificationCounts.unverified > 0)
+      .length,
+  };
 }

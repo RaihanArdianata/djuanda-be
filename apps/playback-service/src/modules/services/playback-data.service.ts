@@ -1,11 +1,13 @@
 import {
+  type AftnMessage,
   aeroswarmMovements,
   aeroswarmTracks,
+  aftnMessages,
   db,
   weatherForecasts,
   weatherObservations,
 } from "@repo/database";
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gte, lte, or, type SQL } from "drizzle-orm";
 import type { TimelineEvent } from "../schema/playback.schema";
 import { buildDummyEvents } from "./dummy-data.service";
 
@@ -19,20 +21,84 @@ export async function loadTimeline(
   to: Date,
   includeDummy = true,
 ): Promise<TimelineEvent[]> {
-  const [tracks, movements, metars, tafs] = await Promise.all([
+  const [tracks, movements, metars, tafs, aftn] = await Promise.all([
     loadAircraftTracks(airportId, from, to),
     loadAircraftMovements(airportId, from, to),
     loadMetars(airportId, from, to),
     loadTafs(airportId, from, to),
+    loadAftnMessages(airportId, from, to),
   ]);
 
   const dummy = includeDummy
     ? buildDummyEvents(airportId, from.getTime(), to.getTime())
     : [];
 
-  const timeline = [...tracks, ...movements, ...metars, ...tafs, ...dummy];
+  const timeline = [
+    ...tracks,
+    ...movements,
+    ...metars,
+    ...tafs,
+    ...aftn,
+    ...dummy,
+  ];
   timeline.sort((a, b) => a.ts - b.ts);
   return timeline;
+}
+
+// aftn_messages has no airport column: a message belongs to the airport it
+// departs from or arrives at.
+export function aftnWindowFilter(
+  airportId: string,
+  from: Date,
+  to: Date,
+): SQL | undefined {
+  return and(
+    or(
+      eq(aftnMessages.departure, airportId),
+      eq(aftnMessages.destination, airportId),
+    ),
+    gte(aftnMessages.datetime, from),
+    lte(aftnMessages.datetime, to),
+  );
+}
+
+export function aftnRowToEvent(row: AftnMessage): TimelineEvent {
+  return {
+    type: "aftn",
+    ts: row.datetime.getTime(),
+    timestamp: row.datetime.toISOString(),
+    data: {
+      id: row.id,
+      messageType: row.messageType,
+      callSign: row.callSign,
+      registration: row.registration,
+      aircraftType: row.aircraftType,
+      departure: row.departure,
+      departureTime: row.departureTime,
+      destination: row.destination,
+      destinationTime: row.destinationTime,
+      duration: row.duration,
+      speed: row.speed,
+      altitude: row.altitude,
+      route: row.route,
+      raw: row.raw,
+      parsed: row.parsed,
+      source: row.source,
+    },
+  };
+}
+
+async function loadAftnMessages(
+  airportId: string,
+  from: Date,
+  to: Date,
+): Promise<TimelineEvent[]> {
+  const rows = await db
+    .select()
+    .from(aftnMessages)
+    .where(aftnWindowFilter(airportId, from, to));
+
+  return rows.map(aftnRowToEvent);
 }
 
 async function loadAircraftTracks(

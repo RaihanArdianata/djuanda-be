@@ -19,6 +19,19 @@ describe("parsePbk", () => {
     expect(events.map((e) => e.ts)).toEqual([1000, 2000, 3000]);
   });
 
+  it("menerima event aftn", () => {
+    const events = parsePbk(
+      pbk(header, {
+        type: "aftn",
+        ts: 1,
+        timestamp: "1970-01-01T00:00:00.001Z",
+        data: { messageType: "FPL" },
+      }),
+    );
+
+    expect(events[0].type).toBe("aftn");
+  });
+
   it("rejects data that is not gzip", () => {
     expect(() => parsePbk(Buffer.from("not gzip"))).toThrow("valid gzip");
   });

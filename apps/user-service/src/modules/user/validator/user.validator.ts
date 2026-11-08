@@ -27,6 +27,7 @@ export const createUserSchema = z.object({
 export type CreateUserParams = z.infer<typeof createUserSchema>;
 
 export const updateUserSchema = z.object({
+  username: z.string().min(1).max(255).optional(),
   name: z.string().min(1).max(255).optional(),
   email: z.email().min(1).max(255).optional(),
   phone: z.string().min(1).max(20).optional(),

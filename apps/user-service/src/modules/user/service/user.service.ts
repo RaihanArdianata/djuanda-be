@@ -266,7 +266,14 @@ export async function updateUser(
       });
     }
 
-    await tx.update(users).set(data).where(eq(users.id, id));
+    const { role, ...userData } = data;
+    await tx
+      .update(users)
+      .set({
+        ...userData,
+        ...(role !== undefined ? { roleId: role } : {}),
+      })
+      .where(eq(users.id, id));
 
     const updatedUser = await tx.query.users.findFirst({
       where: eq(users.id, id),

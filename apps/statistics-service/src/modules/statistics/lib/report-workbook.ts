@@ -865,23 +865,48 @@ export function verificationHistoryText(
     .join(String.fromCharCode(10));
 }
 
+/** `K-007 (2/3)`: kejadian ke-7, alert ke-2 dari 3. Tanpa kejadian ditulis strip. */
+export function incidentLabel(incident: AlertDetail["incident"]): string {
+  if (!incident) return DASH;
+  const number = String(incident.number).padStart(3, "0");
+  return `K-${number} (${incident.position}/${incident.size})`;
+}
+
+/** 0 atau 1 per baris, berganti tiap kali kejadiannya berganti; alert tanpa kejadian selalu berganti. */
+function incidentBands(
+  rows: ReadonlyArray<Pick<AlertDetail, "incident">>,
+): number[] {
+  let band = 0;
+  let previous: number | null = null;
+  return rows.map((d, i) => {
+    const number = d.incident?.number ?? null;
+    if (i > 0 && (number === null || number !== previous)) band = 1 - band;
+    previous = number;
+    return band;
+  });
+}
+
 function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
   const { result } = ctx;
   const ws = wb.addWorksheet(SHEET.alertLog);
   configureSheet(ws, { tab: TAB.log, freezeRow: 5, printTitleRow: 5 });
-  setWidths(ws, [7, 22, 28, 16, 12, 70, 18, 20, 22, 36, 60]);
+  setWidths(ws, [7, 22, 16, 28, 16, 12, 70, 18, 20, 22, 36, 60]);
 
   const rows = allAlertDetails(result.alerts);
+  const incidentCount = new Set(
+    rows.flatMap((d) => (d.incident ? [d.incident.number] : [])),
+  ).size;
   writeTitleBlock(
     ws,
     7,
     "LOG ALERT",
     subtitle(ctx),
-    `${rows.length.toLocaleString("id-ID")} alert, terbaru di atas. Waktu dalam WIB. Gunakan filter pada judul kolom untuk menyaring.`,
+    `${rows.length.toLocaleString("id-ID")} alert${incidentCount > 0 ? ` dalam ${incidentCount.toLocaleString("id-ID")} kejadian` : ""}, kejadian terbaru di atas dan alert satu kejadian berdampingan. Waktu dalam WIB. Gunakan filter pada judul kolom untuk menyaring.`,
   );
   writeHeaderRow(ws, 5, [
     "No.",
     "Waktu (WIB)",
+    "Kejadian",
     "Kategori",
     "Callsign",
     "Keparahan",
@@ -893,6 +918,8 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
     "Riwayat Verifikasi",
   ]);
 
+  // Warna selang-seling per kejadian (bukan per baris) supaya alert satu kejadian terlihat sebagai satu kelompok.
+  const bands = incidentBands(rows);
   rows.forEach((d, i) => {
     const severity = d.severity.toUpperCase();
     const critical = severity === "CRITICAL";
@@ -906,6 +933,7 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
           fmt: FMT.dateTime,
           align: "left",
         },
+        { value: incidentLabel(d.incident), align: "center" },
         { value: d.category },
         { value: d.callsign ?? DASH },
         {
@@ -928,7 +956,7 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
         { value: d.verification.note ?? DASH, wrap: true },
         { value: verificationHistoryText(d.verification.history), wrap: true },
       ],
-      i % 2 === 1,
+      bands[i] === 1,
     );
   });
 
@@ -942,7 +970,7 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
   } else {
     ws.autoFilter = {
       from: { row: 5, column: 2 },
-      to: { row: 5 + rows.length, column: 12 },
+      to: { row: 5 + rows.length, column: 13 },
     };
   }
 }

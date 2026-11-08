@@ -161,29 +161,56 @@ describe("buildOperationalReport", () => {
     const ws = sheet(await roundTrip(), "Log Alert");
     expect(text(ws, "B5")).toBe("No.");
     expect(ws.getCell("C6").value).toEqual(new Date("2026-11-02T05:10:00Z"));
-    expect(text(ws, "D6")).toBe("Short Term Conflict (STCA)");
-    expect(text(ws, "F6")).toBe("Critical");
-    expect(text(ws, "E8")).toBe("—"); // alert without callsign
-    expect(text(ws, "F8")).toBe("Warning");
+    expect(text(ws, "E6")).toBe("Short Term Conflict (STCA)");
+    expect(text(ws, "G6")).toBe("Critical");
+    expect(text(ws, "F8")).toBe("—"); // alert without callsign
+    expect(text(ws, "G8")).toBe("Warning");
+  });
+
+  it("puts the alerts of one incident side by side, newest incident first, each labelled K-nnn (position/size)", async () => {
+    const result = sampleReportResult();
+    const [a, b] = result.alerts.stca.details;
+    const [c] = result.alerts.ria.details;
+    if (!a || !b || !c) throw new Error("fixture changed");
+    // `b` (older, 21:00) and `c` (10:30) are one incident that ended later than `a`'s own incident
+    a.incident = { number: 2, size: 1, position: 1, endAt: Date.parse(a.time) };
+    b.incident = {
+      number: 1,
+      size: 2,
+      position: 2,
+      endAt: Date.parse("2026-11-02T06:00:00+07:00"),
+    };
+    c.incident = {
+      number: 1,
+      size: 2,
+      position: 1,
+      endAt: Date.parse("2026-11-02T06:00:00+07:00"),
+    };
+    const ws = sheet(await roundTrip(result), "Log Alert");
+    expect(text(ws, "D5")).toBe("Kejadian");
+    // the incident that ended last comes first, its alerts oldest first
+    expect(text(ws, "D6")).toBe("K-001 (1/2)");
+    expect(text(ws, "D7")).toBe("K-001 (2/2)");
+    expect(text(ws, "D8")).toBe("K-002 (1/1)");
   });
 
   it("writes the verification of each alert next to its description, with the history one step per line", async () => {
     const ws = sheet(await roundTrip(), "Log Alert");
-    expect(text(ws, "H5")).toBe("Status Verifikasi");
-    expect(text(ws, "L5")).toBe("Riwayat Verifikasi");
+    expect(text(ws, "I5")).toBe("Status Verifikasi");
+    expect(text(ws, "M5")).toBe("Riwayat Verifikasi");
     // newest first: the 2026-11-02 05:10 STCA is the verified one
-    expect(text(ws, "H6")).toBe("Valid alert");
-    expect(text(ws, "I6")).toBe("Budi");
-    expect(text(ws, "K6")).toBe("Dikonfirmasi tower");
-    const history = text(ws, "L6").split(String.fromCharCode(10));
+    expect(text(ws, "I6")).toBe("Valid alert");
+    expect(text(ws, "J6")).toBe("Budi");
+    expect(text(ws, "L6")).toBe("Dikonfirmasi tower");
+    const history = text(ws, "M6").split(String.fromCharCode(10));
     expect(history).toHaveLength(2);
     expect(history[0]).toContain("Sari");
     expect(history[0]).toContain("Belum diverifikasi → False alert");
     expect(history[1]).toContain("False alert → Valid alert");
     // an alert nobody has looked at
-    expect(text(ws, "H7")).toBe("Belum diverifikasi");
-    expect(text(ws, "I7")).toBe("—");
-    expect(text(ws, "L7")).toBe("—");
+    expect(text(ws, "I7")).toBe("Belum diverifikasi");
+    expect(text(ws, "J7")).toBe("—");
+    expect(text(ws, "M7")).toBe("—");
   });
 
   it("writes the movement log with one row per aircraft, hour and type", async () => {

@@ -3,6 +3,8 @@ import {
   type AlertDetailRow,
   formatMeters,
   formatNm,
+  groupAlertDetails,
+  incidentRefs,
   normalizeAlertRow,
   readVerification,
   summarizeIncidents,
@@ -324,5 +326,41 @@ describe("summarizeIncidents", () => {
     ]);
     expect(summary.total).toBe(1);
     expect(summary.byCategory.stca).toBe(1);
+  });
+});
+
+describe("incident of each alert", () => {
+  const at = (hhmmss: string) => `2026-11-08T${hhmmss}+07:00`;
+  const rows = [
+    row(
+      "AREA_PENETRATION",
+      { callsign: "CTV494" },
+      { alert_id: "a1", time: at("19:27:00") },
+    ),
+    row(
+      "RUNWAY_INCURSION",
+      { callsign: "CTV494" },
+      { alert_id: "a2", time: at("19:33:00") },
+    ),
+    row(
+      "AREA_PENETRATION",
+      { callsign: "GIA1" },
+      { alert_id: "b1", time: at("18:00:00") },
+    ),
+  ];
+
+  it("numbers incidents from the oldest and puts each alert in order inside its incident", () => {
+    const refs = incidentRefs(rows);
+    expect(refs.get("b1")).toMatchObject({ number: 1, size: 1, position: 1 });
+    expect(refs.get("a1")).toMatchObject({ number: 2, size: 2, position: 1 });
+    expect(refs.get("a2")).toMatchObject({ number: 2, size: 2, position: 2 });
+  });
+
+  it("hands the incident to each normalized alert", () => {
+    const grouped = groupAlertDetails(rows);
+    expect(grouped.apa.find((d) => d.alertId === "a1")?.incident?.number).toBe(
+      2,
+    );
+    expect(grouped.ria[0]?.incident?.position).toBe(2);
   });
 });

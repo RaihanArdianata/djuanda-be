@@ -173,6 +173,10 @@ Bukan pendeteksi: aturan konfigurasi **area alert bandara**. Alert hanya berlaku
 - Untuk aturan yang belum ada di database, isi tanpa menyentuh aturan lain: `SEED_RULE_TYPES=ALERT_AREA bun run --cwd packages/database seed:alerts` (seed penuh menimpa konfigurasi aturan yang tidak ditandai `preserveConfiguration`). Tanpa aturan, `ALERT_AREA_CENTER` saja sudah cukup untuk menyalakan batas area dengan radius bawaan.
 - Jumlah target yang dikeluarkan dihitung di metrik `alert_tracks_outside_area_total`. Alert cuaca tidak terpengaruh.
 
+### Status aerodrome (segmen terisi)
+
+Segmen runway, taxiway, dan apron berstatus terisi selama ada track di darat yang laporan terakhirnya kurang dari 60 detik dan berada di dalam poligonnya (ditambah `occupancyStickyMs`). Track yang dipakai adalah yang masuk lewat Kafka (`asmgcs.tracks`), bukan gambaran udara yang dikirim ke klien, dan track tanpa flag darat dan tanpa ketinggian dihitung berada di darat. Siaran SSE `aerodrome` (`AERODROME_STATUS_UPDATED`) memuat `features[].aircraftIds` dan `occupants`: track penghuni dengan `trackId`, `callsign`, posisi, kecepatan, `onGround`, `ageMs`, dan `polygonIds`. Klien membandingkan `occupants` dengan yang ia gambar untuk menemukan segmen terisi tanpa pesawat.
+
 ### ALERT_ENGINE
 
 Bukan pendeteksi: penyetelan engine alert yang bisa diubah operator tanpa restart. Env yang sama menjadi nilai awal, isian aturan menggantikannya, dan yang dikosongkan kembali ke env.

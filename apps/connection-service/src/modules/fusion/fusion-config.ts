@@ -42,6 +42,26 @@ function positive(
   return fallback;
 }
 
+/** Zero or more: `0` switches the setting off. The default (with a warning) when set but unusable. */
+function nonNegative(
+  env: Env,
+  key: string,
+  fallback: number,
+  warnings: string[],
+): number {
+  const raw = str(env[key]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n >= 0) return n;
+  warnings.push(
+    `${key}="${raw}" is not a number of 0 or more — using ${fallback}`,
+  );
+  return fallback;
+}
+
+/** The sticky window of the fuser; needs @aeroswarm/live-server with `stickyMs` (older versions ignore it). */
+const DEFAULT_STICKY_MS = 10_000;
+
 const isOff = (raw: string | undefined): boolean =>
   ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
 
@@ -57,6 +77,7 @@ const isOn = (raw: string | undefined): boolean =>
  *   FUSION_AIRBORNE_PRIORITY    same, for aircraft in the air
  *   FUSION_MAX_SOURCE_AGE_MS    sensor silent this long stops competing (5000)
  *   FUSION_FORGET_AFTER_MS      sensor forgotten after this long (600000)
+ *   FUSION_STICKY_MS            among sensors of the same priority (e.g. many radars) the one shown stays this long (10000; 0 = off)
  *   FUSION_SPATIAL              also match tracks without a shared Mode-S address (false)
  *   FUSION_MATCH_RADIUS_M       ... within this distance (150)
  *   FUSION_MATCH_MAX_SKEW_MS    ... and this time difference (3000)
@@ -65,6 +86,12 @@ const isOn = (raw: string | undefined): boolean =>
 export function fusionConfigFromEnv(env: Env): FusionConfig {
   const warnings: string[] = [];
   const d = defaultFusionOptions();
+  const stickyMs = nonNegative(
+    env,
+    "FUSION_STICKY_MS",
+    (d as { stickyMs?: number }).stickyMs ?? DEFAULT_STICKY_MS,
+    warnings,
+  );
   return {
     enabled: !isOff(env.FUSION_ENABLED),
     warnings,
@@ -89,6 +116,7 @@ export function fusionConfigFromEnv(env: Env): FusionConfig {
         d.forgetAfterMs,
         warnings,
       ),
+      ...{ stickyMs },
       spatial: isOn(env.FUSION_SPATIAL),
       matchRadiusM: positive(
         env,

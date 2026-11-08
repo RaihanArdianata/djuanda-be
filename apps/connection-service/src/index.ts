@@ -16,6 +16,7 @@ import { app } from "./app";
 import { verifyToken } from "./modules/auth/token";
 import { startAftnFeeds, stopAftnFeeds } from "./modules/feed/aftn-feed";
 import {
+  type FeedDropInfo,
   getFeedStates,
   startAsterixFeeds,
   stopAsterixFeeds,
@@ -82,6 +83,8 @@ import {
   createMovementRecorder,
   toMovementIngestEvent,
 } from "./modules/movement/movement-recorder";
+import { registerTraceRoute } from "./modules/trace/trace.route";
+import { createTraceStore } from "./modules/trace/trace-store";
 import { registerTrailRoute } from "./modules/trail/trail.route";
 import { trailConfigFromEnv } from "./modules/trail/trail-config";
 import { registerTrailStatMetrics } from "./modules/trail/trail-metrics";
@@ -304,10 +307,73 @@ restoreIdentities(identityMemory, fetchStoredIdentities)
   );
 setInterval(() => identityMemory.sweep(), 60_000).unref?.();
 
+// Penelusuran pesawat (GET /aero/trace?q=GIA322): di tahap mana sebuah pesawat terakhir terlihat atau dibuang.
+const trace = createTraceStore();
+registerTraceRoute({
+  store: trace,
+  authenticate: (token: string | null): boolean => verifyToken(token) !== null,
+});
+/** trackId -> identitas, supaya penghapusan di gambaran udara (yang hanya membawa trackId) tercatat pada pesawat yang sama. */
+const traceIdentity = new Map<string, { icao24?: string; callsign?: string }>();
+const sensorOf = (event: FusedTrackEvent): string => {
+  const ds = event.dataSource;
+  return `${event.protocol}${ds ? ` ${ds.sac}:${ds.sic}` : ""}`;
+};
+liveRuntime.state.on("removed", ({ trackId, reason }) => {
+  trace.record({
+    ...traceIdentity.get(trackId),
+    trackId,
+    stage: "gambaran-udara",
+    outcome: `dihapus: ${reason}`,
+    detail:
+      reason === "exited"
+        ? "keluar dari area cakupan surveilans"
+        : reason === "filtered"
+          ? "di luar area cakupan dan tidak menuju ke dalamnya"
+          : reason === "superseded"
+            ? "digantikan track lain dengan alamat Mode-S yang sama"
+            : undefined,
+  });
+});
+
 startAsterixFeeds({
+  onDrop: (info: FeedDropInfo): void => {
+    trace.record({
+      icao24: info.icao24,
+      callsign: info.callsign,
+      stage: "ingest",
+      outcome: `dibuang: ${info.reason}`,
+      detail: info.detail,
+      sensor: `CAT${info.category} ${info.sac ?? "?"}:${info.sic ?? "?"}`,
+    });
+  },
   fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
     const normalized = applySurfaceState(identityMemory.fill(event));
+    const identity = {
+      icao24: normalized.identity?.icao24,
+      callsign: normalized.identity?.callsign,
+    };
+    trace.record({
+      ...identity,
+      trackId: normalized.trackId,
+      stage: "ingest",
+      outcome: "diterima",
+      sensor: sensorOf(normalized),
+      lat: normalized.position?.lat,
+      lon: normalized.position?.lon,
+      alt: normalized.position?.alt,
+      onGround: normalized.position?.onGround,
+    });
     const out = fuser ? fuser.ingest(normalized) : normalized;
+    trace.record({
+      ...identity,
+      trackId: normalized.trackId,
+      stage: "fusi",
+      outcome: out ? "dipakai" : "ditahan",
+      detail: out
+        ? `sumber: ${out.sources.join(", ")}`
+        : "sensor lain yang sedang ditampilkan",
+    });
     if (out && out.lifecycle !== "dropped") {
       surfaceStates.set(out.trackId, out.position?.onGround);
     }
@@ -328,6 +394,26 @@ startAsterixFeeds({
       feedMetrics.tracksDecoded.inc();
       primaryFeedGate.seen(event.identity?.icao24);
       liveRuntime.feedHandlers.onTrack?.(event);
+      // Apa yang terjadi pada track ini di gambaran udara yang dikirim ke klien.
+      const shown = liveRuntime.state.get(event.trackId);
+      traceIdentity.set(event.trackId, {
+        icao24: event.identity?.icao24,
+        callsign: event.identity?.callsign,
+      });
+      if (traceIdentity.size > 20_000) traceIdentity.clear();
+      trace.record({
+        ...traceIdentity.get(event.trackId),
+        trackId: event.trackId,
+        stage: "gambaran-udara",
+        outcome: shown ? `tampil (${shown.status})` : "tidak masuk",
+        detail: shown
+          ? undefined
+          : "ditolak oleh area cakupan surveilans, atau ditekan setelah keluar dari area",
+        lat: event.position?.lat,
+        lon: event.position?.lon,
+        alt: event.position?.alt,
+        onGround: event.position?.onGround,
+      });
       movements.evaluate(event);
     },
     onHealth: (event: SourceHealthEvent): void => {

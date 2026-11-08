@@ -60,12 +60,34 @@ export interface PolygonOccupancy {
   aircraftCount: number;
 }
 
+/**
+ * Track yang membuat polygon aerodrome berstatus terisi, beserta posisinya. Ikut dalam siaran status aerodrome supaya klien bisa
+ * membandingkannya dengan track yang sedang ia gambar: segmen hijau tanpa pesawat di peta berarti ada track di sini yang tidak sampai
+ * ke klien.
+ */
+export interface OccupantTrack {
+  trackId: string;
+  callsign?: string;
+  targetType?: string;
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  groundSpeed?: number;
+  onGround?: boolean;
+  /** Umur laporan terakhir menurut jam proses (ms). */
+  ageMs: number;
+  /** Polygon yang ditempatinya. */
+  polygonIds: string[];
+}
+
 export interface AerodromeContextData {
   features: AerodromeFeatureContext[];
   /** Occupancy generic untuk SEMUA polygon feature (runway, taxiway, apron,
    *  dan layer polygon lainnya) — dihitung dari posisi track terkini, bukan
    *  event masuk. */
   occupancy?: PolygonOccupancy[];
+  /** Track yang menempati polygon mana pun (lihat OccupantTrack). */
+  occupants?: OccupantTrack[];
   runways: {
     id: string;
     name: string | null;

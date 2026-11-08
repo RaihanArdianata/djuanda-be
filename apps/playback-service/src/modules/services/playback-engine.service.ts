@@ -10,7 +10,7 @@ import {
   getSessionRecord,
   saveSessionRecord,
 } from "./playback-session.service";
-import { cursorIndexAfterSeek } from "./timeline-cursor";
+import { contextInForceAtSeek, cursorIndexAfterSeek } from "./timeline-cursor";
 
 const TICK_MS = Number(process.env.PLAYBACK_TICK_MS ?? 500);
 
@@ -115,6 +115,12 @@ export async function applyControl(
         session.cursor,
       );
       await saveSessionRecord(session);
+      for (const event of contextInForceAtSeek(
+        engine.timeline,
+        session.cursor,
+      )) {
+        await redis.publish(streamChannel(sessionId), JSON.stringify(event));
+      }
       break;
     }
     case "set_speed": {

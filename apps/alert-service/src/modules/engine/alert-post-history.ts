@@ -1,4 +1,10 @@
 import {
+  admit,
+  type GatePoint,
+  type GateState,
+  newGateState,
+} from "./track-gate";
+import {
   getTrackKey,
   resolveTrackKey,
   type TrackHistoryRecord,
@@ -14,6 +20,29 @@ const postHistoryMain = new Map<string, TrackHistoryRecord[]>();
 const postHistoryRelated = new Map<string, TrackHistoryRecord[]>();
 const alertTracks = new Map<string, AlertTrackRefs>();
 const trackToAlerts = new Map<string, Set<string>>();
+// Hitungan laporan yang ditolak berturut-turut per alert dan sisi (lihat track-gate).
+const gates = new Map<string, GateState>();
+
+function admitted(
+  alertId: string,
+  kind: "main" | "related",
+  last: TrackHistoryRecord | undefined,
+  next: TrackHistoryRecord,
+): boolean {
+  const id = `${alertId}:${kind}`;
+  let gate = gates.get(id);
+  if (!gate) {
+    gate = newGateState();
+    gates.set(id, gate);
+  }
+  const point = (r: TrackHistoryRecord): GatePoint => ({
+    latitude: r.latitude,
+    longitude: r.longitude,
+    groundSpeed: r.groundSpeed,
+    at: Date.parse(r.timestamp),
+  });
+  return admit(last ? point(last) : undefined, point(next), gate);
+}
 
 function toRecord(track: MovementTrack): TrackHistoryRecord {
   return {
@@ -79,6 +108,20 @@ function isSamePoint(a: TrackHistoryRecord, b: TrackHistoryRecord): boolean {
   );
 }
 
+function appendTo(
+  alertId: string,
+  kind: "main" | "related",
+  list: TrackHistoryRecord[] | undefined,
+  record: TrackHistoryRecord,
+): PostHistoryAppendResult | undefined {
+  if (!list) return undefined;
+  const last = list[list.length - 1];
+  if (last && isSamePoint(last, record)) return undefined;
+  if (!admitted(alertId, kind, last, record)) return undefined;
+  list.push(record);
+  return { alertId, kind, record };
+}
+
 export function appendPostHistory(
   alertId: string,
   track: MovementTrack,
@@ -90,23 +133,16 @@ export function appendPostHistory(
   const key = resolveTrackKey(track);
 
   if (refs.main && key === refs.main) {
-    const list = postHistoryMain.get(alertId);
-    if (!list) return undefined;
-    const last = list[list.length - 1];
-    if (last && isSamePoint(last, record)) return undefined;
-    list.push(record);
-    return { alertId, kind: "main", record };
+    return appendTo(alertId, "main", postHistoryMain.get(alertId), record);
   }
-
   if (refs.related && key === refs.related) {
-    const list = postHistoryRelated.get(alertId);
-    if (!list) return undefined;
-    const last = list[list.length - 1];
-    if (last && isSamePoint(last, record)) return undefined;
-    list.push(record);
-    return { alertId, kind: "related", record };
+    return appendTo(
+      alertId,
+      "related",
+      postHistoryRelated.get(alertId),
+      record,
+    );
   }
-
   return undefined;
 }
 
@@ -126,6 +162,8 @@ export function flushPostHistory(alertId: string): {
 
   postHistoryMain.delete(alertId);
   postHistoryRelated.delete(alertId);
+  gates.delete(`${alertId}:main`);
+  gates.delete(`${alertId}:related`);
 
   const refs = alertTracks.get(alertId);
   if (refs) {

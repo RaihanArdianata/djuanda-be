@@ -477,3 +477,45 @@ export const findAlertsByAlertIds = async (
         .where(
           and(inArray(alerts.alertId, alertIds), isNull(alerts.deletedAt)),
         );
+
+/** Alert terakhir untuk entitas ini yang selesai sejak `since`; null bila tidak ada. Entitas dikenali dari `data.entityKey` yang disimpan saat alert dibuat. */
+export const findRecentlyClearedAlert = async (
+  airportId: string,
+  type: string,
+  entityKey: string,
+  since: Date,
+): Promise<Alert | undefined> => {
+  const [row] = await db
+    .select()
+    .from(alerts)
+    .where(
+      and(
+        eq(alerts.airportId, airportId),
+        eq(alerts.type, type),
+        eq(alerts.status, "CLEARED"),
+        isNull(alerts.deletedAt),
+        gte(alerts.clearedAt, since),
+        sql`${alerts.data} ->> 'entityKey' = ${entityKey}`,
+      ),
+    )
+    .orderBy(desc(alerts.clearedAt))
+    .limit(1);
+  return row;
+};
+
+/** Buka kembali alert yang selesai: aktif lagi, jejak penyelesaiannya dihapus, dan hitungan pembukaan ulang naik. */
+export const reopenAlert = async (id: string): Promise<Alert | undefined> => {
+  const [row] = await db
+    .update(alerts)
+    .set({
+      status: "ACTIVE",
+      clearedAt: null,
+      clearedBy: null,
+      clearReason: null,
+      updatedAt: new Date(),
+      data: sql`jsonb_set(${alerts.data}, '{reopenCount}', (coalesce((${alerts.data} ->> 'reopenCount')::int, 0) + 1)::text::jsonb)`,
+    })
+    .where(eq(alerts.id, id))
+    .returning();
+  return row;
+};

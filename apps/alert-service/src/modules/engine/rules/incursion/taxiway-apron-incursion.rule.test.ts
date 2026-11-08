@@ -187,4 +187,49 @@ describe("taxiwayApronIncursionRule", () => {
 
     expect(results.length).toBe(0);
   });
+
+  describe("two tracks on one taxiway", () => {
+    const at = (id: string, lon: number) => ({
+      trackId: id,
+      airportId: "WARR",
+      targetType: "AIRCRAFT",
+      latitude: -7.375,
+      longitude: lon,
+      timestamp: now,
+    });
+    // about 0.0009 degrees of longitude = 100 m at this latitude
+    const metres = (m: number) => 112.775 + m / 110_400;
+    const evaluate = (apartM: number, config: Record<string, unknown> = {}) =>
+      taxiwayApronIncursionRule.evaluate(
+        {
+          airportId: "WARR",
+          timestamp: now,
+          tracks: [at("A", 112.775), at("B", metres(apartM))],
+        },
+        { surfaces: [{ ...surface, status: "ACTIVE" }], ...config },
+      );
+
+    test("alerts whatever the spacing by default, as before", () => {
+      expect(evaluate(400).length).toBeGreaterThan(0);
+    });
+
+    test("does not alert for aircraft following each other far apart once a taxiway proximity is set", () => {
+      expect(evaluate(400, { taxiwayProximityMeters: 100 })).toHaveLength(0);
+    });
+
+    test("still alerts when they are within that proximity", () => {
+      expect(
+        evaluate(60, { taxiwayProximityMeters: 100 }).length,
+      ).toBeGreaterThan(0);
+    });
+
+    test("ignores a proximity that is not a positive number", () => {
+      expect(
+        evaluate(400, { taxiwayProximityMeters: 0 }).length,
+      ).toBeGreaterThan(0);
+      expect(
+        evaluate(400, { taxiwayProximityMeters: "x" }).length,
+      ).toBeGreaterThan(0);
+    });
+  });
 });

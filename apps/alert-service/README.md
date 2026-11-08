@@ -9,6 +9,8 @@ Di `packages/database/seed-alert-rules.ts` sudah disiapkan 5 aturan aktif untuk 
 | `STCA` | HIGH | Short Term Conflict Alert: 2 track terlalu dekat prediksi 60 detik. |
 | `RUNWAY_INCURSION` | CRITICAL | Track masuk ke polygon runway yang sedang `active`. |
 | `TAXIWAY_APRON_INCURSION` | WARNING | Track di luar expected route atau masuk polygon taxiway/apron. |
+
+Untuk `TAXIWAY_APRON_INCURSION`, dua pesawat di satu taxiway secara bawaan sudah dihitung konflik berapa pun jaraknya (antre dan saling mengikuti ikut terhitung, dan ini penyumbang terbanyak alert: 91% dari seluruh alert). Isi `taxiwayProximityMeters` di aturannya (mis. 100) supaya taxiway, seperti apron, baru memicu alert bila keduanya sedekat itu. Kosong atau 0 = perilaku lama.
 | `AREA_PENETRATION` | WARNING | Track masuk restricted area. |
 | `DEVIATION` | WARNING | Track menyimpang dari expected route (horizontal, altitude, waktu). |
 
@@ -194,6 +196,7 @@ Bukan pendeteksi: penyetelan engine alert yang bisa diubah operator tanpa restar
 - `twinMaxSpeedDiffKt` (`ALERT_TWIN_MAX_SPEED_DIFF_KT`): selisih kecepatan paling besar untuk itu.
 - `staleGraceSeconds` (`ALERT_STALE_GRACE_SECONDS`): masa tenggang sebelum alert yang kandidatnya hilang dibersihkan.
 - `occupancyStickyMs` (`ALERT_OCCUPANCY_STICKY_MS`): lama runway/taxiway tetap terisi setelah target terakhir terlihat.
+- `reopenWindowSeconds` (bawaan 0 = mati): entitas yang sama muncul lagi dalam sekian detik setelah alertnya selesai, alert lama dibuka kembali (status `ACTIVE`, `data.reopenCount` naik) dan tidak dibuat yang baru. Data awal menunjukkan 81% jeda antar alert di bawah satu menit; nilai 120 detik layak dicoba. Pembuka alert lama tidak menulis aksi di `alert_actions`.
 
 ### RUNWAY_INCURSION
 

@@ -141,6 +141,7 @@ function collectConflictCandidates(
   inside: MovementTrack[],
   ctx: Pick<AlertContext, "airportId" | "timestamp">,
   criticalMeters: number,
+  taxiwayProximityMeters: number,
 ): AlertCandidate[] {
   const entrants = inside.filter((t) =>
     isTrackEnteringSurface(t, surface.polygon),
@@ -156,12 +157,16 @@ function collectConflictCandidates(
   // the stricter shared-surface semantics: two tracks on one taxiway is
   // already a conflict regardless of spacing.
   const isApron = surface.type === "APRON";
+  // Dua pesawat di satu taxiway (antre, mengikuti) umumnya normal. Bila `taxiwayProximityMeters` diisi, taxiway juga hanya dihitung
+  // bila keduanya sedekat itu; kosong/0 = perilaku lama (berbagi taxiway saja sudah konflik).
+  const needsProximity = isApron || taxiwayProximityMeters > 0;
+  const proximityMeters = isApron ? criticalMeters : taxiwayProximityMeters;
   const isTooClose = (t: MovementTrack): boolean =>
     inside.some(
       (o) =>
         o.trackId !== t.trackId &&
         haversineMeters([t.latitude, t.longitude], [o.latitude, o.longitude]) <=
-          criticalMeters,
+          proximityMeters,
     );
 
   const intruders = (
@@ -169,7 +174,7 @@ function collectConflictCandidates(
       ? entrants
       : inside.filter((t) => t.trackId !== occupant.trackId)
   ).filter(
-    (t) => t.trackId !== occupant.trackId && (!isApron || isTooClose(t)),
+    (t) => t.trackId !== occupant.trackId && (!needsProximity || isTooClose(t)),
   );
 
   const candidates: AlertCandidate[] = [];
@@ -191,6 +196,11 @@ function evaluateSurfaces(
   const candidates: AlertCandidate[] = [];
   const criticalMeters =
     (config.criticalSeparationMeters as number | undefined) ?? 50;
+  const proximity = config.taxiwayProximityMeters;
+  const taxiwayProximityMeters =
+    typeof proximity === "number" && Number.isFinite(proximity) && proximity > 0
+      ? proximity
+      : 0;
 
   for (const surface of surfaces) {
     const inside = tracks.filter(
@@ -213,7 +223,13 @@ function evaluateSurfaces(
     }
 
     candidates.push(
-      ...collectConflictCandidates(surface, inside, ctx, criticalMeters),
+      ...collectConflictCandidates(
+        surface,
+        inside,
+        ctx,
+        criticalMeters,
+        taxiwayProximityMeters,
+      ),
     );
   }
 

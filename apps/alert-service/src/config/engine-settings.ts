@@ -14,6 +14,11 @@ export interface EngineSettings {
   staleGraceSeconds: number;
   /** Permukaan tetap OCCUPIED sebanyak ini (ms) setelah track terakhir terlihat di dalam. */
   occupancyStickyMs: number;
+  /**
+   * Kejadian yang sama muncul lagi dalam sekian detik setelah alertnya selesai: alert lama dibuka kembali, bukan dibuat yang baru.
+   * Memicu ulang dalam hitungan detik (81% jeda antar alert di bawah semenit) membengkakkan jumlah alert. 0 = mati (bawaan).
+   */
+  reopenWindowSeconds: number;
 }
 
 export const ENGINE_RULE_TYPE = "ALERT_ENGINE";
@@ -45,6 +50,7 @@ export function engineSettingsFromEnv(
     ),
     staleGraceSeconds: alertServiceEnv.staleGraceSeconds,
     occupancyStickyMs: alertServiceEnv.occupancyStickyMs,
+    reopenWindowSeconds: 0,
   };
 }
 
@@ -66,6 +72,10 @@ export function resolveEngineSettings(
     occupancyStickyMs: nonNegative(
       config?.occupancyStickyMs,
       base.occupancyStickyMs,
+    ),
+    reopenWindowSeconds: nonNegative(
+      config?.reopenWindowSeconds,
+      base.reopenWindowSeconds,
     ),
   };
 }

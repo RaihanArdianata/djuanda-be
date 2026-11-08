@@ -25,12 +25,20 @@ import {
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getAirportTracks } from "../../context/surveillance.context";
 import {
+  findRecentlyClearedAlert,
+  reopenAlert,
+} from "../alert/repository/alert.repository";
+import {
   type AlertTrackHistoryPoint,
   recordAlertTrackHistory,
   registerAlert,
 } from "../alert/service/alert.service";
 import { broadcastAerodromeStatus } from "./aerodrome-status.service";
-import { clearAlertByAlertId, publishAlertCreated } from "./alert.lifecycle";
+import {
+  clearAlertByAlertId,
+  publishAlertCreated,
+  publishAlertUpdated,
+} from "./alert.lifecycle";
 import {
   ALERT_AREA_RULE_TYPE,
   alertAreaFrom,
@@ -193,6 +201,54 @@ function collectCandidates(
 
 const PENDING_CLAIM_VALUE = "__pending__";
 
+/**
+ * Entitas yang sama muncul lagi tak lama setelah alertnya selesai (jitter di batas area, track yang putus sebentar): buka kembali alert
+ * lama, bukan buat yang baru. Mati selama `reopenWindowSeconds` = 0. Mengembalikan alert yang dibuka, atau null bila tidak ada.
+ */
+async function reopenRecentAlert(
+  candidate: AlertCandidate,
+  airportId: string,
+  entityKey: string,
+): Promise<Alert | null> {
+  const windowSeconds = engineSettings.reopenWindowSeconds;
+  if (windowSeconds <= 0) return null;
+  try {
+    const previous = await findRecentlyClearedAlert(
+      airportId,
+      candidate.type,
+      entityKey,
+      new Date(Date.now() - windowSeconds * 1000),
+    );
+    if (!previous) return null;
+    const reopened = await reopenAlert(previous.id);
+    if (!reopened) return null;
+
+    await setActiveAlert(
+      airportId,
+      candidate.type,
+      entityKey,
+      reopened.alertId,
+    );
+    await publishAlertUpdated(reopened);
+    startPostHistory(
+      reopened.alertId,
+      buildEntityKey({ trackId: reopened.trackId }),
+      reopened.relatedTrackId
+        ? buildEntityKey({ trackId: reopened.relatedTrackId })
+        : null,
+    );
+    logger.info(
+      { alertId: reopened.alertId, type: reopened.type, airportId },
+      "alert reopened",
+    );
+    return reopened;
+  } catch (err) {
+    // Gagal membuka kembali tidak boleh menghilangkan alert: lanjut membuat yang baru.
+    logger.warn({ err, type: candidate.type }, "failed to reopen alert");
+    return null;
+  }
+}
+
 async function registerCandidate(
   candidate: AlertCandidate,
   airportId: string,
@@ -217,6 +273,9 @@ async function registerCandidate(
     }
     return null;
   }
+
+  const reopened = await reopenRecentAlert(candidate, airportId, entityKey);
+  if (reopened) return reopened;
 
   const trackHistory = getTrackHistory(candidate.trackId, 20);
   const relatedTrackHistory = getTrackHistory(candidate.relatedTrackId, 20);

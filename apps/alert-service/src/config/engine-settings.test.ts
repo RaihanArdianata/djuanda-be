@@ -30,6 +30,7 @@ describe("resolveEngineSettings", () => {
     twinMaxSpeedDiffKt: 15,
     staleGraceSeconds: 20,
     occupancyStickyMs: 5000,
+    reopenWindowSeconds: 0,
   };
 
   it("lets the rule override the env values", () => {
@@ -40,7 +41,20 @@ describe("resolveEngineSettings", () => {
       twinMaxSpeedDiffKt: 15,
       staleGraceSeconds: 30,
       occupancyStickyMs: 5000,
+      reopenWindowSeconds: 0,
     });
+  });
+
+  it("reads the reopen window, which is off (0) unless the rule sets it", () => {
+    expect(resolveEngineSettings(undefined, base).reopenWindowSeconds).toBe(0);
+    expect(
+      resolveEngineSettings({ reopenWindowSeconds: 120 }, base)
+        .reopenWindowSeconds,
+    ).toBe(120);
+    expect(
+      resolveEngineSettings({ reopenWindowSeconds: -5 }, base)
+        .reopenWindowSeconds,
+    ).toBe(0);
   });
 
   it("ignores what is not a number or is negative, and accepts 0", () => {

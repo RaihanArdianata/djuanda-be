@@ -94,6 +94,11 @@ export function sampleReportResult(
       },
       taia: { count: 0, details: [] },
       total: 3,
+      incidents: {
+        total: 2,
+        byCategory: { stca: 1, apa: 0, da: 0, ria: 1, taia: 0 },
+        needsAction: 1,
+      },
     },
     trend: [
       {

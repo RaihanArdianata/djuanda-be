@@ -192,7 +192,7 @@ function highlights(ctx: Context): string[] {
   } else {
     const d = stats.dominantCategory;
     lines.push(
-      `Total ${result.alerts.total.toLocaleString("id-ID")} alert (${stats.alertCritical.toLocaleString("id-ID")} Critical, ${stats.alertWarning.toLocaleString("id-ID")} Warning).${d ? ` Kategori dominan: ${d.label} sebanyak ${d.count.toLocaleString("id-ID")} (${Math.round(pct(d.count, result.alerts.total) * 100)}%).` : ""}`,
+      `Total ${result.alerts.total.toLocaleString("id-ID")} alert${result.alerts.incidents.total > 0 ? `, setara ${result.alerts.incidents.total.toLocaleString("id-ID")} kejadian setelah alert yang sama digabung (${result.alerts.incidents.needsAction.toLocaleString("id-ID")} kejadian belum selesai dinilai)` : ""} (${stats.alertCritical.toLocaleString("id-ID")} Critical, ${stats.alertWarning.toLocaleString("id-ID")} Warning).${d ? ` Kategori dominan: ${d.label} sebanyak ${d.count.toLocaleString("id-ID")} (${Math.round(pct(d.count, result.alerts.total) * 100)}%).` : ""}`,
     );
     if (stats.peakAlert) {
       lines.push(

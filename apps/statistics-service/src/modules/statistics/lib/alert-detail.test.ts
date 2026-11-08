@@ -5,6 +5,7 @@ import {
   formatNm,
   normalizeAlertRow,
   readVerification,
+  summarizeIncidents,
 } from "./alert-detail";
 
 const row = (
@@ -260,5 +261,68 @@ describe("verification", () => {
     );
     expect(v.history).toHaveLength(1);
     expect(v.history[0]?.by).toBe("Sari");
+  });
+});
+
+describe("summarizeIncidents", () => {
+  const at = (
+    minute: number,
+    type: string,
+    over: Partial<AlertDetailRow> = {},
+    data: Record<string, unknown> = {},
+  ) =>
+    row(
+      type,
+      { callsign: "CTV494", ...data },
+      {
+        alert_id: `${type}|${minute}`,
+        time: `2026-11-08T19:${String(minute).padStart(2, "0")}:00+07:00`,
+        ...over,
+      },
+    );
+
+  it("counts one incident for a flow that raised several alerts of several types", () => {
+    const summary = summarizeIncidents([
+      at(27, "TAXIWAY_APRON_INCURSION"),
+      at(28, "AREA_PENETRATION"),
+      at(33, "RUNWAY_INCURSION", { severity: "CRITICAL" }),
+    ]);
+    expect(summary.total).toBe(1);
+    expect(summary.byCategory).toEqual({
+      stca: 0,
+      apa: 1,
+      da: 0,
+      ria: 1,
+      taia: 1,
+    });
+    expect(summary.needsAction).toBe(1);
+  });
+
+  it("starts another incident after a gap of more than 15 minutes, and keeps callsigns apart", () => {
+    const summary = summarizeIncidents([
+      at(0, "TAXIWAY_APRON_INCURSION"),
+      at(40, "TAXIWAY_APRON_INCURSION"),
+      at(41, "TAXIWAY_APRON_INCURSION", {}, { callsign: "GIA320" }),
+    ]);
+    expect(summary.total).toBe(3);
+  });
+
+  it("does not need action once every alert of the incident has been judged", () => {
+    const verified = { verification_status: "VERIFIED" };
+    expect(
+      summarizeIncidents([
+        at(0, "TAXIWAY_APRON_INCURSION", verified),
+        at(1, "AREA_PENETRATION", verified),
+      ]).needsAction,
+    ).toBe(0);
+  });
+
+  it("makes a conflict one incident per pair", () => {
+    const summary = summarizeIncidents([
+      at(0, "STCA", {}, { callsign: "SIA929", relatedCallsign: "GIA320" }),
+      at(2, "STCA", {}, { callsign: "GIA320", relatedCallsign: "SIA929" }),
+    ]);
+    expect(summary.total).toBe(1);
+    expect(summary.byCategory.stca).toBe(1);
   });
 });

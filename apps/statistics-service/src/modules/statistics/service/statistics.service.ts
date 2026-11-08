@@ -1,4 +1,4 @@
-import { aeroswarmMovements, alerts, db } from "@repo/database";
+import { aeroswarmMovements, alertActions, alerts, db } from "@repo/database";
 import { and, eq, gte, lt, type SQL, sql } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import {
@@ -515,8 +515,47 @@ export async function getOperationalStatistics(
             ${alerts.severity} AS severity,
             ${alerts.relatedTrackId} AS related_track_id,
             to_char(${alerts.triggeredAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS time,
+            ${alerts.verificationStatus} AS verification_status,
+            ${alerts.verifiedBy} AS verified_by,
+            to_char(${alerts.verifiedAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS verified_at,
+            ${alerts.verificationNote} AS verification_note,
+            (
+              SELECT jsonb_agg(
+                jsonb_build_object(
+                  'at', to_char(${alertActions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00',
+                  'by', ${alertActions.actorName},
+                  'from', ${alertActions.previousVerificationStatus},
+                  'to', ${alertActions.newVerificationStatus},
+                  'note', ${alertActions.note}
+                )
+                ORDER BY ${alertActions.createdAt}
+              )
+              FROM ${alertActions}
+              WHERE ${alertActions.alertId} = ${alerts.alertId}
+                AND ${alertActions.action} = 'VERIFY'
+            ) AS verification_history,
             jsonb_build_object(
               'callsign', ${alerts.data} -> 'callsign',
+              'relatedCallsign', ${alerts.data} -> 'relatedCallsign',
+              'domain', ${alerts.data} -> 'domain',
+              'reason', ${alerts.data} -> 'reason',
+              'runwayName', ${alerts.data} -> 'runwayName',
+              'runwayStatus', ${alerts.data} -> 'runwayStatus',
+              'predictedTimeSeconds', ${alerts.data} -> 'predictedTimeSeconds',
+              'horizontalSeparationNm', ${alerts.data} -> 'horizontalSeparationNm',
+              'minimumHorizontalSeparationNm', ${alerts.data} -> 'minimumHorizontalSeparationNm',
+              'horizontalSeparationMeters', ${alerts.data} -> 'horizontalSeparationMeters',
+              'minimumSeparationMeters', ${alerts.data} -> 'minimumSeparationMeters',
+              'predictedVerticalSeparationFt', ${alerts.data} -> 'predictedVerticalSeparationFt',
+              'minimumVerticalSeparationFt', ${alerts.data} -> 'minimumVerticalSeparationFt',
+              'distanceMeters', ${alerts.data} -> 'distanceMeters',
+              'maxDistanceMeters', ${alerts.data} -> 'maxDistanceMeters',
+              'criticalMeters', ${alerts.data} -> 'criticalMeters',
+              'horizontalDistanceMeters', ${alerts.data} -> 'horizontalDistanceMeters',
+              'altitudeDeviationFt', ${alerts.data} -> 'altitudeDeviationFt',
+              'maxAltitudeDeviationFt', ${alerts.data} -> 'maxAltitudeDeviationFt',
+              'timeDeviationSeconds', ${alerts.data} -> 'timeDeviationSeconds',
+              'timeExceeded', ${alerts.data} -> 'timeExceeded',
               'areaName', ${alerts.data} -> 'areaName',
               'areaType', ${alerts.data} -> 'areaType',
               'areaStatus', ${alerts.data} -> 'areaStatus',

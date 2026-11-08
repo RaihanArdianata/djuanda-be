@@ -27,6 +27,25 @@ export const ALERT_TYPE_TO_CATEGORY: Readonly<
 
 export const KNOWN_ALERT_TYPES = Object.keys(ALERT_TYPE_TO_CATEGORY);
 
+/** Satu langkah riwayat verifikasi (dari `alert_actions`, aksi VERIFY), terlama dahulu. */
+export interface VerificationEntry {
+  /** Waktu langkah (Asia/Jakarta, ISO dengan +07:00). */
+  at: string | null;
+  by: string | null;
+  from: string | null;
+  to: string | null;
+  note: string | null;
+}
+
+export interface AlertVerification {
+  /** UNVERIFIED, VERIFIED, atau FALSE_ALARM. */
+  status: string;
+  by: string | null;
+  at: string | null;
+  note: string | null;
+  history: VerificationEntry[];
+}
+
 export interface AlertDetail {
   type: string;
   callsign: string | null;
@@ -34,6 +53,7 @@ export interface AlertDetail {
   /** Waktu alert dipicu (kolom `triggered_at`, Asia/Jakarta, ISO dengan +07:00). */
   time: string;
   description: string;
+  verification: AlertVerification;
 }
 
 /** Baris hasil query detail (kolom `detail_data` sudah berupa JSONB ringkas dari SQL). */
@@ -45,6 +65,13 @@ export interface AlertDetailRow {
   /** Berasal dari `alerts.triggered_at` (Asia/Jakarta). */
   time: string;
   detail_data: unknown;
+  verification_status?: string | null;
+  verified_by?: string | null;
+  /** Asia/Jakarta, ISO dengan +07:00. */
+  verified_at?: string | null;
+  verification_note?: string | null;
+  /** Array JSON (atau string JSON) `VerificationEntry`. */
+  verification_history?: unknown;
   [column: string]: unknown;
 }
 
@@ -63,21 +90,33 @@ function readString(source: JsonRecord | null, key: string): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
 
+function readNumber(source: JsonRecord | null, key: string): number | null {
+  const value = source?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readBoolean(source: JsonRecord | null, key: string): boolean | null {
+  const value = source?.[key];
+  return typeof value === "boolean" ? value : null;
+}
+
 function readRecord(source: JsonRecord | null, key: string): JsonRecord | null {
   const value = source?.[key];
   return isRecord(value) ? value : null;
 }
 
-function parseData(raw: unknown): JsonRecord | null {
-  if (typeof raw === "string") {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      return isRecord(parsed) ? parsed : null;
-    } catch {
-      return null;
-    }
+function parseJson(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return null;
   }
-  return isRecord(raw) ? raw : null;
+}
+
+function parseData(raw: unknown): JsonRecord | null {
+  const parsed = parseJson(raw);
+  return isRecord(parsed) ? parsed : null;
 }
 
 interface ZoneView {
@@ -86,10 +125,37 @@ interface ZoneView {
   status: string | null;
 }
 
+/** Angka dan teks tambahan di `alerts.data` yang dipakai untuk menjelaskan sebab dan jarak. */
+interface AlertFacts {
+  domain: string | null;
+  relatedCallsign: string | null;
+  reason: string | null;
+  runwayName: string | null;
+  runwayStatus: string | null;
+  // STCA
+  predictedTimeSeconds: number | null;
+  horizontalSeparationNm: number | null;
+  minimumHorizontalSeparationNm: number | null;
+  horizontalSeparationMeters: number | null;
+  minimumSeparationMeters: number | null;
+  predictedVerticalSeparationFt: number | null;
+  minimumVerticalSeparationFt: number | null;
+  // Taxiway/apron dan deviasi
+  distanceMeters: number | null;
+  maxDistanceMeters: number | null;
+  criticalMeters: number | null;
+  horizontalDistanceMeters: number | null;
+  altitudeDeviationFt: number | null;
+  maxAltitudeDeviationFt: number | null;
+  timeDeviationSeconds: number | null;
+  timeExceeded: boolean | null;
+}
+
 interface AlertDataView {
   callsign: string | null;
   area: ZoneView | null;
   surface: ZoneView | null;
+  facts: AlertFacts;
 }
 
 /**
@@ -116,14 +182,44 @@ function readZone(
   };
 }
 
+function readFacts(data: JsonRecord): AlertFacts {
+  const num = (key: string): number | null => readNumber(data, key);
+  return {
+    domain: readString(data, "domain"),
+    relatedCallsign: readString(data, "relatedCallsign"),
+    reason: readString(data, "reason"),
+    runwayName: readString(data, "runwayName"),
+    runwayStatus: readString(data, "runwayStatus"),
+    predictedTimeSeconds: num("predictedTimeSeconds"),
+    horizontalSeparationNm: num("horizontalSeparationNm"),
+    minimumHorizontalSeparationNm: num("minimumHorizontalSeparationNm"),
+    horizontalSeparationMeters: num("horizontalSeparationMeters"),
+    minimumSeparationMeters: num("minimumSeparationMeters"),
+    predictedVerticalSeparationFt: num("predictedVerticalSeparationFt"),
+    minimumVerticalSeparationFt: num("minimumVerticalSeparationFt"),
+    distanceMeters: num("distanceMeters"),
+    maxDistanceMeters: num("maxDistanceMeters"),
+    criticalMeters: num("criticalMeters"),
+    horizontalDistanceMeters: num("horizontalDistanceMeters"),
+    altitudeDeviationFt: num("altitudeDeviationFt"),
+    maxAltitudeDeviationFt: num("maxAltitudeDeviationFt"),
+    timeDeviationSeconds: num("timeDeviationSeconds"),
+    timeExceeded: readBoolean(data, "timeExceeded"),
+  };
+}
+
+const NO_FACTS: AlertFacts = readFacts({});
+
 function toDataView(raw: unknown): AlertDataView {
   const data = parseData(raw);
-  if (!data) return { callsign: null, area: null, surface: null };
+  if (!data)
+    return { callsign: null, area: null, surface: null, facts: NO_FACTS };
   const track = readRecord(data, "track");
   return {
     callsign: readString(track, "callsign") ?? readString(data, "callsign"),
     area: readZone(data, "area"),
     surface: readZone(data, "surface"),
+    facts: readFacts(data),
   };
 }
 
@@ -135,10 +231,6 @@ function aircraftSubject(callsign: string | null): string {
   return callsign
     ? `aircraft callsign ${callsign}`
     : "aircraft (callsign tidak diketahui)";
-}
-
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 const MONTHS_ID = [
@@ -170,6 +262,21 @@ function onDate(dateText: string | null): string {
   return dateText ? ` pada tanggal ${dateText}` : "";
 }
 
+const NUMBER_FORMAT = new Intl.NumberFormat("id-ID", {
+  maximumFractionDigits: 1,
+});
+
+/** `120 m` atau `1,3 km`; meter dibulatkan, jarak jauh dalam kilometer. */
+export function formatMeters(meters: number): string {
+  return meters >= 1000
+    ? `${NUMBER_FORMAT.format(meters / 1000)} km`
+    : `${Math.round(meters)} m`;
+}
+
+export function formatNm(nm: number): string {
+  return `${NUMBER_FORMAT.format(nm)} NM`;
+}
+
 interface DescriptionInput {
   category: AlertCategoryKey;
   dateText: string | null;
@@ -179,6 +286,77 @@ interface DescriptionInput {
   relatedTrackId: string | null;
   area: ZoneView | null;
   surface: ZoneView | null;
+  facts?: AlertFacts;
+}
+
+/** Penutup yang sama untuk semua alert: lokasi bandara, kapan, dan tingkat keparahan. */
+function tail(input: DescriptionInput): string {
+  return ` di airport ${input.airportId}${onDate(input.dateText)} dengan severity ${input.severity}.`;
+}
+
+function zoneLabel(zone: ZoneView | null, fallback: string): string {
+  const parts = [zone?.type, zone?.name].filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : fallback;
+}
+
+/** Jarak dan batas pemisahan menurut satuannya: meter untuk STCA darat, NM untuk STCA udara. */
+function stcaFigures(f: AlertFacts): {
+  distance: string | null;
+  limit: string | null;
+} {
+  if (f.domain === "SURFACE") {
+    return {
+      distance: orNull(f.horizontalSeparationMeters, formatMeters),
+      limit: orNull(f.minimumSeparationMeters, formatMeters),
+    };
+  }
+  return {
+    distance: orNull(f.horizontalSeparationNm, formatNm),
+    limit: orNull(f.minimumHorizontalSeparationNm, formatNm),
+  };
+}
+
+function orNull(
+  value: number | null,
+  format: (v: number) => string,
+): string | null {
+  return value === null ? null : format(value);
+}
+
+function stcaVertical(f: AlertFacts): string {
+  if (f.predictedVerticalSeparationFt === null || f.domain === "SURFACE")
+    return "";
+  const limit =
+    f.minimumVerticalSeparationFt !== null
+      ? ` (batas ${Math.round(f.minimumVerticalSeparationFt)} ft)`
+      : "";
+  return `, selisih ketinggian ${Math.round(f.predictedVerticalSeparationFt)} ft${limit}`;
+}
+
+function stcaGap(f: AlertFacts): string {
+  const { distance, limit } = stcaFigures(f);
+  if (distance === null) return "";
+  const inTime =
+    f.predictedTimeSeconds !== null
+      ? ` dalam ${Math.round(f.predictedTimeSeconds)} detik`
+      : "";
+  const below = limit ? `, di bawah batas pemisahan ${limit}` : "";
+  return `diprediksi berada pada jarak ${distance}${inTime}${below}${stcaVertical(f)}`;
+}
+
+function describeStca(input: DescriptionInput): string {
+  const f = input.facts ?? NO_FACTS;
+  const kind = f.domain === "SURFACE" ? "STCA darat" : "STCA udara";
+  const other = f.relatedCallsign
+    ? ` dan aircraft callsign ${f.relatedCallsign}`
+    : input.relatedTrackId
+      ? ` dan related track ${input.relatedTrackId}`
+      : "";
+  const gap = stcaGap(f);
+  const why = gap
+    ? `: ${aircraftSubject(input.callsign)}${other} ${gap}`
+    : ` yang melibatkan ${aircraftSubject(input.callsign)}${other}`;
+  return `Potensi Short Term Conflict Alert (${kind})${why}${tail(input)}`;
 }
 
 function describeAreaPenetration(input: DescriptionInput): string {
@@ -188,25 +366,81 @@ function describeAreaPenetration(input: DescriptionInput): string {
     .filter(Boolean)
     .join(" ");
   const areaType = area?.type ? ` yang bertipe ${area.type}` : "";
-  return `${capitalize(aircraftSubject(input.callsign))} memasuki ${areaLabel}${areaType} di airport ${input.airportId}${onDate(input.dateText)} dengan severity ${input.severity}.`;
+  const why = isRestricted
+    ? ", yaitu area yang sedang dibatasi sehingga target yang masuk dianggap pelanggaran"
+    : "";
+  return `Potensi pelanggaran area: ${aircraftSubject(input.callsign)} memasuki ${areaLabel}${areaType}${why}${tail(input)}`;
 }
 
 function describeTaxiwayApronIncursion(input: DescriptionInput): string {
-  const surfaceType = input.surface?.type ? ` pada ${input.surface.type}` : "";
-  return `Telah terjadi Taxiway/Apron Incursion yang melibatkan ${aircraftSubject(input.callsign)}${surfaceType} di airport ${input.airportId}${onDate(input.dateText)}.`;
-}
-
-function describeStca(input: DescriptionInput): string {
-  const related = input.relatedTrackId
-    ? ` dan related track ${input.relatedTrackId}`
+  const f = input.facts ?? NO_FACTS;
+  const where = input.surface
+    ? ` pada ${zoneLabel(input.surface, "taxiway/apron")}`
     : "";
-  return `Telah terjadi Short Term Conflict Alert (STCA) yang melibatkan ${aircraftSubject(input.callsign)}${related} di airport ${input.airportId}${onDate(input.dateText)}.`;
+  const head = `Potensi Taxiway/Apron Incursion: ${aircraftSubject(input.callsign)}`;
+
+  if (f.relatedCallsign) {
+    const gap =
+      f.distanceMeters !== null
+        ? `, berjarak ${formatMeters(f.distanceMeters)}${
+            f.criticalMeters !== null
+              ? ` (batas kritis ${formatMeters(f.criticalMeters)})`
+              : ""
+          }`
+        : "";
+    return `${head} memasuki permukaan${where} yang sedang dipakai aircraft callsign ${f.relatedCallsign}${gap}${tail(input)}`;
+  }
+  if (f.reason === "OFF_ROUTE" && f.distanceMeters !== null) {
+    const limit =
+      f.maxDistanceMeters !== null
+        ? ` (batas ${formatMeters(f.maxDistanceMeters)})`
+        : "";
+    return `${head} menyimpang ${formatMeters(f.distanceMeters)} dari rute taxiway${limit}${where}${tail(input)}`;
+  }
+  return `${head} berada di luar jalur yang diizinkan${where}${tail(input)}`;
 }
 
-function describeGeneric(label: string, input: DescriptionInput): string {
-  const zone = input.surface ?? input.area;
-  const zoneText = zone?.type ? ` pada ${zone.type}` : "";
-  return `Telah terjadi ${label} yang melibatkan ${aircraftSubject(input.callsign)}${zoneText} di airport ${input.airportId}${onDate(input.dateText)}.`;
+function describeRunwayIncursion(input: DescriptionInput): string {
+  const f = input.facts ?? NO_FACTS;
+  const runway = f.runwayName ? `runway ${f.runwayName}` : "runway";
+  const occupant = f.relatedCallsign
+    ? ` yang sedang dipakai aircraft callsign ${f.relatedCallsign}`
+    : "";
+  const status = f.runwayStatus ? ` (status ${f.runwayStatus})` : "";
+  return `Potensi Runway Incursion (RIA): ${aircraftSubject(input.callsign)} memasuki ${runway}${occupant}${status}${tail(input)}`;
+}
+
+function describeDeviation(input: DescriptionInput): string {
+  const f = input.facts ?? NO_FACTS;
+  const parts: string[] = [];
+  if (f.horizontalDistanceMeters !== null) {
+    const limit =
+      f.maxDistanceMeters !== null
+        ? ` (batas ${formatMeters(f.maxDistanceMeters)})`
+        : "";
+    parts.push(
+      `menyimpang ${formatMeters(f.horizontalDistanceMeters)} dari rute${limit}`,
+    );
+  }
+  if (f.altitudeDeviationFt !== null) {
+    const limit =
+      f.maxAltitudeDeviationFt !== null
+        ? ` (batas ${Math.round(f.maxAltitudeDeviationFt)} ft)`
+        : "";
+    parts.push(
+      `mengalami selisih ketinggian ${Math.round(Math.abs(f.altitudeDeviationFt))} ft${limit}`,
+    );
+  }
+  if (f.timeDeviationSeconds !== null && f.timeExceeded) {
+    parts.push(
+      `mengalami selisih waktu ${Math.round(Math.abs(f.timeDeviationSeconds))} detik dari jadwal`,
+    );
+  }
+  const detail =
+    parts.length > 0
+      ? parts.join(", ")
+      : "menyimpang dari rute yang direncanakan";
+  return `Potensi Deviation Alert (DA): ${aircraftSubject(input.callsign)} ${detail}${tail(input)}`;
 }
 
 export function buildAlertDescription(input: DescriptionInput): string {
@@ -218,10 +452,43 @@ export function buildAlertDescription(input: DescriptionInput): string {
     case "stca":
       return describeStca(input);
     case "ria":
-      return describeGeneric("Runway Incursion (RIA)", input);
+      return describeRunwayIncursion(input);
     case "da":
-      return describeGeneric("Deviation Alert (DA)", input);
+      return describeDeviation(input);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Verification
+// ---------------------------------------------------------------------------
+
+function toEntry(raw: unknown): VerificationEntry | null {
+  if (!isRecord(raw)) return null;
+  return {
+    at: readString(raw, "at"),
+    by: readString(raw, "by"),
+    from: readString(raw, "from"),
+    to: readString(raw, "to"),
+    note: readString(raw, "note"),
+  };
+}
+
+function readHistory(raw: unknown): VerificationEntry[] {
+  const parsed = parseJson(raw);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map(toEntry).filter((e): e is VerificationEntry => e !== null);
+}
+
+export function readVerification(row: AlertDetailRow): AlertVerification {
+  const clean = (v: string | null | undefined): string | null =>
+    typeof v === "string" && v.trim() !== "" ? v : null;
+  return {
+    status: clean(row.verification_status) ?? "UNVERIFIED",
+    by: clean(row.verified_by),
+    at: clean(row.verified_at),
+    note: clean(row.verification_note),
+    history: readHistory(row.verification_history),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +522,9 @@ export function normalizeAlertRow(
       relatedTrackId: row.related_track_id ?? null,
       area: view.area,
       surface: view.surface,
+      facts: view.facts,
     }),
+    verification: readVerification(row),
   };
   return { category, detail };
 }

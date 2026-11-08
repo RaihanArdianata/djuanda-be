@@ -179,3 +179,24 @@ menampilkan blok `.env` siap tempel. Detail: `aeroswarm-project/docs/development
 
 `@aeroswarm/codec` dan `@aeroswarm/replay-server` diambil dari npmjs publik (org
 `aeroswarm`) — tidak ada scope redirect di `.npmrc`, resolve seperti package biasa.
+
+## Penelusuran pesawat: `GET /aero/trace`
+
+"Kenapa pesawat X ada di FlightRadar24 tetapi tidak di peta?" tidak bisa dijawab dari statistik, karena pembuangan terjadi diam-diam di beberapa tahap. Endpoint ini menunjukkan di tahap mana sebuah pesawat terakhir terlihat atau dibuang.
+
+```
+GET /aero/trace?q=CTV718&token=<token>      (atau header Authorization: Bearer <token>)
+```
+
+`q` = callsign (sebagian pun boleh), ICAO24, atau trackId; token yang sama dengan jejak (`/aero/tracks/:id/trail`). Jawabannya memuat, per pesawat yang cocok, `verdict` (kesimpulan satu kalimat) dan `entries`: peralihan di tiap tahap, dengan sensor (`asterix-cat048 50:26`), posisi, ketinggian, hitungan, dan umurnya.
+
+| Tahap | Hasil | Artinya |
+|---|---|---|
+| `ingest` | `diterima` | sebuah sensor melaporkannya dan laporannya punya posisi dan identitas |
+| `ingest` | `dibuang: no-position` | laporan tanpa posisi; untuk radar CAT048 berarti antenanya belum punya koordinat (`ASTERIX_RADAR_SITES`) |
+| `ingest` | `dibuang: no-identity` / `test-target` | tanpa alamat Mode-S dan nomor track, atau ditandai target uji, simulasi, atau transponder referensi |
+| `fusi` | `dipakai` / `ditahan` | fusi memakainya, atau sensor lain yang sedang ditampilkan |
+| `gambaran-udara` | `tampil (status)` | sampai ke gambaran udara yang dikirim ke klien |
+| `gambaran-udara` | `tidak masuk`, `dihapus: exited/filtered/superseded` | ditolak atau dihapus oleh area cakupan surveilans (`INTEREST_BBOX` atau `interestRadiusNm`) atau digantikan track lain |
+
+Jawaban kosong (`matches: []`) berarti pesawat itu tidak pernah sampai ke layanan ini sejak ia mulai: feed tidak membawanya, atau laporannya dibuang sebelum identitasnya tercatat. Catatan ini hanya di memori (30 peralihan per pesawat, 5000 pesawat) dan hilang saat layanan restart. Catatan tahap `ingest` yang dibuang butuh `@aeroswarm/ingest` yang punya `onDrop`; tanpa itu hanya tahap yang diterima yang tercatat.

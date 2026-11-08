@@ -3,6 +3,8 @@ import { publishToTopic } from "@repo/shared/sse/publisher";
 import type { AerodromeContextData } from "./types";
 
 const HEARTBEAT_MS = 15_000;
+/** Batas jumlah track penghuni dalam satu siaran. */
+const MAX_OCCUPANTS = 100;
 const lastBroadcast = new Map<string, { key: string; at: number }>();
 
 function activeIdsKey(aerodrome: AerodromeContextData): string {
@@ -46,6 +48,8 @@ export async function broadcastAerodromeStatus(
       aircraftIds: o.aircraftIds,
       aircraftCount: o.aircraftCount,
     })),
+    // Track yang membuat polygon terisi, dengan posisinya: klien membandingkannya dengan track yang ia gambar.
+    occupants: (aerodrome.occupants ?? []).slice(0, MAX_OCCUPANTS),
     // Legacy shape — tetap dikirim untuk kompatibilitas consumer lama.
     runways: aerodrome.runways.map((r) => ({ id: r.id, active: r.active })),
     surfaces: aerodrome.surfaces.map((s) => ({ id: s.id, active: s.active })),

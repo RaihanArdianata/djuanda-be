@@ -19,6 +19,17 @@ export interface RunnableFeed {
   stop(): Promise<void>;
 }
 
+/** What `@aeroswarm/ingest` reports about a dropped record (`DropInfo`). */
+export interface FeedDropInfo {
+  reason: string;
+  detail: string;
+  category: number;
+  sac?: number;
+  sic?: number;
+  icao24?: string;
+  callsign?: string;
+}
+
 export interface FeedHandlers {
   /** Every decoded track, including `lifecycle: "dropped"`. Runs after persistence. */
   onTrack?: (event: FusedTrackEvent) => void;
@@ -33,6 +44,8 @@ export interface StartFeedsOptions {
   handlers?: FeedHandlers;
   /** Where decoded tracks are stored (index.ts passes the shared ingest buffer). */
   persist: (event: FusedTrackEventLike) => void;
+  /** A record a feed dropped before it became a track (no position, no identity, test target): for tracing. Needs a recent @aeroswarm/ingest. */
+  onDrop?: (info: FeedDropInfo) => void;
   /**
    * Merges what several sensors report about one aircraft. Runs before storage
    * and before `handlers.onTrack`, so both see one track per aircraft. Return
@@ -166,7 +179,17 @@ export function startAsterixFeeds(opts: StartFeedsOptions): void {
   for (const feed of feeds) {
     const entry: Running = {
       name: feed.name,
-      source: create(feed),
+      source: create(
+        opts.onDrop
+          ? {
+              ...feed,
+              config: {
+                ...feed.config,
+                onDrop: opts.onDrop,
+              } as typeof feed.config,
+            }
+          : feed,
+      ),
       lastHealth: null,
     };
     running.push(entry);

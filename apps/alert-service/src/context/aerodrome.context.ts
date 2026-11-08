@@ -15,6 +15,7 @@ import type {
   AerodromeContextData,
   AerodromeFeatureContext,
   MovementTrack,
+  OccupantTrack,
   PolygonOccupancy,
 } from "../modules/engine/types";
 
@@ -188,65 +189,96 @@ function isGroundTrackOccupying(t: MovementTrack, now: number): boolean {
 // aerodrome kedip OCCUPIED↔AVAILABLE di frontend.
 const lastOccupiedAt = new Map<string, number>();
 
-/** Occupancy generic untuk semua polygon feature: sebuah polygon OCCUPIED
- *  selama minimal satu track (ground, posisi masih segar) berada di dalamnya.
- *  Tidak ada per-cabang per tipe layer — semua polygon dicek sama. */
-function computeOccupancy(
-  airportId: string,
+/** Track yang berada di dalam tiap polygon: per polygon, dan per track (polygon mana saja yang ditempatinya). */
+function containment(
   data: AerodromeContextData,
-  tracks: MovementTrack[],
-): PolygonOccupancy[] {
-  const now = Date.now();
-  const ground = tracks.filter((t) => isGroundTrackOccupying(t, now));
+  ground: MovementTrack[],
+): { byPolygon: Map<string, string[]>; byTrack: Map<string, string[]> } {
+  const byPolygon = new Map<string, string[]>();
+  const byTrack = new Map<string, string[]>();
+  const add = (
+    map: Map<string, string[]>,
+    key: string,
+    value: string,
+  ): void => {
+    const list = map.get(key);
+    if (list) list.push(value);
+    else map.set(key, [value]);
+  };
 
-  const occupants = new Map<string, string[]>();
   for (const track of ground) {
     const point: [number, number] = [track.latitude, track.longitude];
     for (const f of data.features) {
-      if (
-        f.bbox &&
-        (point[0] < f.bbox[0] ||
-          point[0] > f.bbox[2] ||
-          point[1] < f.bbox[1] ||
-          point[1] > f.bbox[3])
-      ) {
-        continue;
-      }
+      if (f.bbox && outsideBox(point, f.bbox)) continue;
       if (!pointInPolygon(point, f.polygon)) continue;
-      const list = occupants.get(f.id);
-      if (list) list.push(track.trackId);
-      else occupants.set(f.id, [track.trackId]);
+      add(byPolygon, f.id, track.trackId);
+      add(byTrack, track.trackId, f.id);
     }
   }
+  return { byPolygon, byTrack };
+}
 
-  return data.features.map((f) => {
-    const aircraftIds = occupants.get(f.id) ?? [];
+const outsideBox = (
+  point: [number, number],
+  bbox: [number, number, number, number],
+): boolean =>
+  point[0] < bbox[0] ||
+  point[0] > bbox[2] ||
+  point[1] < bbox[1] ||
+  point[1] > bbox[3];
+
+/** Occupancy generic untuk semua polygon feature: sebuah polygon OCCUPIED
+ *  selama minimal satu track (ground, posisi masih segar) berada di dalamnya.
+ *  Tidak ada per-cabang per tipe layer — semua polygon dicek sama. Juga mengembalikan
+ *  track yang menempatinya, dengan posisinya. */
+export function computeOccupancy(
+  airportId: string,
+  data: AerodromeContextData,
+  tracks: MovementTrack[],
+): { occupancy: PolygonOccupancy[]; occupants: OccupantTrack[] } {
+  const now = Date.now();
+  const ground = tracks.filter((t) => isGroundTrackOccupying(t, now));
+  const { byPolygon, byTrack } = containment(data, ground);
+
+  const occupancy: PolygonOccupancy[] = data.features.map((f) => {
+    const aircraftIds = byPolygon.get(f.id) ?? [];
     const stickyKey = `${airportId}:${f.id}`;
-
-    if (aircraftIds.length > 0) {
-      lastOccupiedAt.set(stickyKey, now);
-      return {
-        polygonId: f.id,
-        type: f.layer,
-        status: "OCCUPIED",
-        aircraftIds,
-        aircraftCount: aircraftIds.length,
-      };
-    }
+    if (aircraftIds.length > 0) lastOccupiedAt.set(stickyKey, now);
 
     const last = lastOccupiedAt.get(stickyKey);
     const sticky =
       last !== undefined && now - last < engineSettings.occupancyStickyMs;
-    if (!sticky) lastOccupiedAt.delete(stickyKey);
+    if (aircraftIds.length === 0 && !sticky) lastOccupiedAt.delete(stickyKey);
 
     return {
       polygonId: f.id,
       type: f.layer,
-      status: sticky ? "OCCUPIED" : "AVAILABLE",
+      status: aircraftIds.length > 0 || sticky ? "OCCUPIED" : "AVAILABLE",
       aircraftIds,
       aircraftCount: aircraftIds.length,
     };
   });
+
+  const occupants: OccupantTrack[] = ground.flatMap((track) => {
+    const polygonIds = byTrack.get(track.trackId);
+    if (!polygonIds) return [];
+    return [
+      {
+        trackId: track.trackId,
+        callsign: track.callsign,
+        targetType: track.targetType,
+        latitude: track.latitude,
+        longitude: track.longitude,
+        altitude: track.altitude,
+        groundSpeed: track.groundSpeed,
+        onGround: track.onGround,
+        ageMs: now - new Date(track.timestamp).getTime(),
+        polygonIds,
+      },
+    ];
+  });
+
+  return { occupancy, occupants };
 }
 
 export async function getAerodromeContext(
@@ -274,13 +306,18 @@ export async function getAerodromeContext(
   }
   if (!data) return null;
 
-  const occupancy = computeOccupancy(airportId, data, tracks ?? []);
+  const { occupancy, occupants } = computeOccupancy(
+    airportId,
+    data,
+    tracks ?? [],
+  );
   const occupiedIds = new Set(
     occupancy.filter((o) => o.status === "OCCUPIED").map((o) => o.polygonId),
   );
   return {
     ...data,
     occupancy,
+    occupants,
     runways: data.runways.map((r) => ({ ...r, active: occupiedIds.has(r.id) })),
     surfaces: data.surfaces.map((s) => ({
       ...s,

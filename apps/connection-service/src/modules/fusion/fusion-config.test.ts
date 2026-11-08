@@ -82,3 +82,24 @@ describe("fusionConfigFromEnv", () => {
     }
   });
 });
+
+describe("FUSION_STICKY_MS", () => {
+  const sticky = (
+    env: Record<string, string | undefined>,
+  ): number | undefined =>
+    (fusionConfigFromEnv(env).options as { stickyMs?: number }).stickyMs;
+
+  it("is 10 seconds by default, and can be set or switched off with 0", () => {
+    expect(sticky({})).toBe(10_000);
+    expect(sticky({ FUSION_STICKY_MS: "20000" })).toBe(20_000);
+    expect(sticky({ FUSION_STICKY_MS: "0" })).toBe(0);
+  });
+
+  it("falls back to the default and warns for a value that is not a number of 0 or more", () => {
+    const result = fusionConfigFromEnv({ FUSION_STICKY_MS: "-5" });
+    expect((result.options as { stickyMs?: number }).stickyMs).toBe(10_000);
+    expect(result.warnings.some((w) => w.includes("FUSION_STICKY_MS"))).toBe(
+      true,
+    );
+  });
+});

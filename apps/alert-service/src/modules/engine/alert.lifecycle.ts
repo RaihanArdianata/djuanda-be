@@ -1,4 +1,6 @@
 import type { Alert } from "@repo/database";
+import { logger } from "@repo/logger";
+import { publishToTopic } from "@repo/shared/sse/publisher";
 import { clearActiveAlert } from "../../cache/alert-state.cache";
 import {
   mergeAlertData,
@@ -11,6 +13,7 @@ import {
   type AlertEvent,
   type AlertEventType,
   publishAlertEvent,
+  publishAlertEvents,
 } from "../messaging/alert.producer";
 import { flushPostHistory } from "./alert-post-history";
 import { buildEntityKey } from "./track-history";
@@ -58,6 +61,31 @@ export async function publishAlertCleared(alert: Alert): Promise<void> {
 export async function publishAlertVerified(alert: Alert): Promise<void> {
   await broadcastAlert(alert, "ALERT_VERIFIED");
   await publishAlertEvent(toAlertEvent(alert, "ALERT_VERIFIED"));
+}
+
+/**
+ * Verifikasi massal: satu siaran SSE untuk seluruh kelompok (klien cukup memuat ulang) dan satu pengiriman Kafka, bukan satu per alert.
+ */
+export async function publishAlertsVerifiedBatch(
+  verified: Alert[],
+): Promise<void> {
+  if (verified.length === 0) return;
+  try {
+    await publishToTopic(
+      "alerts",
+      JSON.stringify({
+        eventType: "ALERT_VERIFIED",
+        timestamp: new Date().toISOString(),
+        bulk: true,
+        alertIds: verified.map((a) => a.alertId),
+      }),
+    );
+  } catch (err) {
+    logger.warn({ err }, "failed to broadcast bulk verification to Redis");
+  }
+  await publishAlertEvents(
+    verified.map((a) => toAlertEvent(a, "ALERT_VERIFIED")),
+  );
 }
 
 export async function acknowledgeAlert(

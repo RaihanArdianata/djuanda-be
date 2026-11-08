@@ -519,3 +519,43 @@ export const reopenAlert = async (id: string): Promise<Alert | undefined> => {
     .returning();
   return row;
 };
+
+/** Satu UPDATE untuk banyak alert sekaligus; mengembalikan baris yang berubah. */
+export const verifyAlertsBatch = async (
+  ids: string[],
+  params: VerifyAlertRepoParams,
+): Promise<Alert[]> =>
+  ids.length === 0
+    ? []
+    : await db
+        .update(alerts)
+        .set({
+          verificationStatus: params.status,
+          verifiedAt: new Date(),
+          verifiedBy: params.verifiedBy ?? null,
+          verificationNote: params.note ?? null,
+          updatedAt: new Date(),
+        })
+        .where(and(inArray(alerts.id, ids), isNull(alerts.deletedAt)))
+        .returning();
+
+/** Satu INSERT untuk banyak catatan aksi sekaligus. */
+export const recordAlertActionsBatch = async (
+  items: RecordAlertActionParams[],
+): Promise<void> => {
+  if (items.length === 0) return;
+  await db.insert(alertActions).values(
+    items.map((params) => ({
+      alertId: params.alertId,
+      action: params.action,
+      actorId: params.actorId ?? null,
+      actorName: params.actorName ?? null,
+      previousStatus: params.previousStatus ?? null,
+      newStatus: params.newStatus ?? null,
+      previousVerificationStatus: params.previousVerificationStatus ?? null,
+      newVerificationStatus: params.newVerificationStatus ?? null,
+      note: params.note ?? null,
+      metadata: params.metadata ?? {},
+    })),
+  );
+};

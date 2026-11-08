@@ -19,10 +19,11 @@ import {
   getAllAlerts,
   verifyAlertService,
 } from "../service/alert.service";
+import { listIncidentsService } from "../service/incident.service";
 import {
-  listIncidentsService,
-  verifyIncidentsService,
-} from "../service/incident.service";
+  requestVerifyIncidents,
+  verifyJobStatusService,
+} from "../service/verify-incidents.service";
 import {
   acknowledgeAlertSchema,
   bulkClearAlertSchema,
@@ -309,11 +310,23 @@ export const listIncidentsController = catchAsync(async (c) => {
   );
 });
 
+/** Verifikasi satu kejadian: diperiksa sekarang, dikerjakan di antrean (202); `jobId` untuk memantau kemajuannya. */
 export const verifyIncidentsController = catchAsync(async (c) => {
   const body = await c.req.json();
   const input = parseOrThrow(verifyIncidentsSchema, body);
   const actor = getActor(c);
 
-  const result = await verifyIncidentsService(input, actor);
-  return success(c, result, { message: "Incident verified successfully" });
+  const result = await requestVerifyIncidents(input, actor);
+  return success(c, result, {
+    code: result.queued ? 202 : 200,
+    message: result.queued
+      ? "Verification queued"
+      : "Incident verified successfully",
+  });
+});
+
+export const verifyJobStatusController = catchAsync(async (c) => {
+  const { jobId } = c.req.param();
+  const status = await verifyJobStatusService(jobId);
+  return success(c, status, { message: "Verification job status fetched" });
 });

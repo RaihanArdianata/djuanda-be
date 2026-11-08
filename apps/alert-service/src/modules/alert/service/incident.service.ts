@@ -1,29 +1,11 @@
-import type { Alert } from "@repo/database";
 import {
   groupIncidents,
   type Incident,
   incidentCountByType,
 } from "@repo/shared/alert-incident";
-import ApiError from "@repo/shared/api-error";
-import { publishAlertVerified } from "../../engine/alert.lifecycle";
-import {
-  composeVerificationNote,
-  filterIncidents,
-  needsCriticalConfirmation,
-  paginate,
-} from "../incident/incident-query";
-import {
-  findAlertsByAlertIds,
-  listIncidentSources,
-  recordAlertAction,
-  verifyAlert as repoVerifyAlert,
-} from "../repository/alert.repository";
-import type {
-  ListIncidentsInput,
-  VerifyIncidentsInput,
-} from "../validator/alert.validator";
-
-type UserActor = { id?: string; name?: string; username?: string };
+import { filterIncidents, paginate } from "../incident/incident-query";
+import { listIncidentSources } from "../repository/alert.repository";
+import type { ListIncidentsInput } from "../validator/alert.validator";
 
 const DAY_MS = 86_400_000;
 const DEFAULT_RANGE_DAYS = 30;
@@ -101,77 +83,5 @@ export async function listIncidentsService(
       needsAction: matched.filter((i) => i.verificationCounts.unverified > 0)
         .length,
     },
-  };
-}
-
-export interface VerifyIncidentsResult {
-  total: number;
-  updated: string[];
-  skipped: string[];
-}
-
-function isJudged(alert: Alert): boolean {
-  return alert.verificationStatus !== "UNVERIFIED";
-}
-
-export async function verifyIncidentsService(
-  input: VerifyIncidentsInput,
-  actor?: UserActor,
-): Promise<VerifyIncidentsResult> {
-  const found = await findAlertsByAlertIds(input.alertIds);
-  if (found.length === 0) {
-    throw new ApiError("NOT_FOUND", { message: "Alert not found" });
-  }
-
-  const targets = input.onlyUnverified
-    ? found.filter((a) => !isJudged(a))
-    : found;
-  if (
-    !input.confirmCritical &&
-    needsCriticalConfirmation(targets.map((a) => a.severity))
-  ) {
-    throw new ApiError("BAD_REQUEST", {
-      message:
-        "Kejadian ini memuat alert Critical: konfirmasi eksplisit diperlukan (confirmCritical)",
-    });
-  }
-
-  const actorName =
-    input.verifiedBy ?? actor?.name ?? actor?.username ?? "system";
-  const note = composeVerificationNote(input.reasonCode, input.note);
-  const updated: string[] = [];
-
-  for (const alert of targets) {
-    const row = await repoVerifyAlert(alert.id, {
-      status: input.status,
-      note,
-      verifiedBy: actorName,
-    });
-    if (!row) continue;
-    await recordAlertAction({
-      alertId: alert.alertId,
-      action: "VERIFY",
-      actorId: actor?.id ?? null,
-      actorName,
-      previousVerificationStatus: alert.verificationStatus,
-      newVerificationStatus: input.status,
-      note,
-      metadata: {
-        incidentId: input.incidentId ?? null,
-        reasonCode: input.reasonCode ?? null,
-        bulk: true,
-        onlyUnverified: input.onlyUnverified,
-      },
-    });
-    await publishAlertVerified(row);
-    updated.push(alert.alertId);
-  }
-
-  forgetIncidentCache();
-  const updatedSet = new Set(updated);
-  return {
-    total: input.alertIds.length,
-    updated,
-    skipped: input.alertIds.filter((id) => !updatedSet.has(id)),
   };
 }

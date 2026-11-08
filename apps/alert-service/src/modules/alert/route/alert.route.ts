@@ -15,6 +15,7 @@ import {
   listIncidentsController,
   verifyAlertController,
   verifyIncidentsController,
+  verifyJobStatusController,
 } from "../controller/alert.controller";
 
 const app = new Hono()
@@ -25,6 +26,7 @@ const app = new Hono()
   .get("/export", exportAlertsController)
   .get("/incidents", listIncidentsController)
   .post("/incidents/verify", verifyIncidentsController)
+  .get("/incidents/verify/:jobId", verifyJobStatusController)
   .post("/detect", detectAlertController)
   .post("/clear-bulk", bulkClearAlertController)
   .get("/:id", getAlertByIdController)

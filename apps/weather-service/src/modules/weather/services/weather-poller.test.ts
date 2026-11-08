@@ -74,7 +74,9 @@ beforeEach(() => {
   fetchLatestBmkgSpeci.mockReset();
   fetchLatestBmkgTaf.mockReset();
   saveObservation.mockReset();
+  saveObservation.mockResolvedValue(true);
   saveForecast.mockReset();
+  saveForecast.mockResolvedValue(true);
   getWeatherSyncMetadata.mockClear();
   setWeatherSyncFailed.mockReset();
   setWeatherSyncStarted.mockReset();
@@ -106,7 +108,7 @@ describe("pollMetar", () => {
     fetchLatestBmkgMetar.mockResolvedValue(null);
 
     // Should resolve, not throw -- a provider outage must not stop the poller.
-    await expect(pollMetar()).resolves.toBe(false);
+    await expect(pollMetar()).resolves.toBe("no-data");
     expect(saveObservation).not.toHaveBeenCalled();
   });
 
@@ -170,7 +172,7 @@ describe("pollTaf", () => {
   it("does not save anything when the provider fails gracefully (returns null)", async () => {
     fetchLatestBmkgTaf.mockResolvedValue(null);
 
-    await expect(pollTaf()).resolves.toBe(false);
+    await expect(pollTaf()).resolves.toBe("no-data");
     expect(saveForecast).not.toHaveBeenCalled();
   });
 
@@ -199,10 +201,14 @@ describe("syncWeatherNow", () => {
     const t0 = 1_000_000_000_000;
     const first = await syncWeatherNow(t0);
     expect(first?.results).toEqual({
-      metar: "failed",
-      speci: "failed",
+      metar: "ok",
+      speci: "ok",
       taf: "failed",
     });
+    expect(setWeatherSyncFailed).toHaveBeenCalledWith(
+      "Weather provider failed: taf (Error)",
+      "WARR",
+    );
 
     expect(await syncWeatherNow(t0 + 5_000)).toBeNull();
     expect(await syncWeatherNow(t0 + 31_000)).not.toBeNull();

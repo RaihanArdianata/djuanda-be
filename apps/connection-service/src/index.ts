@@ -57,7 +57,10 @@ import {
   startIngestKafkaConsumer,
   stopIngestKafkaConsumer,
 } from "./modules/ingest/service/ingest-kafka-consumer";
-import { handleIngestSocketMessage } from "./modules/ingest/service/ingest-socket";
+import {
+  handleIngestSocketMessage,
+  registerIngestSocketLive,
+} from "./modules/ingest/service/ingest-socket";
 import {
   startTrackProducer,
   stopTrackProducer,
@@ -75,6 +78,10 @@ import {
   upgradeLive,
 } from "./modules/live/live-socket";
 import { createMovementPhaseStore } from "./modules/live/movement-phase";
+import {
+  createRelayToLive,
+  relayToLiveEnabled,
+} from "./modules/live/relay-to-live";
 import {
   startMovementProducer,
   stopMovementProducer,
@@ -336,6 +343,43 @@ liveRuntime.state.on("removed", ({ trackId, reason }) => {
   });
 });
 
+// Track dari jalur relay (topic Kafka AeroSwarm, WebSocket ingest) ikut ke gambaran udara klien lewat normalisasi dan fusi yang sama dengan
+// feed langsung; tanpa ini pesawat yang hanya datang lewat relay terlihat oleh layanan alert tetapi tidak ada di peta. RELAY_TO_LIVE=false mematikan.
+const relayToLive = createRelayToLive({
+  enabled: relayToLiveEnabled(process.env),
+  normalize: (event: FusedTrackEvent): FusedTrackEvent =>
+    applySurfaceState(identityMemory.fill(event)),
+  fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
+    const out = fuser ? fuser.ingest(event) : event;
+    if (out && out.lifecycle !== "dropped") {
+      surfaceStates.set(out.trackId, out.position?.onGround);
+    }
+    return out;
+  },
+  onTrack: (event: FusedTrackEvent): void => {
+    liveRuntime.feedHandlers.onTrack?.(event);
+  },
+  onForwarded: (
+    event: FusedTrackEvent,
+    fused: FusedTrackEvent | null,
+  ): void => {
+    trace.record({
+      icao24: event.identity?.icao24,
+      callsign: event.identity?.callsign,
+      trackId: event.trackId,
+      stage: "ingest",
+      outcome: "diterima (relay)",
+      detail: fused ? "diteruskan ke gambaran udara" : "ditahan oleh fusi",
+      sensor: sensorOf(event),
+      lat: event.position?.lat,
+      lon: event.position?.lon,
+      alt: event.position?.alt,
+      onGround: event.position?.onGround,
+    });
+  },
+});
+registerIngestSocketLive({ gate: primaryFeedGate, sink: relayToLive });
+
 startAsterixFeeds({
   onDrop: (info: FeedDropInfo): void => {
     trace.record({
@@ -472,7 +516,10 @@ registerHealthProbe({
   startAftnFeeds({ onFlightPlan });
 })();
 
-startIngestKafkaConsumer({ gate: primaryFeedGate }).catch((err) => {
+startIngestKafkaConsumer({
+  gate: primaryFeedGate,
+  liveSink: relayToLive,
+}).catch((err) => {
   logger.error(
     { err },
     "kafka ingest consumer failed to start — http/websocket ingest are unaffected",

@@ -19,6 +19,7 @@ import {
   getAllAlerts,
   verifyAlertService,
 } from "../service/alert.service";
+import { withDescription } from "../service/alert-description";
 import { listIncidentsService } from "../service/incident.service";
 import {
   requestVerifyIncidents,
@@ -77,7 +78,7 @@ export const listAlertsController = catchAsync(async (c) => {
   const result = await getAllAlerts(parsed);
   return success(
     c,
-    result.items,
+    result.items.map(withDescription),
     { message: "Alerts fetched successfully" },
     {
       page: parsed.page,
@@ -99,7 +100,7 @@ export const listActiveAlertsController = catchAsync(async (c) => {
   const result = await getActiveAlerts(parsed);
   return success(
     c,
-    result.items,
+    result.items.map(withDescription),
     { message: "Active alerts fetched successfully" },
     {
       page: parsed.page,
@@ -118,7 +119,9 @@ export const getAlertByIdController = catchAsync(async (c) => {
     return failure(c, 404, { code: "NOT_FOUND", message: "Alert not found" });
   }
 
-  return success(c, alert, { message: "Alert fetched successfully" });
+  return success(c, withDescription(alert), {
+    message: "Alert fetched successfully",
+  });
 });
 
 export const getAlertTrackHistoryController = catchAsync(async (c) => {

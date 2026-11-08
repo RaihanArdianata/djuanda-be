@@ -172,14 +172,14 @@ describe("buildOperationalReport", () => {
     expect(text(ws, "H5")).toBe("Status Verifikasi");
     expect(text(ws, "L5")).toBe("Riwayat Verifikasi");
     // newest first: the 2026-11-02 05:10 STCA is the verified one
-    expect(text(ws, "H6")).toBe("Terverifikasi");
+    expect(text(ws, "H6")).toBe("Valid alert");
     expect(text(ws, "I6")).toBe("Budi");
     expect(text(ws, "K6")).toBe("Dikonfirmasi tower");
     const history = text(ws, "L6").split(String.fromCharCode(10));
     expect(history).toHaveLength(2);
     expect(history[0]).toContain("Sari");
-    expect(history[0]).toContain("Belum diverifikasi → Alarm palsu");
-    expect(history[1]).toContain("Alarm palsu → Terverifikasi");
+    expect(history[0]).toContain("Belum diverifikasi → False alert");
+    expect(history[1]).toContain("False alert → Valid alert");
     // an alert nobody has looked at
     expect(text(ws, "H7")).toBe("Belum diverifikasi");
     expect(text(ws, "I7")).toBe("—");

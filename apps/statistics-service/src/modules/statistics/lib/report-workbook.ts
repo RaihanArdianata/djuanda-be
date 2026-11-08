@@ -842,15 +842,15 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
 
 const VERIFICATION_LABEL: Readonly<Record<string, string>> = {
   UNVERIFIED: "Belum diverifikasi",
-  VERIFIED: "Terverifikasi",
-  FALSE_ALARM: "Alarm palsu",
+  VERIFIED: "Valid alert",
+  FALSE_ALARM: "False alert",
 };
 
 function verificationLabel(status: string): string {
   return VERIFICATION_LABEL[status.toUpperCase()] ?? status;
 }
 
-/** Satu baris per langkah, terlama dahulu: `2 November 2026 pukul 05:30:00 WIB · Sari · Belum diverifikasi → Alarm palsu — catatan`. */
+/** Satu baris per langkah, terlama dahulu: `2 November 2026 pukul 05:30:00 WIB · Sari · Belum diverifikasi → False alert — catatan`. */
 export function verificationHistoryText(
   history: AlertDetail["verification"]["history"],
 ): string {

@@ -44,7 +44,7 @@ describe("toJakartaIso", () => {
 describe("describeAlert", () => {
   it("builds the same sentence as the statistics export, with the time in WIB", () => {
     const text = describeAlert(alert());
-    expect(text).toContain("Potensi Runway Incursion (RIA)");
+    expect(text).toContain("Potensi Runway Incursion");
     expect(text).toContain(
       "aircraft callsign UKL5002 memasuki runway 10/28 yang sedang dipakai aircraft callsign SJV201",
     );

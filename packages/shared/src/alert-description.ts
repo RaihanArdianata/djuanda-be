@@ -364,7 +364,7 @@ function describeRunwayIncursion(input: DescriptionInput): string {
     ? ` yang sedang dipakai aircraft callsign ${f.relatedCallsign}`
     : "";
   const status = f.runwayStatus ? ` (status ${f.runwayStatus})` : "";
-  return `Potensi Runway Incursion (RIA): ${aircraftSubject(input.callsign)} memasuki ${runway}${occupant}${status}${tail(input)}`;
+  return `Potensi Runway Incursion: ${aircraftSubject(input.callsign)} memasuki ${runway}${occupant}${status}${tail(input)}`;
 }
 
 function describeDeviation(input: DescriptionInput): string {
@@ -397,7 +397,7 @@ function describeDeviation(input: DescriptionInput): string {
     parts.length > 0
       ? parts.join(", ")
       : "menyimpang dari rute yang direncanakan";
-  return `Potensi Deviation Alert (DA): ${aircraftSubject(input.callsign)} ${detail}${tail(input)}`;
+  return `Potensi Deviation Alert: ${aircraftSubject(input.callsign)} ${detail}${tail(input)}`;
 }
 
 export function buildAlertDescription(input: DescriptionInput): string {

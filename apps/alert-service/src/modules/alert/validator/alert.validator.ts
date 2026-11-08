@@ -157,7 +157,7 @@ export const verifyIncidentsSchema = z
       ctx.addIssue({
         code: "custom",
         path: ["reasonCode"],
-        message: "Alasan wajib dipilih untuk Alarm palsu",
+        message: "Alasan wajib dipilih untuk False alert",
       });
     }
     if (value.reasonCode === "OTHER" && !value.note?.trim()) {

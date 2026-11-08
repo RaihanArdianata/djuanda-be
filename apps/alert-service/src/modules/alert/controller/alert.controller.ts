@@ -20,6 +20,10 @@ import {
   verifyAlertService,
 } from "../service/alert.service";
 import {
+  listIncidentsService,
+  verifyIncidentsService,
+} from "../service/incident.service";
+import {
   acknowledgeAlertSchema,
   bulkClearAlertSchema,
   clearAlertSchema,
@@ -27,7 +31,9 @@ import {
   detectSchema,
   exportAlertSchema,
   listAlertInputSchema,
+  listIncidentsSchema,
   verifyAlertSchema,
+  verifyIncidentsSchema,
 } from "../validator/alert.validator";
 
 function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown): T {
@@ -284,4 +290,30 @@ export const exportAlertsController = catchAsync(async (c) => {
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });
+});
+
+export const listIncidentsController = catchAsync(async (c) => {
+  const input = parseOrThrow(listIncidentsSchema, c.req.query());
+  const result = await listIncidentsService(input);
+
+  return success(
+    c,
+    { items: result.items, summary: result.summary },
+    { message: "Incidents fetched successfully" },
+    {
+      page: input.page,
+      size: input.limit,
+      total: result.total,
+      totalPages: Math.ceil(result.total / input.limit),
+    },
+  );
+});
+
+export const verifyIncidentsController = catchAsync(async (c) => {
+  const body = await c.req.json();
+  const input = parseOrThrow(verifyIncidentsSchema, body);
+  const actor = getActor(c);
+
+  const result = await verifyIncidentsService(input, actor);
+  return success(c, result, { message: "Incident verified successfully" });
 });

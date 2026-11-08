@@ -1,4 +1,5 @@
 import z from "zod";
+import { FALSE_ALARM_REASON_CODES } from "../incident/incident-query";
 
 export const paginationSchema = z.object({
   page: z.coerce.number().min(1).default(1),
@@ -20,6 +21,8 @@ export const listAlertSchema = z.object({
   relatedTrackId: z.string().optional(),
   startDate: z.coerce.date().optional(),
   endDate: z.coerce.date().optional(),
+  /** Alert ID dipisah koma: anggota satu kejadian. */
+  alertIds: z.string().optional(),
   q: z.string().optional(),
   sortBy: z
     .enum([
@@ -117,3 +120,53 @@ export const exportAlertSchema = z
   });
 
 export type ExportAlertInput = z.infer<typeof exportAlertSchema>;
+
+export const listIncidentsSchema = z.object({
+  airportId: z.string().optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  type: z.string().optional(),
+  severity: z.string().optional(),
+  status: z.enum(["ACTIVE", "CLEARED"]).optional(),
+  verification: z
+    .enum(["UNVERIFIED", "VERIFIED", "FALSE_ALARM", "MIXED", "NEEDS_ACTION"])
+    .optional(),
+  q: z.string().optional(),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
+});
+
+export type ListIncidentsInput = z.infer<typeof listIncidentsSchema>;
+
+export const verifyIncidentsSchema = z
+  .object({
+    /** Alert ID anggota kejadian. */
+    alertIds: z.array(z.string().min(1)).min(1).max(500),
+    incidentId: z.string().optional(),
+    status: z.enum(["VERIFIED", "FALSE_ALARM"]),
+    reasonCode: z.enum(FALSE_ALARM_REASON_CODES).optional(),
+    note: z.string().max(500).optional(),
+    /** "Terapkan juga": hanya alert yang belum dinilai, yang sudah dinilai tidak ditimpa. */
+    onlyUnverified: z.boolean().default(false),
+    /** Wajib true bila ada alert Critical di dalamnya. */
+    confirmCritical: z.boolean().default(false),
+    verifiedBy: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.status === "FALSE_ALARM" && !value.reasonCode) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["reasonCode"],
+        message: "Alasan wajib dipilih untuk Alarm palsu",
+      });
+    }
+    if (value.reasonCode === "OTHER" && !value.note?.trim()) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["note"],
+        message: "Catatan wajib diisi bila alasannya Lainnya",
+      });
+    }
+  });
+
+export type VerifyIncidentsInput = z.infer<typeof verifyIncidentsSchema>;

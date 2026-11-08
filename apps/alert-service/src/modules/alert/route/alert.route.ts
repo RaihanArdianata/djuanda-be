@@ -12,7 +12,9 @@ import {
   getAlertTrackHistoryController,
   listActiveAlertsController,
   listAlertsController,
+  listIncidentsController,
   verifyAlertController,
+  verifyIncidentsController,
 } from "../controller/alert.controller";
 
 const app = new Hono()
@@ -21,6 +23,8 @@ const app = new Hono()
   .get("/", listAlertsController)
   .get("/active", listActiveAlertsController)
   .get("/export", exportAlertsController)
+  .get("/incidents", listIncidentsController)
+  .post("/incidents/verify", verifyIncidentsController)
   .post("/detect", detectAlertController)
   .post("/clear-bulk", bulkClearAlertController)
   .get("/:id", getAlertByIdController)

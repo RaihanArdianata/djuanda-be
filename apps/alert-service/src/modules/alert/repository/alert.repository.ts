@@ -8,6 +8,7 @@ import {
   db,
   type NewAlert,
 } from "@repo/database";
+import type { IncidentAlertInput } from "@repo/shared/alert-incident";
 import {
   and,
   asc,
@@ -35,6 +36,15 @@ const SORTABLE_COLUMNS = {
 } as const;
 
 export type AlertSortableColumn = keyof typeof SORTABLE_COLUMNS;
+
+/** Alert ID dipisah koma menjadi satu filter; kosong berarti tanpa filter. */
+const alertIdsFilter = (raw: string | undefined): SQL | undefined => {
+  const ids = (raw ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return ids.length > 0 ? inArray(alerts.alertId, ids) : undefined;
+};
 
 const buildFilters = (params: ListAlertsInput): SQL | undefined => {
   // Pencarian bebas: Alert ID / tipe / track / callsign (callsign tinggal di
@@ -71,6 +81,7 @@ const buildFilters = (params: ListAlertsInput): SQL | undefined => {
       : undefined,
     params.startDate ? gte(alerts.triggeredAt, params.startDate) : undefined,
     params.endDate ? lte(alerts.triggeredAt, params.endDate) : undefined,
+    alertIdsFilter(params.alertIds),
     ...searchTokens.map(
       (token) =>
         or(
@@ -416,3 +427,53 @@ export const getAlertTrackHistory = async (
   }
   return { main, related };
 };
+
+export interface IncidentSourceParams {
+  airportId?: string;
+  startDate: Date;
+  endDate: Date;
+}
+
+/** Kolom ringkas semua alert pada rentang itu, terlama dahulu, untuk dikelompokkan menjadi kejadian. */
+export const listIncidentSources = async (
+  params: IncidentSourceParams,
+): Promise<IncidentAlertInput[]> => {
+  const rows = await db
+    .select({
+      alertId: alerts.alertId,
+      type: alerts.type,
+      severity: alerts.severity,
+      status: alerts.status,
+      triggeredAt: alerts.triggeredAt,
+      trackId: alerts.trackId,
+      verificationStatus: alerts.verificationStatus,
+      callsign: sql<
+        string | null
+      >`coalesce(${alerts.data} ->> 'callsign', ${alerts.data} -> 'track' ->> 'callsign')`,
+      relatedCallsign: sql<string | null>`${alerts.data} ->> 'relatedCallsign'`,
+    })
+    .from(alerts)
+    .where(
+      and(
+        isNull(alerts.deletedAt),
+        gte(alerts.triggeredAt, params.startDate),
+        lte(alerts.triggeredAt, params.endDate),
+        params.airportId ? eq(alerts.airportId, params.airportId) : undefined,
+      ),
+    )
+    .orderBy(asc(alerts.triggeredAt));
+
+  return rows.map((r) => ({ ...r, triggeredAt: r.triggeredAt.getTime() }));
+};
+
+export const findAlertsByAlertIds = async (
+  alertIds: string[],
+): Promise<Alert[]> =>
+  alertIds.length === 0
+    ? []
+    : await db
+        .select()
+        .from(alerts)
+        .where(
+          and(inArray(alerts.alertId, alertIds), isNull(alerts.deletedAt)),
+        );

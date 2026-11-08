@@ -4,7 +4,7 @@ import {
   severityRank,
 } from "@repo/shared/alert-incident";
 
-/** Alasan baku untuk Alarm palsu, supaya penyebab positif palsu bisa dihitung dan dipakai menyetel aturan. */
+/** Alasan baku untuk False alert, supaya penyebab positif palsu bisa dihitung dan dipakai menyetel aturan. */
 export const FALSE_ALARM_REASONS = {
   SCHEDULED_MOVEMENT: "Pergerakan terjadwal",
   RADAR_NOISE: "Derau radar",

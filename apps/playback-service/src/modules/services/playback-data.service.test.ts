@@ -1,7 +1,21 @@
 import { describe, expect, it } from "bun:test";
-import type { AftnMessage } from "@repo/database";
+import type {
+  AerodromeFeature,
+  AftnMessage,
+  AshtamMessage,
+  NotamMessage,
+} from "@repo/database";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { aftnRowToEvent, aftnWindowFilter } from "./playback-data.service";
+import {
+  aerodromeSnapshotEvents,
+  aerodromeSnapshotFilter,
+  aftnRowToEvent,
+  aftnWindowFilter,
+  ashtamRowToEvent,
+  ashtamWindowFilter,
+  notamRowToEvent,
+  notamWindowFilter,
+} from "./playback-data.service";
 
 const at = new Date("2026-11-08T01:00:00.000Z");
 const row = {
@@ -28,6 +42,209 @@ const row = {
   createdAt: at,
   updatedAt: at,
 } as AftnMessage;
+
+const windowStart = new Date("2026-11-08T00:00:00.000Z");
+const windowEnd = new Date("2026-11-08T02:00:00.000Z");
+const fromMs = windowStart.getTime();
+
+const notamRow = {
+  id: "22222222-2222-2222-2222-222222222222",
+  source: "navsim",
+  providerId: "provider-2",
+  series: "A",
+  number: "1234",
+  year: 2026,
+  type: "NOTAMN",
+  icaoLocation: "WARR",
+  effectiveFrom: at,
+  effectiveTo: new Date("2026-11-09T00:00:00.000Z"),
+  body: "RWY 10/28 EDGE LIGHT U/S",
+  status: "ACTIVE",
+  contentHash: "hash-2",
+  raw: "(A1234/26 NOTAMN)",
+} as NotamMessage;
+
+const ashtamRow = {
+  id: "33333333-3333-3333-3333-333333333333",
+  source: "navsim",
+  providerId: "ASHTAM 7836",
+  type: "ASHTAM",
+  affectedFir: "WAAF",
+  effectiveFrom: at,
+  effectiveTo: new Date("2026-11-09T00:00:00.000Z"),
+  volcanoName: "SEMERU",
+  volcanicAsh: "ASH TO FL150",
+  status: "ACTIVE",
+  contentHash: "hash-3",
+  raw: "ASHTAM 7836",
+  providerRaw: { secret: "provider-payload" },
+} as unknown as AshtamMessage;
+
+describe("notamRowToEvent", () => {
+  it("memakai effectiveFrom bila mulai di dalam rentang", () => {
+    const event = notamRowToEvent(notamRow, fromMs);
+    expect(event.type).toBe("notam");
+    expect(event.ts).toBe(at.getTime());
+  });
+
+  it("muncul di awal rentang bila sudah berlaku sebelumnya", () => {
+    const event = notamRowToEvent(
+      { ...notamRow, effectiveFrom: new Date("2026-11-01T00:00:00.000Z") },
+      fromMs,
+    );
+    expect(event.ts).toBe(fromMs);
+    expect(event.timestamp).toBe("2026-11-08T00:00:00.000Z");
+    expect(event.data).toMatchObject({
+      effectiveFrom: "2026-11-01T00:00:00.000Z",
+    });
+  });
+
+  it("mempertahankan nama field lama dan membawa status", () => {
+    expect(notamRowToEvent(notamRow, fromMs).data).toMatchObject({
+      id: notamRow.id,
+      airportId: "WARR",
+      series: "A",
+      text: "RWY 10/28 EDGE LIGHT U/S",
+      status: "ACTIVE",
+      effectiveTo: "2026-11-09T00:00:00.000Z",
+    });
+  });
+
+  it("tidak membawa kolom internal atau identitas track", () => {
+    const { data } = notamRowToEvent(notamRow, fromMs);
+    expect(data).not.toHaveProperty("contentHash");
+    expect(data).not.toHaveProperty("trackId");
+  });
+});
+
+describe("notamWindowFilter", () => {
+  it("memilih NOTAM bandara yang masa berlakunya beririsan", () => {
+    const filter = notamWindowFilter("WARR", windowStart, windowEnd);
+    if (!filter) throw new Error("filter kosong");
+    const { sql, params } = new PgDialect().sqlToQuery(filter);
+
+    expect(sql).toContain('"notam_messages"."icao_location" = $1');
+    expect(sql).toContain('"notam_messages"."effective_from" <= $2');
+    expect(sql).toContain('"notam_messages"."effective_to" >= $3');
+    expect(sql).not.toContain('"notam_messages"."status"');
+    expect(params[0]).toBe("WARR");
+  });
+});
+
+describe("ashtamRowToEvent", () => {
+  it("muncul di awal rentang bila sudah berlaku sebelumnya", () => {
+    const event = ashtamRowToEvent(
+      { ...ashtamRow, effectiveFrom: new Date("2026-11-01T00:00:00.000Z") },
+      "WARR",
+      fromMs,
+    );
+    expect(event.type).toBe("ashtam");
+    expect(event.ts).toBe(fromMs);
+  });
+
+  it("mempertahankan nama field lama dan membawa FIR", () => {
+    expect(ashtamRowToEvent(ashtamRow, "WARR", fromMs).data).toMatchObject({
+      id: ashtamRow.id,
+      airportId: "WARR",
+      volcano: "SEMERU",
+      ashAdvisory: "ASH TO FL150",
+      affectedFir: "WAAF",
+      status: "ACTIVE",
+    });
+  });
+
+  it("tidak membawa kolom internal", () => {
+    const { data } = ashtamRowToEvent(ashtamRow, "WARR", fromMs);
+    expect(data).not.toHaveProperty("providerRaw");
+    expect(data).not.toHaveProperty("contentHash");
+  });
+});
+
+describe("ashtamWindowFilter", () => {
+  it("memilih berdasarkan masa berlaku saja", () => {
+    const filter = ashtamWindowFilter(windowStart, windowEnd);
+    if (!filter) throw new Error("filter kosong");
+    const { sql } = new PgDialect().sqlToQuery(filter);
+
+    expect(sql).toContain('"ashtam_messages"."effective_from" <= $1');
+    expect(sql).toContain('"ashtam_messages"."effective_to" >= $2');
+    expect(sql).not.toContain('"ashtam_messages"."affected_fir"');
+  });
+});
+
+const feature = (over: Partial<AerodromeFeature>): AerodromeFeature =>
+  ({
+    id: "44444444-4444-4444-4444-444444444444",
+    airportId: "WARR",
+    layer: "RUNWAY",
+    name: "10/28",
+    status: "ACTIVE",
+    geometry: { type: "Polygon", coordinates: [] },
+    properties: { active: true, surface: "asphalt" },
+    ...over,
+  }) as AerodromeFeature;
+
+describe("aerodromeSnapshotEvents", () => {
+  it("tidak menghasilkan event bila tidak ada fitur", () => {
+    expect(aerodromeSnapshotEvents([], "WARR", fromMs)).toEqual([]);
+  });
+
+  it("menghasilkan satu event aerodrome di awal rentang", () => {
+    const events = aerodromeSnapshotEvents([feature({})], "WARR", fromMs);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("aerodrome");
+    expect(events[0].ts).toBe(fromMs);
+    expect(events[0].timestamp).toBe("2026-11-08T00:00:00.000Z");
+  });
+
+  it("mengambil status bandara dari fitur AERODROME dan membawa fitur", () => {
+    const [event] = aerodromeSnapshotEvents(
+      [feature({ layer: "AERODROME", status: "RESTRICTED" }), feature({})],
+      "WARR",
+      fromMs,
+    );
+    expect(event.data).toMatchObject({
+      airportId: "WARR",
+      status: "RESTRICTED",
+      features: [
+        { layer: "AERODROME", status: "RESTRICTED" },
+        { layer: "RUNWAY", name: "10/28", properties: { active: true } },
+      ],
+    });
+  });
+
+  it("status null bila tidak ada fitur AERODROME", () => {
+    const [event] = aerodromeSnapshotEvents([feature({})], "WARR", fromMs);
+    expect(event.data).toMatchObject({ status: null });
+  });
+
+  it("tidak membawa geometri atau identitas track", () => {
+    const [event] = aerodromeSnapshotEvents([feature({})], "WARR", fromMs);
+    const data = event.data as { features: object[] };
+    expect(data.features[0]).not.toHaveProperty("geometry");
+    expect(data).not.toHaveProperty("trackId");
+    expect(data).not.toHaveProperty("icao24");
+  });
+});
+
+describe("aerodromeSnapshotFilter", () => {
+  it("memilih layer operasional bandara", () => {
+    const filter = aerodromeSnapshotFilter("WARR");
+    if (!filter) throw new Error("filter kosong");
+    const { sql, params } = new PgDialect().sqlToQuery(filter);
+
+    expect(sql).toContain('"aerodrome_features"."airport_id" = $1');
+    expect(sql).toContain('"aerodrome_features"."layer" in');
+    expect(params).toEqual([
+      "WARR",
+      "AERODROME",
+      "RUNWAY",
+      "TAXIWAY",
+      "APRON",
+      "RESTRICTED",
+    ]);
+  });
+});
 
 describe("aftnRowToEvent", () => {
   it("memakai datetime sebagai waktu event", () => {

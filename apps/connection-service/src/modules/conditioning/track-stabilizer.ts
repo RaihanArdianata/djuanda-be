@@ -10,32 +10,32 @@ import {
 /**
  * Penstabil target di permukaan. Sensor MLAT melaporkan posisi pesawat yang diam atau merayap dengan derau 1 sampai 7 m dan sesekali lonjakan
  * 20 sampai 40 m, dengan arah yang acak. Digambar apa adanya, pesawat yang berdiri di apron menjadi coretan, ikonnya berputar, dan alert yang
- * dihitung dari posisi itu ikut bergoyang. Aturan di sini (kebijakan bawaan, bisa diatur lewat env):
+ * dihitung dari posisi itu ikut bergoyang.
  *
- *  - Diam: kecepatan di bawah `standKt` selama `freezeAfter` laporan berturut-turut membekukan posisi di satu titik jangkar dan menahan arah
- *    terakhir yang baik, dengan kecepatan dilaporkan 0. Satu laporan yang menyimpang (derau, lonjakan) tidak melepas pembekuan.
- *  - Bergerak lagi: pembekuan baru dilepas setelah `releaseReports` laporan berturut-turut yang lebih cepat dari `standKt` ATAU lebih jauh dari
- *    jangkar daripada `radiusM`.
- *  - Bergerak: lonjakan yang mustahil (jarak ke posisi sebelumnya melebihi `maxJumpKt`) ditolak sampai `maxRejects` kali berturut-turut, posisi
- *    dihaluskan ringan (EMA), dan arah dihitung dari gerak yang sebenarnya (bukan dari laporan sensor yang berderau), minimal `headingMinMoveM`.
+ * Penyaringnya KONTINU (bukan "bekukan lalu lompat"), supaya gerak tetap mulus:
+ *
+ *  - Zona mati dengan tali: posisi yang ditampilkan hanya bergerak bila posisi sensor menjauh lebih dari `radiusM` (saat lambat) atau
+ *    `moveRadiusM` (saat bergerak) darinya, dan saat bergerak ia ditarik seperti dengan tali sepanjang radius itu. Derau di dalam radius
+ *    tidak menggeser apa-apa, jadi pesawat yang diam jadi satu titik; pesawat yang bergerak diikuti tanpa lompatan.
+ *  - Langkah per laporan dibatasi sesuai kecepatan pesawat sendiri, jadi menyusul setelah tertahan berjalan mulus, tidak melompat.
+ *  - Lonjakan mustahil ditolak sampai `maxRejects` kali berturut-turut. Batasnya menyesuaikan kecepatan pesawat sendiri (mis. pesawat yang
+ *    melaju 120 kt di landasan tidak dianggap melompat).
+ *  - Arah dihitung dari gerak yang sebenarnya (minimal `headingMinMoveM`), bukan dari heading sensor yang berderau; selama belum bergerak
+ *    jauh, arah terakhir dipertahankan.
  *  - Hanya target di permukaan (`onGround`). Pesawat di udara tidak disentuh.
  */
 
 export interface StabilizerOptions {
-  /** Di bawah kecepatan ini (knot) target dianggap diam. */
+  /** Di bawah kecepatan ini (knot) target dianggap diam atau merayap. */
   standKt: number;
-  /** Laporan lambat berturut-turut sebelum posisi dibekukan. */
-  freezeAfter: number;
-  /** Jarak dari jangkar yang masih dianggap derau, meter. */
+  /** Zona mati saat diam atau merayap: derau sampai sejauh ini tidak menggeser posisi, meter. */
   radiusM: number;
-  /** Laporan "bergerak" berturut-turut sebelum pembekuan dilepas. */
-  releaseReports: number;
-  /** Langkah lebih cepat dari ini (knot) antara dua laporan dianggap lonjakan palsu di permukaan. */
+  /** Zona mati saat bergerak normal (di atas `standKt`), meter. Sekaligus selisih posisi tampil dan posisi sensor. */
+  moveRadiusM: number;
+  /** Langkah lebih cepat dari ini (knot), dan lebih dari 3 kali kecepatan pesawat sendiri, dianggap lonjakan palsu. */
   maxJumpKt: number;
   /** Berapa laporan berturut-turut yang boleh ditolak sebagai lonjakan sebelum dianggap kenyataan. */
   maxRejects: number;
-  /** Bobot laporan baru pada penghalusan posisi saat bergerak (0 sampai 1; 1 = tanpa penghalusan). */
-  alpha: number;
   /** Arah baru dihitung dari gerak sejauh ini, meter. */
   headingMinMoveM: number;
   /** State target yang tidak melapor sekian lama dibuang, ms. */
@@ -45,19 +45,17 @@ export interface StabilizerOptions {
 
 export const DEFAULT_STABILIZER_OPTIONS: StabilizerOptions = {
   standKt: 6,
-  freezeAfter: 3,
-  radiusM: 20,
-  releaseReports: 2,
+  radiusM: 15,
+  moveRadiusM: 3,
   maxJumpKt: 80,
   maxRejects: 2,
-  alpha: 0.6,
   headingMinMoveM: 10,
   forgetAfterMs: 120_000,
 };
 
 export interface StabilizerStats {
-  /** Laporan yang dikeluarkan dari titik beku. */
-  frozenReports: number;
+  /** Laporan yang tidak menggeser posisi tampil (derau di dalam zona mati). */
+  heldReports: number;
   /** Lonjakan mustahil yang ditolak. */
   jumpsRejected: number;
 }
@@ -70,20 +68,26 @@ export interface TrackStabilizer {
 }
 
 interface State {
-  frozen: boolean;
-  anchor?: LatLon;
-  slowStreak: number;
-  moveStreak: number;
-  rejects: number;
-  /** Posisi halus terakhir yang dikeluarkan, dan kapan. */
-  out?: LatLon & { at: number };
+  /** Posisi yang ditampilkan. */
+  out: LatLon;
+  /** Laporan sensor terakhir yang diterima (bukan lonjakan), dan kapan. */
+  lastRaw: LatLon & { at: number };
+  /** Kecepatan dilaporkan yang dihaluskan, knot. */
+  speed: number;
   heading?: number;
+  /** Titik tampil terakhir yang bergerak cukup jauh, untuk menghitung arah. */
   trail: LatLon[];
+  rejects: number;
   lastAt: number;
 }
 
 const KT_TO_MPS: number = 0.514444;
-const TRAIL_LEN: number = 10;
+const TRAIL_LEN: number = 12;
+/** Langkah maksimum per laporan = kecepatan pesawat x selang x faktor ini + tambahan kecil, supaya menyusul tidak melompat. */
+const STEP_FACTOR: number = 1.5;
+const MIN_STEP_M: number = 2;
+const MIN_DT_S: number = 0.2;
+const MAX_DT_S: number = 10;
 
 function withMotion(
   event: FusedTrackEvent,
@@ -101,15 +105,19 @@ function withMotion(
   };
 }
 
-const newState = (event: FusedTrackEvent, at: number): State => ({
-  frozen: false,
-  slowStreak: 0,
-  moveStreak: 0,
-  rejects: 0,
-  trail: [],
-  lastAt: at,
-  heading: event.velocity?.heading,
-});
+/** Titik sejauh `metres` dari `from` ke arah `to` (bidang datar). */
+function towards(from: LatLon, to: LatLon, metres: number): LatLon {
+  const total = distanceM(from, to);
+  if (total === 0) return from;
+  const f = Math.min(1, metres / total);
+  return {
+    lat: from.lat + (to.lat - from.lat) * f,
+    lon: from.lon + (to.lon - from.lon) * f,
+  };
+}
+
+const clamp = (n: number, lo: number, hi: number): number =>
+  Math.min(hi, Math.max(lo, n));
 
 export function createTrackStabilizer(
   options: Partial<StabilizerOptions> = {},
@@ -122,7 +130,7 @@ export function createTrackStabilizer(
   };
   const now = options.now ?? ((): number => Date.now());
   const states = new Map<string, State>();
-  const counters: StabilizerStats = { frozenReports: 0, jumpsRejected: 0 };
+  const counters: StabilizerStats = { heldReports: 0, jumpsRejected: 0 };
 
   /** Arah dari gerak: dari titik terlama di jejak pendek yang sudah cukup jauh; bila belum ada, arah terakhir dipertahankan. */
   function headingFrom(
@@ -143,86 +151,47 @@ export function createTrackStabilizer(
     );
   }
 
-  /** Titik beku: derau dan lonjakan sesaat tidak menggeser apa-apa. Mengembalikan keluaran bila masih beku, null bila sudah dilepas. */
-  function whileFrozen(
-    event: FusedTrackEvent,
-    st: State,
-    raw: LatLon,
-    speed: number,
-  ): FusedTrackEvent | null {
-    const anchor = st.anchor;
-    if (!st.frozen || !anchor) return null;
-    const away = distanceM(raw, anchor) > opts.radiusM || speed >= opts.standKt;
-    st.moveStreak = away ? st.moveStreak + 1 : 0;
-    if (st.moveStreak < opts.releaseReports) {
-      counters.frozenReports++;
-      return withMotion(event, anchor, 0, st.heading);
-    }
-    // Benar-benar bergerak lagi: mulai dari posisi sekarang, jejak lama dibuang.
-    st.frozen = false;
-    st.anchor = undefined;
-    st.moveStreak = 0;
-    st.slowStreak = 0;
-    st.rejects = 0;
-    st.out = undefined;
-    st.trail = [];
-    return null;
-  }
-
-  /** Lonjakan mustahil terhadap posisi yang baru dikeluarkan: ditolak sampai `maxRejects` kali berturut-turut. */
-  function rejectJump(
-    event: FusedTrackEvent,
+  /** Lonjakan mustahil terhadap laporan sensor sebelumnya; batasnya mengikuti kecepatan pesawat sendiri. */
+  function isJump(
     st: State,
     raw: LatLon,
     t: number,
-  ): FusedTrackEvent | null {
-    const last = st.out;
-    if (!last || st.rejects >= opts.maxRejects) {
-      st.rejects = 0;
-      return null;
-    }
-    const dtS = (t - last.at) / 1000;
-    const impliedKt = dtS > 0.2 ? distanceM(raw, last) / dtS / KT_TO_MPS : 0;
-    if (impliedKt <= opts.maxJumpKt) {
-      st.rejects = 0;
-      return null;
-    }
-    st.rejects++;
-    counters.jumpsRejected++;
-    return withMotion(event, last, event.velocity?.groundSpeed, st.heading);
+    reportedKt: number,
+  ): boolean {
+    const dtS = clamp((t - st.lastRaw.at) / 1000, MIN_DT_S, MAX_DT_S);
+    const impliedKt = distanceM(raw, st.lastRaw) / dtS / KT_TO_MPS;
+    const allowedKt = Math.max(
+      opts.maxJumpKt,
+      3 * Math.max(reportedKt, st.speed),
+    );
+    return impliedKt > allowedKt;
   }
 
-  /** Bergerak (atau mulai diam): penghalusan ringan, pembekuan setelah cukup laporan lambat, arah dari gerak. */
-  function moving(
-    event: FusedTrackEvent,
-    st: State,
-    raw: LatLon,
-    speed: number,
-    t: number,
-  ): FusedTrackEvent {
-    const last = st.out;
-    const smooth: LatLon = last
-      ? {
-          lat: last.lat + (raw.lat - last.lat) * opts.alpha,
-          lon: last.lon + (raw.lon - last.lon) * opts.alpha,
-        }
-      : raw;
-
-    st.slowStreak = speed < opts.standKt ? st.slowStreak + 1 : 0;
-    if (st.slowStreak >= opts.freezeAfter) {
-      st.frozen = true;
-      st.anchor = smooth;
-      st.moveStreak = 0;
-      counters.frozenReports++;
-      return withMotion(event, smooth, 0, st.heading);
+  /** Zona mati dengan tali: bergerak hanya sejauh yang diperlukan agar posisi sensor ada di dalam radius, dan tidak lebih cepat dari pesawatnya. */
+  function follow(st: State, raw: LatLon, dtS: number, slow: boolean): LatLon {
+    const radius = slow ? opts.radiusM : opts.moveRadiusM;
+    const gap = distanceM(raw, st.out);
+    if (gap <= radius) {
+      counters.heldReports++;
+      return st.out;
     }
+    const maxStep = Math.max(
+      Math.max(st.speed, opts.standKt) * KT_TO_MPS * dtS * STEP_FACTOR,
+      MIN_STEP_M,
+    );
+    return towards(st.out, raw, Math.min(gap - radius, maxStep));
+  }
 
-    const heading = headingFrom(st, smooth, event.velocity?.heading);
-    st.heading = heading;
-    st.out = { ...smooth, at: t };
-    st.trail.push(smooth);
+  /** Posisi tampil bergeser: catat di jejak pendek dan perbarui arah dari gerak. */
+  function moveTo(
+    st: State,
+    next: LatLon,
+    sensorHeading: number | undefined,
+  ): void {
+    st.out = next;
+    st.trail.push(next);
     if (st.trail.length > TRAIL_LEN) st.trail.shift();
-    return withMotion(event, smooth, event.velocity?.groundSpeed, heading);
+    st.heading = headingFrom(st, next, sensorHeading);
   }
 
   return {
@@ -236,17 +205,44 @@ export function createTrackStabilizer(
       }
 
       const t = now();
-      const st = states.get(id) ?? newState(event, t);
-      states.set(id, st);
-      st.lastAt = t;
       const raw: LatLon = { lat: pos.lat, lon: pos.lon };
-      const speed = event.velocity?.groundSpeed ?? 0;
+      const reportedKt = event.velocity?.groundSpeed ?? 0;
+      const st = states.get(id);
 
-      return (
-        whileFrozen(event, st, raw, speed) ??
-        rejectJump(event, st, raw, t) ??
-        moving(event, st, raw, speed, t)
-      );
+      // Laporan pertama: tampil apa adanya, arahnya dari sensor sampai target terbukti bergerak.
+      if (!st) {
+        states.set(id, {
+          out: raw,
+          lastRaw: { ...raw, at: t },
+          speed: reportedKt,
+          heading: event.velocity?.heading,
+          trail: [raw],
+          rejects: 0,
+          lastAt: t,
+        });
+        return event;
+      }
+
+      // Lonjakan mustahil: tahan posisi tampil, dan lepas bila terus berlanjut (berarti nyata).
+      if (st.rejects < opts.maxRejects && isJump(st, raw, t, reportedKt)) {
+        st.rejects++;
+        st.lastAt = t;
+        counters.jumpsRejected++;
+        return withMotion(event, st.out, reportedKt, st.heading);
+      }
+      const dtS = clamp((t - st.lastRaw.at) / 1000, MIN_DT_S, MAX_DT_S);
+      st.rejects = 0;
+      st.lastRaw = { ...raw, at: t };
+      st.lastAt = t;
+      st.speed = st.speed * 0.5 + reportedKt * 0.5;
+
+      const slow = st.speed < opts.standKt;
+      const next = follow(st, raw, dtS, slow);
+      const moved = distanceM(next, st.out) > 0;
+      if (moved) moveTo(st, next, event.velocity?.heading);
+      // Tidak bergeser dan pelan: kecepatan dilaporkan 0, bukan derau 0 sampai 5 kt dari sensor.
+      const speedOut = !moved && slow ? 0 : event.velocity?.groundSpeed;
+      return withMotion(event, next, speedOut, st.heading);
     },
 
     forget(trackId: string): void {

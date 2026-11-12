@@ -33,99 +33,116 @@ function posOf(e: { position?: { lat: number; lon: number } }) {
   return { lat: e.position.lat, lon: e.position.lon };
 }
 
+/** Jalankan satu target sepanjang `steps` laporan 1 detik; `reportFor(i)` memberi laporan ke-i. */
+function run(
+  steps: number,
+  reportFor: (i: number) => ReturnType<typeof at>,
+  opts = {},
+) {
+  const c = clock();
+  const stab = createTrackStabilizer({ now: c.now, ...opts });
+  const outs: Array<ReturnType<typeof stab.apply>> = [];
+  for (let i = 0; i < steps; i++) {
+    outs.push(stab.apply(reportFor(i)));
+    c.advance(1000);
+  }
+  return { stab, outs };
+}
+
 describe("track stabilizer: standing", () => {
   it("turns a standing aircraft's 1 to 7 m scribble into one point with a steady heading", () => {
-    const c = clock();
-    const stab = createTrackStabilizer({ now: c.now });
-    const outs: Array<ReturnType<typeof stab.apply>> = [];
-    for (let i = 0; i < 30; i++) {
+    const { outs } = run(30, (i) => {
       const [n, e] = JITTER[i % JITTER.length] as [number, number];
-      // The sensor reports a random heading for a target that is not moving.
-      outs.push(stab.apply(at(n, e, i % 3, (i * 97) % 360)));
-      c.advance(1000);
-    }
-    const settled = outs.slice(6);
-    const first = posOf(settled[0] as never);
-    for (const o of settled) {
+      // The sensor reports a random heading and 0 to 2 kt for a target that is not moving.
+      return at(n, e, i % 3, (i * 97) % 360);
+    });
+    const first = posOf(outs[0] as never);
+    for (const o of outs.slice(1)) {
       expect(distanceM(posOf(o), first)).toBeLessThan(0.01);
       expect(o.velocity?.groundSpeed).toBe(0);
-      expect(o.velocity?.heading).toBe(
-        (settled[0] as { velocity?: { heading?: number } }).velocity?.heading,
-      );
     }
+    const headings = new Set(outs.slice(1).map((o) => o.velocity?.heading));
+    expect(headings.size).toBe(1);
   });
 
-  it("is not moved by a single 44 m jump while it stands", () => {
-    const c = clock();
-    const stab = createTrackStabilizer({ now: c.now });
-    let anchor = { lat: 0, lon: 0 };
-    for (let i = 0; i < 6; i++) {
-      anchor = posOf(stab.apply(at(0, 0, 1)));
-      c.advance(1000);
-    }
-    const jumped = stab.apply(at(44, 0, 3));
-    expect(distanceM(posOf(jumped), anchor)).toBeLessThan(0.01);
-    c.advance(1000);
-    expect(distanceM(posOf(stab.apply(at(0, 1, 1))), anchor)).toBeLessThan(
-      0.01,
+  it("is not moved by a single 44 m jump, nor by a noisy speed reading", () => {
+    const { outs } = run(12, (i) =>
+      i === 8 ? at(44, 0, 3) : at(0, 0, i === 9 ? 5 : 1),
     );
-  });
-
-  it("lets go once the aircraft really moves again (two reports that are fast or far)", () => {
-    const c = clock();
-    const stab = createTrackStabilizer({ now: c.now });
-    for (let i = 0; i < 6; i++) {
-      stab.apply(at(0, 0, 0));
-      c.advance(1000);
-    }
-    const first = stab.apply(at(0, 30, 12, 90));
-    expect(first.velocity?.groundSpeed).toBe(0); // one report is not enough
-    c.advance(1000);
-    const second = stab.apply(at(0, 36, 12, 90));
-    expect(second.velocity?.groundSpeed).toBe(12);
-    expect(distanceM(posOf(second), offset(0, 36))).toBeLessThan(1);
+    const first = posOf(outs[0] as never);
+    for (const o of outs) expect(distanceM(posOf(o), first)).toBeLessThan(0.01);
   });
 });
 
-describe("track stabilizer: moving", () => {
-  it("keeps the heading of a straight taxi steady despite 2 m of noise and a heading the sensor gets wrong", () => {
-    const c = clock();
-    const stab = createTrackStabilizer({ now: c.now });
-    const headings: number[] = [];
-    for (let i = 0; i < 25; i++) {
-      const [nn, ee] = JITTER[i % JITTER.length] as [number, number];
-      // 15 kt (about 7.7 m/s) due east, with noise.
-      const out = stab.apply(
-        at(nn * 0.4, i * 7.7 + ee * 0.4, 15, (i * 131) % 360),
-      );
-      if (i >= 4) headings.push(out.velocity?.heading ?? NaN);
-      c.advance(1000);
+describe("track stabilizer: moving smoothly", () => {
+  it("never makes a step bigger than the aircraft's own speed allows, also when it starts moving after standing (no stair-steps)", () => {
+    // Stands 10 s, then taxis east at 10 kt (5.1 m/s) for 20 s.
+    const { outs } = run(30, (i) =>
+      i < 10 ? at(0, 0, 0) : at(0, (i - 10) * 5.1, 10, 90),
+    );
+    let previous = posOf(outs[0] as never);
+    for (const o of outs.slice(1)) {
+      const here = posOf(o);
+      // Allowed step: max(speed, 6 kt) x 1.5 over one second, which is below 6 m here.
+      expect(distanceM(previous, here)).toBeLessThan(6);
+      previous = here;
     }
-    for (const h of headings) expect(angleDiff(h, 90)).toBeLessThan(20);
+    // Once it moves steadily it is shown close to where the sensor has it.
+    const last = outs[outs.length - 1] as never;
+    expect(distanceM(posOf(last), offset(0, 19 * 5.1))).toBeLessThan(8);
   });
 
-  it("rejects a jump that no aircraft could make, but accepts it if it persists", () => {
-    const c = clock();
-    const stab = createTrackStabilizer({ now: c.now, maxRejects: 2 });
-    let last = { lat: 0, lon: 0 };
-    for (let i = 0; i < 6; i++) {
-      last = posOf(stab.apply(at(0, i * 7.7, 15, 90)));
-      c.advance(1000);
-    }
-    // 300 m in one second.
-    expect(distanceM(posOf(stab.apply(at(0, 340, 15, 90))), last)).toBeLessThan(
-      1,
-    );
-    c.advance(1000);
-    expect(distanceM(posOf(stab.apply(at(0, 348, 15, 90))), last)).toBeLessThan(
-      1,
-    );
-    c.advance(1000);
-    // Third in a row: it is real.
+  it("keeps the heading of a straight taxi steady despite 2 m of noise and a heading the sensor gets wrong", () => {
+    const { outs } = run(25, (i) => {
+      const [nn, ee] = JITTER[i % JITTER.length] as [number, number];
+      return at(nn * 0.4, i * 7.7 + ee * 0.4, 15, (i * 131) % 360);
+    });
+    for (const o of outs.slice(4))
+      expect(angleDiff(o.velocity?.heading ?? Number.NaN, 90)).toBeLessThan(20);
+  });
+
+  it("follows a slow creep (3 kt, e.g. a pushback) without standing still for good", () => {
+    // 3 kt = 1.5 m/s due north for 60 s, with noise: the shown position keeps up within the dead zone.
+    const { outs } = run(60, (i) => {
+      const [nn, ee] = JITTER[i % JITTER.length] as [number, number];
+      return at(i * 1.5 + nn * 0.3, ee * 0.3, 3, 0);
+    });
+    const last = posOf(outs[outs.length - 1] as never);
+    const truth = offset(59 * 1.5, 0);
+    expect(distanceM(last, truth)).toBeLessThan(20);
+    expect(distanceM(last, offset(0, 0))).toBeGreaterThan(60);
+  });
+
+  it("does not take an aircraft rolling at 120 kt on the runway for a jump", () => {
+    // 120 kt is 61.7 m/s; with the old fixed limit of 80 kt every second report would have been rejected.
+    const { stab, outs } = run(10, (i) => at(0, i * 61.7, 120, 90));
+    expect(stab.stats().jumpsRejected).toBe(0);
     expect(
-      distanceM(posOf(stab.apply(at(0, 356, 15, 90))), last),
-    ).toBeGreaterThan(100);
+      distanceM(posOf(outs[9] as never), offset(0, 9 * 61.7)),
+    ).toBeLessThan(5);
+  });
+});
+
+describe("track stabilizer: jumps", () => {
+  it("rejects a jump that no aircraft could make, but accepts it if it persists", () => {
+    const { stab, outs } = run(10, (i) =>
+      i < 6 ? at(0, i * 7.7, 15, 90) : at(0, 340 + (i - 6) * 7.7, 15, 90),
+    );
+    const before = posOf(outs[5] as never);
+    // The first two reports after the jump stay where the aircraft was ...
+    expect(distanceM(posOf(outs[6] as never), before)).toBeLessThan(1);
+    expect(distanceM(posOf(outs[7] as never), before)).toBeLessThan(1);
     expect(stab.stats().jumpsRejected).toBe(2);
+    // ... and then it is real: the shown position goes after it at the pace the aircraft's own speed allows (3 s went by, at 15 kt
+    // that is about 35 m), not in one leap of 340 m.
+    const target = offset(0, 340 + 3 * 7.7);
+    let previous = before;
+    for (let i = 8; i < 10; i++) {
+      const here = posOf(outs[i] as never);
+      expect(distanceM(previous, here)).toBeLessThan(40);
+      expect(distanceM(here, target)).toBeLessThan(distanceM(previous, target));
+      previous = here;
+    }
   });
 });
 
@@ -145,7 +162,7 @@ describe("track stabilizer: what it leaves alone", () => {
     }
     const drop = at(0, 0, 0, 0, { lifecycle: "dropped" });
     expect(stab.apply(drop)).toBe(drop);
-    // A new life of the same id starts unfrozen: the first reports are not held at the old anchor.
+    // A new life of the same id starts where it is reported, not at the old place.
     const fresh = stab.apply(at(0, 200, 0));
     expect(distanceM(posOf(fresh), offset(0, 200))).toBeLessThan(1);
   });

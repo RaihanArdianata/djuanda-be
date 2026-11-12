@@ -93,6 +93,43 @@ describe("STCA", () => {
     expect(text).not.toContain("ketinggian");
   });
 
+  it("uses metres for low-air categories even though domain is AIR", () => {
+    const text = describeRow(
+      row("STCA", {
+        domain: "AIR",
+        category: "AIR_LOW_CROSSING",
+        callsign: "GIA320",
+        relatedCallsign: "SIA929",
+        predictedTimeSeconds: 60,
+        horizontalSeparationNm: 0.17,
+        horizontalSeparationMeters: 320,
+        minimumSeparationMeters: 500,
+      }),
+    );
+    expect(text).toContain("STCA udara");
+    expect(text).toContain("jarak 320 m dalam 60 detik");
+    expect(text).toContain("batas pemisahan 500 m");
+    expect(text).not.toContain("NM");
+  });
+
+  it("states the current distance for AIR_LOW_DOME, not a prediction", () => {
+    const text = describeRow(
+      row("STCA", {
+        domain: "AIR",
+        category: "AIR_LOW_DOME",
+        callsign: "DOME1",
+        relatedCallsign: "DOME2",
+        predictedTimeSeconds: null,
+        horizontalSeparationMeters: 110,
+        minimumSeparationMeters: 140,
+      }),
+    );
+    expect(text).toContain("berada pada jarak 110 m");
+    expect(text).toContain("batas pemisahan 140 m");
+    expect(text).not.toContain("diprediksi");
+    expect(text).not.toContain("detik");
+  });
+
   it("falls back to the related track id when the alert carries no figures", () => {
     const text = describeRow(
       row("STCA", { callsign: "SIA929" }, { related_track_id: "ast_1" }),

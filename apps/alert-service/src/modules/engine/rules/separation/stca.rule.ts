@@ -1,5 +1,12 @@
 import { isAirborne } from "../../airborne";
-import type { AlertCandidate, AlertContext, DetectionRule } from "../../types";
+import { type AlertArea, distanceFromCenterM } from "../../alert-area";
+import type {
+  AlertCandidate,
+  AlertContext,
+  DetectionRule,
+  MovementTrack,
+} from "../../types";
+import { haversineMeters } from "../geometry/geometry";
 
 const DEFAULT_HORIZON_SECONDS = 60;
 
@@ -20,16 +27,32 @@ function minimumVerticalFt(
 const DEFAULT_SURFACE_MIN_SEPARATION_M = 50;
 const DEFAULT_SURFACE_HORIZON_SECONDS = 10;
 const METERS_PER_NM = 1852;
+const METERS_PER_FT = 0.3048;
 
-/** STCA punya dua varian: di udara (AIR) dan di darat (SURFACE), masing-masing dengan ambang sendiri. */
+const DEFAULT_HIGH_ALTITUDE_FT = 1500;
+const DEFAULT_LOW_CROSSING_SEPARATION_M = 500;
+const DEFAULT_LOW_CROSSING_VERTICAL_M = 100;
+const DEFAULT_LOW_DOME_ALTITUDE_FT = 1000;
+const DEFAULT_LOW_DOME_SEPARATION_M = 140;
+const DEFAULT_LOW_DOME_RADIUS_FRACTION = 0.5;
+
+export type StcaCategory =
+  | "AIR_HIGH"
+  | "AIR_LOW_CROSSING"
+  | "AIR_LOW_DOME"
+  | "SURFACE";
+
 type StcaDomain = "AIR" | "SURFACE";
 
 interface PoolParams {
   domain: StcaDomain;
+  category: StcaCategory;
   horizonSeconds: number;
   /** Batas pemisahan horizontal (NM). */
   limitNm: number;
   verticalFt: number | undefined;
+  useMeters: boolean;
+  minimumSeparationMeters?: number;
 }
 
 const numberOr = (value: unknown, fallback: number): number =>
@@ -37,20 +60,98 @@ const numberOr = (value: unknown, fallback: number): number =>
     ? value
     : fallback;
 
+function trackAltitudeFt(track: MovementTrack): number | null {
+  return track.altitude !== undefined ? track.altitude : null;
+}
+
+/**
+ * Bukti pemilihan kategori — bukan batas geometri yang dipakai rule.
+ * `distanceFromCenterM` = jarak **terjauh** anggota pasangan ke ARP.
+ * `altitudeFt` = ketinggian **minimum** pasangan.
+ * `radiusM` = radius zona kategori (alas kubah udara / radius darat / 50% darat),
+ * bukan tinggi efektif kubah elipsoid dan bukan ambang pemisahan.
+ */
+function zonePayload(
+  a: MovementTrack,
+  b: MovementTrack,
+  area: AlertArea | null | undefined,
+  radiusM: number | null,
+): {
+  distanceFromCenterM: number | null;
+  radiusM: number | null;
+  altitudeFt: number | null;
+} {
+  const altA = trackAltitudeFt(a);
+  const altB = trackAltitudeFt(b);
+  const altitudeFt =
+    altA !== null && altB !== null ? Math.min(altA, altB) : (altA ?? altB);
+  if (!area) {
+    return { distanceFromCenterM: null, radiusM, altitudeFt };
+  }
+  return {
+    distanceFromCenterM: Math.max(
+      distanceFromCenterM(a, area),
+      distanceFromCenterM(b, area),
+    ),
+    radiusM,
+    altitudeFt,
+  };
+}
+
+function categoryRadiusM(
+  ctx: AlertContext,
+  category: StcaCategory,
+): number | null {
+  if (!ctx.alertArea) return null;
+  if (category === "AIR_LOW_DOME") {
+    return ctx.alertArea.groundRadiusM * DEFAULT_LOW_DOME_RADIUS_FRACTION;
+  }
+  if (category === "AIR_LOW_CROSSING" || category === "SURFACE") {
+    return ctx.alertArea.groundRadiusM;
+  }
+  return ctx.alertArea.airRadiusM;
+}
+
+function candidateMessage(
+  callsignA: string,
+  callsignB: string,
+  distance: string,
+  p: PoolParams,
+): string {
+  const current = p.category === "AIR_LOW_DOME";
+  const time =
+    current || p.horizonSeconds <= 0 ? "" : ` in ${p.horizonSeconds}s`;
+  const surface = p.domain === "SURFACE" ? ", surface" : "";
+  const verb = current ? "below" : "predicted below";
+  return `${callsignA} and ${callsignB} ${verb} minimum separation (${distance}${time}${surface})`;
+}
+
+function separationData(
+  distanceNm: number,
+  p: PoolParams,
+): Record<string, unknown> {
+  if (!p.useMeters) return {};
+  return {
+    horizontalSeparationMeters: distanceNm * METERS_PER_NM,
+    minimumSeparationMeters:
+      p.minimumSeparationMeters ?? p.limitNm * METERS_PER_NM,
+  };
+}
+
 function buildCandidate(
   ctx: AlertContext,
-  a: AlertContext["tracks"][0],
-  b: AlertContext["tracks"][0],
+  a: MovementTrack,
+  b: MovementTrack,
   pairKey: string,
   distanceNm: number,
   p: PoolParams,
 ): AlertCandidate {
   const callsignA = a.callsign ?? a.trackId;
   const callsignB = b.callsign ?? b.trackId;
-  const surface = p.domain === "SURFACE";
-  const separation = surface
+  const separation = p.useMeters
     ? `${Math.round(distanceNm * METERS_PER_NM)} m`
     : `${distanceNm.toFixed(2)} NM`;
+  const current = p.category === "AIR_LOW_DOME";
   return {
     alertId: `STCA|${ctx.airportId}|${pairKey}`,
     airportId: ctx.airportId,
@@ -63,20 +164,19 @@ function buildCandidate(
     data: {
       // AIR atau SURFACE: klien menampilkan STCA udara dan STCA darat sebagai dua jenis yang berbeda.
       domain: p.domain,
+      category: p.category,
+      zone: zonePayload(a, b, ctx.alertArea, categoryRadiusM(ctx, p.category)),
       callsign: callsignA,
       relatedCallsign: callsignB,
-      message: `${callsignA} and ${callsignB} predicted below minimum separation (${separation} in ${p.horizonSeconds}s${surface ? ", surface" : ""})`,
+      message: candidateMessage(callsignA, callsignB, separation, p),
       latitude: (a.latitude + b.latitude) / 2,
       longitude: (a.longitude + b.longitude) / 2,
       track: trackSnapshot(a),
       relatedTrack: trackSnapshot(b),
-      predictedTimeSeconds: p.horizonSeconds,
+      predictedTimeSeconds: current ? null : p.horizonSeconds,
       horizontalSeparationNm: distanceNm,
       minimumHorizontalSeparationNm: p.limitNm,
-      ...(surface && {
-        horizontalSeparationMeters: distanceNm * METERS_PER_NM,
-        minimumSeparationMeters: p.limitNm * METERS_PER_NM,
-      }),
+      ...separationData(distanceNm, p),
       predictedVerticalSeparationFt:
         a.altitude !== undefined && b.altitude !== undefined
           ? Math.abs(a.altitude - b.altitude)
@@ -88,9 +188,9 @@ function buildCandidate(
 
 /** Jarak (NM) pada waktu prediksi bila pasangan ini terlalu dekat; `undefined` bila tidak (atau tidak dinilai). */
 function conflictDistanceNm(
-  a: AlertContext["tracks"][0],
-  b: AlertContext["tracks"][0],
-  p: PoolParams,
+  a: MovementTrack,
+  b: MovementTrack,
+  p: Pick<PoolParams, "horizonSeconds" | "limitNm" | "verticalFt">,
 ): number | undefined {
   // Callsign sama = satu pesawat yang terlihat dua kali (dua trackId dari dua jalur feed), bukan dua pesawat yang berdekatan.
   if (a.callsign && a.callsign === b.callsign) return undefined;
@@ -107,10 +207,186 @@ function conflictDistanceNm(
   return distanceNm < p.limitNm ? distanceNm : undefined;
 }
 
-/** Pasangan di dalam satu kumpulan target (semua di udara, atau semua di darat) yang diperkirakan terlalu dekat. */
-function evaluatePool(
+function sameCallsign(a: MovementTrack, b: MovementTrack): boolean {
+  return Boolean(a.callsign && a.callsign === b.callsign);
+}
+
+function isAircraft(track: MovementTrack): boolean {
+  return (track.targetType ?? "AIRCRAFT") === "AIRCRAFT";
+}
+
+function currentSeparationM(a: MovementTrack, b: MovementTrack): number {
+  return haversineMeters([a.latitude, a.longitude], [b.latitude, b.longitude]);
+}
+
+function predictedSeparationM(
+  a: MovementTrack,
+  b: MovementTrack,
+  seconds: number,
+): number {
+  const pa = predict(a, seconds);
+  const pb = predict(b, seconds);
+  return haversineMeters(
+    [pa.latitude, pa.longitude],
+    [pb.latitude, pb.longitude],
+  );
+}
+
+function verticalSeparationM(
+  a: MovementTrack,
+  b: MovementTrack,
+): number | undefined {
+  if (a.altitude === undefined || b.altitude === undefined) return undefined;
+  return Math.abs(a.altitude - b.altitude) * METERS_PER_FT;
+}
+
+interface AirThresholds {
+  highAltitudeFt: number;
+  lowCrossingSeparationM: number;
+  lowCrossingVerticalM: number;
+  lowDomeAltitudeFt: number;
+  lowDomeSeparationM: number;
+  lowDomeRadiusFraction: number;
+  horizonSeconds: number;
+  highLimitNm: number;
+  highVerticalFt: number | undefined;
+}
+
+function airThresholds(config: Record<string, unknown>): AirThresholds {
+  return {
+    highAltitudeFt: numberOr(config.highAltitudeFt, DEFAULT_HIGH_ALTITUDE_FT),
+    lowCrossingSeparationM: numberOr(
+      config.lowCrossingSeparationMeters,
+      DEFAULT_LOW_CROSSING_SEPARATION_M,
+    ),
+    lowCrossingVerticalM: numberOr(
+      config.lowCrossingVerticalMeters,
+      DEFAULT_LOW_CROSSING_VERTICAL_M,
+    ),
+    lowDomeAltitudeFt: numberOr(
+      config.lowDomeAltitudeFt,
+      DEFAULT_LOW_DOME_ALTITUDE_FT,
+    ),
+    lowDomeSeparationM: numberOr(
+      config.lowDomeSeparationMeters,
+      DEFAULT_LOW_DOME_SEPARATION_M,
+    ),
+    lowDomeRadiusFraction: numberOr(
+      config.lowDomeRadiusFraction,
+      DEFAULT_LOW_DOME_RADIUS_FRACTION,
+    ),
+    horizonSeconds: numberOr(
+      config.predictionTimeSeconds,
+      DEFAULT_HORIZON_SECONDS,
+    ),
+    highLimitNm: numberOr(config.minimumHorizontalSeparationNm, 3),
+    highVerticalFt: minimumVerticalFt(config),
+  };
+}
+
+function inRadius(
+  track: MovementTrack,
+  area: AlertArea,
+  radiusM: number,
+): boolean {
+  return distanceFromCenterM(track, area) <= radiusM;
+}
+
+function bothInLowBand(
+  a: MovementTrack,
+  b: MovementTrack,
+  area: AlertArea,
+  highAltitudeFt: number,
+): boolean {
+  const low = (t: MovementTrack): boolean =>
+    t.altitude !== undefined &&
+    t.altitude < highAltitudeFt &&
+    inRadius(t, area, area.groundRadiusM);
+  return low(a) && low(b);
+}
+
+function bothInDomeBand(
+  a: MovementTrack,
+  b: MovementTrack,
+  area: AlertArea,
+  t: AirThresholds,
+): boolean {
+  const radiusM = area.groundRadiusM * t.lowDomeRadiusFraction;
+  const dome = (track: MovementTrack): boolean =>
+    track.altitude !== undefined &&
+    track.altitude < t.lowDomeAltitudeFt &&
+    inRadius(track, area, radiusM);
+  return dome(a) && dome(b);
+}
+
+function evaluateAirPair(
   ctx: AlertContext,
-  tracks: AlertContext["tracks"],
+  a: MovementTrack,
+  b: MovementTrack,
+  pairKey: string,
+  config: Record<string, unknown>,
+): AlertCandidate | undefined {
+  if (sameCallsign(a, b)) return undefined;
+  const t = airThresholds(config);
+  const area = ctx.alertArea ?? null;
+
+  // Tanpa area: hanya kategori 1 (tanpa batas atas). Kategori 2/3 butuh jarak ke ARP.
+  if (area && bothInLowBand(a, b, area, t.highAltitudeFt)) {
+    if (isAircraft(a) && isAircraft(b) && bothInDomeBand(a, b, area, t)) {
+      const nowM = currentSeparationM(a, b);
+      if (nowM <= t.lowDomeSeparationM) {
+        return buildCandidate(ctx, a, b, pairKey, nowM / METERS_PER_NM, {
+          domain: "AIR",
+          category: "AIR_LOW_DOME",
+          horizonSeconds: 0,
+          limitNm: t.lowDomeSeparationM / METERS_PER_NM,
+          verticalFt: undefined,
+          useMeters: true,
+          minimumSeparationMeters: t.lowDomeSeparationM,
+        });
+      }
+    }
+
+    const predictedM = predictedSeparationM(a, b, t.horizonSeconds);
+    const verticalM = verticalSeparationM(a, b);
+    if (
+      predictedM < t.lowCrossingSeparationM &&
+      verticalM !== undefined &&
+      verticalM <= t.lowCrossingVerticalM
+    ) {
+      return buildCandidate(ctx, a, b, pairKey, predictedM / METERS_PER_NM, {
+        domain: "AIR",
+        category: "AIR_LOW_CROSSING",
+        horizonSeconds: t.horizonSeconds,
+        limitNm: t.lowCrossingSeparationM / METERS_PER_NM,
+        verticalFt: t.lowCrossingVerticalM / METERS_PER_FT,
+        useMeters: true,
+        minimumSeparationMeters: t.lowCrossingSeparationM,
+      });
+    }
+    return undefined;
+  }
+
+  const distanceNm = conflictDistanceNm(a, b, {
+    horizonSeconds: t.horizonSeconds,
+    limitNm: t.highLimitNm,
+    verticalFt: t.highVerticalFt,
+  });
+  if (distanceNm === undefined) return undefined;
+  return buildCandidate(ctx, a, b, pairKey, distanceNm, {
+    domain: "AIR",
+    category: "AIR_HIGH",
+    horizonSeconds: t.horizonSeconds,
+    limitNm: t.highLimitNm,
+    verticalFt: t.highVerticalFt,
+    useMeters: false,
+  });
+}
+
+/** Pasangan di dalam satu kumpulan target (semua di udara, atau semua di darat) yang diperkirakan terlalu dekat. */
+function evaluateSurfacePool(
+  ctx: AlertContext,
+  tracks: MovementTrack[],
   p: PoolParams,
 ): AlertCandidate[] {
   const candidates: AlertCandidate[] = [];
@@ -139,11 +415,6 @@ export const stcaRule: DetectionRule = {
     ctx: AlertContext,
     config: Record<string, unknown>,
   ): AlertCandidate[] => {
-    const horizon = numberOr(
-      config.predictionTimeSeconds,
-      DEFAULT_HORIZON_SECONDS,
-    );
-
     // STCA udara: hanya target di udara. Target yang tidak melaporkan ketinggian (banyak track radar) tidak bisa dinilai
     // pemisahan vertikalnya, dan flag udara/darat mereka tidak bisa dipercaya: tidak ikut. `requireAltitude: false` mengembalikan
     // perilaku lama.
@@ -153,30 +424,40 @@ export const stcaRule: DetectionRule = {
         (t) => config.requireAltitude === false || t.altitude !== undefined,
       );
 
-    const candidates = evaluatePool(ctx, air, {
-      domain: "AIR",
-      horizonSeconds: horizon,
-      limitNm: numberOr(config.minimumHorizontalSeparationNm, 3),
-      verticalFt: minimumVerticalFt(config),
-    });
+    const candidates: AlertCandidate[] = [];
+    const seen = new Set<string>();
+    for (let i = 0; i < air.length; i++) {
+      for (let j = i + 1; j < air.length; j++) {
+        const a = air[i];
+        const b = air[j];
+        const pairKey = [a.trackId, b.trackId].sort().join("|");
+        if (seen.has(pairKey)) continue;
+        seen.add(pairKey);
+        const hit = evaluateAirPair(ctx, a, b, pairKey, config);
+        if (hit) candidates.push(hit);
+      }
+    }
 
     // STCA darat (`includeSurface: true`): dua target di darat (taksi, parkir, kendaraan) dengan ambang sendiri dalam meter.
     // Pasangan campuran (satu di udara, satu di darat) tidak dinilai: itu urusan aturan incursion.
     if (config.includeSurface === true) {
       const surface = ctx.tracks.filter((t) => !isAirborne(t));
+      const minM = numberOr(
+        config.surfaceMinimumSeparationMeters,
+        DEFAULT_SURFACE_MIN_SEPARATION_M,
+      );
       candidates.push(
-        ...evaluatePool(ctx, surface, {
+        ...evaluateSurfacePool(ctx, surface, {
           domain: "SURFACE",
+          category: "SURFACE",
           horizonSeconds: numberOr(
             config.surfacePredictionTimeSeconds,
             DEFAULT_SURFACE_HORIZON_SECONDS,
           ),
-          limitNm:
-            numberOr(
-              config.surfaceMinimumSeparationMeters,
-              DEFAULT_SURFACE_MIN_SEPARATION_M,
-            ) / METERS_PER_NM,
+          limitNm: minM / METERS_PER_NM,
           verticalFt: undefined,
+          useMeters: true,
+          minimumSeparationMeters: minM,
         }),
       );
     }
@@ -185,7 +466,7 @@ export const stcaRule: DetectionRule = {
   },
 };
 
-function trackSnapshot(track: AlertContext["tracks"][0]): {
+function trackSnapshot(track: MovementTrack): {
   trackId: string;
   callsign: string;
   registration: string | null;
@@ -214,7 +495,7 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
 }
 
 function predict(
-  track: AlertContext["tracks"][0],
+  track: MovementTrack,
   seconds: number,
 ): { latitude: number; longitude: number } {
   const speedKnots = track.groundSpeed ?? 0;

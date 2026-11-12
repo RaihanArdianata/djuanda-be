@@ -78,22 +78,22 @@ const defaultRules = [
       minimumHorizontalSeparationNm: 3,
       minimumVerticalSeparationFt: 1000,
       requireAltitude: true,
-      includeSurface: false,
+      includeSurface: true,
       surfaceMinimumSeparationMeters: 50,
       surfacePredictionTimeSeconds: 10,
     },
     documentation: {
       parameters: {
         predictionTimeSeconds:
-          "Waktu prediksi ke depan (detik) untuk memperkirakan posisi kedua track.",
+          "Waktu prediksi ke depan (detik) untuk memperkirakan posisi kedua track (kategori AIR_HIGH dan AIR_LOW_CROSSING). Bawaan 60.",
         minimumHorizontalSeparationNm:
-          "Jarak horizontal minimum (nautical miles) antara dua track.",
+          "AIR_HIGH: jarak horizontal minimum (nautical miles) antara dua track. Bawaan 3.",
         minimumVerticalSeparationFt:
-          "Jarak vertikal minimum (feet): dua track yang selisih tingginya sama atau lebih dari ini tidak memicu STCA walau dekat secara horizontal. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
+          "AIR_HIGH: jarak vertikal minimum (feet). Dua track yang selisih tingginya sama atau lebih dari ini tidak memicu STCA walau dekat secara horizontal. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
         requireAltitude:
           "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:
-          "true = STCA darat ikut menyala: dua target di darat (taksi, parkir, kendaraan) dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Bawaan false (konflik di darat ditangani aturan incursion).",
+          "true = STCA darat ikut menyala: dua target di darat dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Alert membawa data.domain SURFACE dan data.category SURFACE.",
         surfaceMinimumSeparationMeters:
           "STCA darat: jarak minimum (meter) antara dua target di darat. Bawaan 50. Hanya dipakai bila includeSurface true.",
         surfacePredictionTimeSeconds:
@@ -101,16 +101,16 @@ const defaultRules = [
       },
       examples: [
         {
-          name: "2 pesawat di udara, posisi sama",
+          name: "AIR_HIGH — 2 pesawat di atas 1500 ft, dekat",
           topic: "asmgcs.tracks",
           explanation:
-            "Kirim 2 track di udara (onGround false) pada posisi sama / sangat dekat. Jarak 0 NM < 3 NM akan trigger STCA. Target di darat tidak dihitung.",
+            "Dua track di 3000 ft pada posisi sama. data.domain=AIR, data.category=AIR_HIGH. Ambang 3 NM / 1000 ft / 60 dtk.",
           payloads: [
             {
               eventType: "TRACK_UPDATED",
               timestamp: "2026-05-30T12:00:00.000Z",
               data: {
-                trackId: "STCA-1",
+                trackId: "STCA-HIGH-1",
                 airportId: "WARR",
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
@@ -119,14 +119,14 @@ const defaultRules = [
                 groundSpeedKt: 150,
                 heading: 90,
                 onGround: false,
-                callsign: "STCA1",
+                callsign: "HIGH1",
               },
             },
             {
               eventType: "TRACK_UPDATED",
               timestamp: "2026-05-30T12:00:00.000Z",
               data: {
-                trackId: "STCA-2",
+                trackId: "STCA-HIGH-2",
                 airportId: "WARR",
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
@@ -135,14 +135,134 @@ const defaultRules = [
                 groundSpeedKt: 150,
                 heading: 270,
                 onGround: false,
-                callsign: "STCA2",
+                callsign: "HIGH2",
+              },
+            },
+          ],
+        },
+        {
+          name: "AIR_LOW_CROSSING — 2 pesawat < 1500 ft, ~200 m, prediksi < 500 m",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua track 980 ft di dalam 5 km dari ARP, terpisah ~200 m (di luar kubah 140 m). data.category=AIR_LOW_CROSSING. 400 ft / 30 kt juga udara, bukan darat.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-X-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 980,
+                groundSpeedKt: 80,
+                heading: 90,
+                onGround: false,
+                callsign: "XING1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-X-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7886,
+                altitudeFt: 980,
+                groundSpeedKt: 80,
+                heading: 270,
+                onGround: false,
+                callsign: "XING2",
+              },
+            },
+          ],
+        },
+        {
+          name: "AIR_LOW_DOME — 400 ft / 30 kt, jarak saat ini ≤ 140 m",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua pesawat 400 ft / 30 kt (masih udara) ~100 m di dekat ARP, di dalam kubah 2,5 km. data.category=AIR_LOW_DOME. Jarak 2D saat ini, bukan prediksi.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-DOME-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 400,
+                groundSpeedKt: 30,
+                heading: 90,
+                onGround: false,
+                callsign: "DOME1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-DOME-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7877,
+                altitudeFt: 400,
+                groundSpeedKt: 30,
+                heading: 270,
+                onGround: false,
+                callsign: "DOME2",
+              },
+            },
+          ],
+        },
+        {
+          name: "SURFACE — 2 target di darat < 50 m",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua track onGround pada posisi hampir sama. data.domain=SURFACE, data.category=SURFACE. Ambang 50 m / 10 dtk. includeSurface harus true.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-GND-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 0,
+                groundSpeedKt: 5,
+                heading: 90,
+                onGround: true,
+                callsign: "GND1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-GND-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.78685,
+                altitudeFt: 0,
+                groundSpeedKt: 5,
+                heading: 270,
+                onGround: true,
+                callsign: "GND2",
               },
             },
           ],
         },
       ],
       notes:
-        "Track harus berada di bandara WARR. Kalau hanya 1 track, tidak ada pasangan untuk dicek.",
+        "type tetap STCA. Frontend membedakan STCA Udara / STCA Darat dari data.domain (AIR|SURFACE) dan sub-kategori dari data.category (AIR_HIGH|AIR_LOW_CROSSING|AIR_LOW_DOME|SURFACE). Kategori 2/3 butuh aturan ALERT_AREA (jarak ke ARP). 400 ft / 30 kt adalah udara (plafon taksi 100 ft). Track harus berada di bandara WARR. Kalau hanya 1 track, tidak ada pasangan untuk dicek.",
     },
   },
   {

@@ -85,6 +85,8 @@ export interface ZoneView {
 /** Angka dan teks tambahan di `alerts.data` yang dipakai untuk menjelaskan sebab dan jarak. */
 export interface AlertFacts {
   domain: string | null;
+  /** Sub-kategori STCA: AIR_HIGH | AIR_LOW_CROSSING | AIR_LOW_DOME | SURFACE. */
+  category: string | null;
   relatedCallsign: string | null;
   reason: string | null;
   runwayName: string | null;
@@ -143,6 +145,7 @@ function readFacts(data: JsonRecord): AlertFacts {
   const num = (key: string): number | null => readNumber(data, key);
   return {
     domain: readString(data, "domain"),
+    category: readString(data, "category"),
     relatedCallsign: readString(data, "relatedCallsign"),
     reason: readString(data, "reason"),
     runwayName: readString(data, "runwayName"),
@@ -256,12 +259,20 @@ function zoneLabel(zone: ZoneView | null, fallback: string): string {
   return parts.length > 0 ? parts.join(" ") : fallback;
 }
 
-/** Jarak dan batas pemisahan menurut satuannya: meter untuk STCA darat, NM untuk STCA udara. */
+function stcaUsesMeters(f: AlertFacts): boolean {
+  return (
+    f.domain === "SURFACE" ||
+    f.category === "AIR_LOW_CROSSING" ||
+    f.category === "AIR_LOW_DOME"
+  );
+}
+
+/** Jarak dan batas pemisahan menurut satuannya: meter untuk darat dan udara rendah, NM untuk AIR_HIGH. */
 function stcaFigures(f: AlertFacts): {
   distance: string | null;
   limit: string | null;
 } {
-  if (f.domain === "SURFACE") {
+  if (stcaUsesMeters(f)) {
     return {
       distance: orNull(f.horizontalSeparationMeters, formatMeters),
       limit: orNull(f.minimumSeparationMeters, formatMeters),
@@ -293,12 +304,14 @@ function stcaVertical(f: AlertFacts): string {
 function stcaGap(f: AlertFacts): string {
   const { distance, limit } = stcaFigures(f);
   if (distance === null) return "";
+  const current = f.category === "AIR_LOW_DOME";
   const inTime =
-    f.predictedTimeSeconds !== null
+    !current && f.predictedTimeSeconds !== null
       ? ` dalam ${Math.round(f.predictedTimeSeconds)} detik`
       : "";
   const below = limit ? `, di bawah batas pemisahan ${limit}` : "";
-  return `diprediksi berada pada jarak ${distance}${inTime}${below}${stcaVertical(f)}`;
+  const verb = current ? "berada pada jarak" : "diprediksi berada pada jarak";
+  return `${verb} ${distance}${inTime}${below}${stcaVertical(f)}`;
 }
 
 function describeStca(input: DescriptionInput): string {

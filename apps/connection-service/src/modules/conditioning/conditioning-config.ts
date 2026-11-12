@@ -1,0 +1,129 @@
+import { type Env, str } from "../feed/feed-env";
+import { DEFAULT_GHOST_OPTIONS, type GhostFilterOptions } from "./ghost-filter";
+import {
+  DEFAULT_STABILIZER_OPTIONS,
+  type StabilizerOptions,
+} from "./track-stabilizer";
+
+export interface ConditioningConfig {
+  ghost: { enabled: boolean; options: GhostFilterOptions };
+  stabilizer: { enabled: boolean; options: StabilizerOptions };
+  warnings: string[];
+}
+
+const isOff = (raw: string | undefined): boolean =>
+  ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
+
+/** Angka positif dari env; nilai bawaan (dengan peringatan) bila diisi tetapi tidak bisa dipakai. */
+function positive(
+  env: Env,
+  key: string,
+  fallback: number,
+  warnings: string[],
+  integer = false,
+): number {
+  const raw = str(env[key]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0 && (!integer || Number.isInteger(n)))
+    return n;
+  warnings.push(
+    `${key}="${raw}" is not a positive ${integer ? "whole " : ""}number — using ${fallback}`,
+  );
+  return fallback;
+}
+
+/** Pecahan 0 < x <= 1. */
+function fraction(
+  env: Env,
+  key: string,
+  fallback: number,
+  warnings: string[],
+): number {
+  const raw = str(env[key]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0 && n <= 1) return n;
+  warnings.push(
+    `${key}="${raw}" is not between 0 (exclusive) and 1 — using ${fallback}`,
+  );
+  return fallback;
+}
+
+/**
+ * Pengondisian track sebelum sampai ke peta dan alert. Keduanya aktif secara bawaan.
+ *
+ * Penyaring bayangan (target tanpa identitas yang hanya gema target lain dari sensor yang sama):
+ *   GHOST_FILTER_ENABLED         default true
+ *   GHOST_RADIUS_M               dalam jarak ini dari target beridentitas = bayangan (40)
+ *   GHOST_MIN_REPORTS            laporan sebelum target tanpa identitas dianggap nyata (3)
+ *   GHOST_MAX_AGE_MS             laporan target beridentitas yang lebih tua tidak dipakai sebagai pembanding (2000)
+ *
+ * Penstabil target di permukaan (diam jadi titik, bergerak jadi garis, arah stabil):
+ *   TRACK_STABILIZER_ENABLED     default true
+ *   STABILIZER_STAND_KT          di bawah ini (knot) dianggap diam (6)
+ *   STABILIZER_FREEZE_AFTER      laporan lambat berturut-turut sebelum dibekukan (3)
+ *   STABILIZER_RADIUS_M          derau yang masih dimaklumi di sekitar titik beku, meter (20)
+ *   STABILIZER_RELEASE_REPORTS   laporan "bergerak" berturut-turut sebelum pembekuan dilepas (2)
+ *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dianggap lonjakan palsu (80)
+ *   STABILIZER_SMOOTHING         bobot laporan baru saat bergerak, 1 = tanpa penghalusan (0.6)
+ *   STABILIZER_HEADING_MIN_M     arah baru dihitung dari gerak sejauh ini, meter (10)
+ */
+export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
+  const warnings: string[] = [];
+  const g = DEFAULT_GHOST_OPTIONS;
+  const s = DEFAULT_STABILIZER_OPTIONS;
+  return {
+    warnings,
+    ghost: {
+      enabled: !isOff(env.GHOST_FILTER_ENABLED),
+      options: {
+        ...g,
+        radiusM: positive(env, "GHOST_RADIUS_M", g.radiusM, warnings),
+        minReports: positive(
+          env,
+          "GHOST_MIN_REPORTS",
+          g.minReports,
+          warnings,
+          true,
+        ),
+        maxAgeMs: positive(env, "GHOST_MAX_AGE_MS", g.maxAgeMs, warnings),
+      },
+    },
+    stabilizer: {
+      enabled: !isOff(env.TRACK_STABILIZER_ENABLED),
+      options: {
+        ...s,
+        standKt: positive(env, "STABILIZER_STAND_KT", s.standKt, warnings),
+        freezeAfter: positive(
+          env,
+          "STABILIZER_FREEZE_AFTER",
+          s.freezeAfter,
+          warnings,
+          true,
+        ),
+        radiusM: positive(env, "STABILIZER_RADIUS_M", s.radiusM, warnings),
+        releaseReports: positive(
+          env,
+          "STABILIZER_RELEASE_REPORTS",
+          s.releaseReports,
+          warnings,
+          true,
+        ),
+        maxJumpKt: positive(
+          env,
+          "STABILIZER_MAX_JUMP_KT",
+          s.maxJumpKt,
+          warnings,
+        ),
+        alpha: fraction(env, "STABILIZER_SMOOTHING", s.alpha, warnings),
+        headingMinMoveM: positive(
+          env,
+          "STABILIZER_HEADING_MIN_M",
+          s.headingMinMoveM,
+          warnings,
+        ),
+      },
+    },
+  };
+}

@@ -14,6 +14,8 @@ import { logger } from "@repo/logger";
 import type { ServerWebSocket } from "bun";
 import { app } from "./app";
 import { verifyToken } from "./modules/auth/token";
+import { createConditioning } from "./modules/conditioning/conditioning";
+import { conditioningConfigFromEnv } from "./modules/conditioning/conditioning-config";
 import { startAftnFeeds, stopAftnFeeds } from "./modules/feed/aftn-feed";
 import {
   type FeedDropInfo,
@@ -231,6 +233,32 @@ logger.info(
     : "track fusion disabled (FUSION_ENABLED=false)",
 );
 
+// Sebelum dan sesudah fusi: gema target lain (target tanpa identitas yang menempel pada target beridentitas dari sensor yang sama) dibuang,
+// dan posisi serta arah target di permukaan distabilkan (diam jadi titik, bergerak jadi garis). Keduanya aktif secara bawaan;
+// GHOST_FILTER_ENABLED=false dan TRACK_STABILIZER_ENABLED=false mematikannya, nilai ambangnya diatur lewat env (lihat conditioning-config.ts).
+const conditioningConfig = conditioningConfigFromEnv(process.env);
+for (const w of conditioningConfig.warnings) logger.warn(w);
+const conditioning = createConditioning(conditioningConfig);
+setInterval(() => conditioning.sweep(), 30_000).unref?.();
+logger.info(
+  {
+    ghost: conditioningConfig.ghost.enabled
+      ? conditioningConfig.ghost.options
+      : false,
+    stabilizer: conditioningConfig.stabilizer.enabled
+      ? conditioningConfig.stabilizer.options
+      : false,
+  },
+  "track conditioning",
+);
+let lastConditioningLog = "";
+setInterval(() => {
+  const stats = JSON.stringify(conditioning.stats());
+  if (stats !== lastConditioningLog)
+    logger.info(conditioning.stats(), "track conditioning stats");
+  lastConditioningLog = stats;
+}, 60_000).unref?.();
+
 // The line behind each aircraft, kept in memory as the live picture changes, so
 // answering a trail request is a read and costs the feeds nothing.
 const trailConfig = trailConfigFromEnv(process.env);
@@ -266,6 +294,7 @@ liveRuntime.state.on("removed", ({ trackId }): void => {
   movementPhases.forget(trackId);
   surfaceStates.forget(trackId);
   fuser?.forget(trackId);
+  conditioning.forget(trackId);
 });
 
 // Flight plans: kept in memory for the live picture and forwarded to Kafka so
@@ -343,6 +372,34 @@ liveRuntime.state.on("removed", ({ trackId, reason }) => {
   });
 });
 
+/** Satu jalur untuk feed langsung dan relay: saring bayangan, fusi, lalu stabilkan target di permukaan. */
+function fuseAndCondition(normalized: FusedTrackEvent): {
+  out: FusedTrackEvent | null;
+  held?: string;
+} {
+  const admitted = conditioning.admit(normalized);
+  if (!admitted.event) {
+    trace.record({
+      icao24: normalized.identity?.icao24,
+      callsign: normalized.identity?.callsign,
+      trackId: normalized.trackId,
+      stage: "ingest",
+      outcome: "ditahan",
+      detail: admitted.reason,
+      sensor: sensorOf(normalized),
+      lat: normalized.position?.lat,
+      lon: normalized.position?.lon,
+    });
+    return { out: null, held: admitted.reason };
+  }
+  const fused = fuser ? fuser.ingest(admitted.event) : admitted.event;
+  const out =
+    fused && fused.lifecycle !== "dropped"
+      ? conditioning.stabilize(fused)
+      : fused;
+  return { out, held: admitted.reason };
+}
+
 // Track dari jalur relay (topic Kafka AeroSwarm, WebSocket ingest) ikut ke gambaran udara klien lewat normalisasi dan fusi yang sama dengan
 // feed langsung; tanpa ini pesawat yang hanya datang lewat relay terlihat oleh layanan alert tetapi tidak ada di peta. RELAY_TO_LIVE=false mematikan.
 const relayToLive = createRelayToLive({
@@ -350,7 +407,7 @@ const relayToLive = createRelayToLive({
   normalize: (event: FusedTrackEvent): FusedTrackEvent =>
     applySurfaceState(identityMemory.fill(event)),
   fuse: (event: FusedTrackEvent): FusedTrackEvent | null => {
-    const out = fuser ? fuser.ingest(event) : event;
+    const { out } = fuseAndCondition(event);
     if (out && out.lifecycle !== "dropped") {
       surfaceStates.set(out.trackId, out.position?.onGround);
     }
@@ -408,7 +465,7 @@ startAsterixFeeds({
       alt: normalized.position?.alt,
       onGround: normalized.position?.onGround,
     });
-    const out = fuser ? fuser.ingest(normalized) : normalized;
+    const { out, held } = fuseAndCondition(normalized);
     trace.record({
       ...identity,
       trackId: normalized.trackId,
@@ -416,7 +473,7 @@ startAsterixFeeds({
       outcome: out ? "dipakai" : "ditahan",
       detail: out
         ? `sumber: ${out.sources.join(", ")}`
-        : "sensor lain yang sedang ditampilkan",
+        : (held ?? "sensor lain yang sedang ditampilkan"),
     });
     if (out && out.lifecycle !== "dropped") {
       surfaceStates.set(out.trackId, out.position?.onGround);

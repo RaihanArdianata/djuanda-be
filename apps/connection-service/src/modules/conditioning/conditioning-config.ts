@@ -33,23 +33,6 @@ function positive(
   return fallback;
 }
 
-/** Pecahan 0 < x <= 1. */
-function fraction(
-  env: Env,
-  key: string,
-  fallback: number,
-  warnings: string[],
-): number {
-  const raw = str(env[key]);
-  if (raw === undefined) return fallback;
-  const n = Number(raw);
-  if (Number.isFinite(n) && n > 0 && n <= 1) return n;
-  warnings.push(
-    `${key}="${raw}" is not between 0 (exclusive) and 1 — using ${fallback}`,
-  );
-  return fallback;
-}
-
 /**
  * Pengondisian track sebelum sampai ke peta dan alert. Keduanya aktif secara bawaan.
  *
@@ -59,14 +42,12 @@ function fraction(
  *   GHOST_MIN_REPORTS            laporan sebelum target tanpa identitas dianggap nyata (3)
  *   GHOST_MAX_AGE_MS             laporan target beridentitas yang lebih tua tidak dipakai sebagai pembanding (2000)
  *
- * Penstabil target di permukaan (diam jadi titik, bergerak jadi garis, arah stabil):
+ * Penstabil target di permukaan (diam jadi titik, bergerak jadi garis mulus, arah stabil):
  *   TRACK_STABILIZER_ENABLED     default true
- *   STABILIZER_STAND_KT          di bawah ini (knot) dianggap diam (6)
- *   STABILIZER_FREEZE_AFTER      laporan lambat berturut-turut sebelum dibekukan (3)
- *   STABILIZER_RADIUS_M          derau yang masih dimaklumi di sekitar titik beku, meter (20)
- *   STABILIZER_RELEASE_REPORTS   laporan "bergerak" berturut-turut sebelum pembekuan dilepas (2)
- *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dianggap lonjakan palsu (80)
- *   STABILIZER_SMOOTHING         bobot laporan baru saat bergerak, 1 = tanpa penghalusan (0.6)
+ *   STABILIZER_STAND_KT          di bawah ini (knot) dianggap diam atau merayap (6)
+ *   STABILIZER_RADIUS_M          zona mati saat diam atau merayap: derau sejauh ini tidak menggeser posisi, meter (15)
+ *   STABILIZER_MOVE_RADIUS_M     zona mati saat bergerak normal; sekaligus selisih posisi tampil dan sensor, meter (3)
+ *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dan dari 3x kecepatan pesawat sendiri = lonjakan palsu (80)
  *   STABILIZER_HEADING_MIN_M     arah baru dihitung dari gerak sejauh ini, meter (10)
  */
 export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
@@ -95,20 +76,12 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
       options: {
         ...s,
         standKt: positive(env, "STABILIZER_STAND_KT", s.standKt, warnings),
-        freezeAfter: positive(
-          env,
-          "STABILIZER_FREEZE_AFTER",
-          s.freezeAfter,
-          warnings,
-          true,
-        ),
         radiusM: positive(env, "STABILIZER_RADIUS_M", s.radiusM, warnings),
-        releaseReports: positive(
+        moveRadiusM: positive(
           env,
-          "STABILIZER_RELEASE_REPORTS",
-          s.releaseReports,
+          "STABILIZER_MOVE_RADIUS_M",
+          s.moveRadiusM,
           warnings,
-          true,
         ),
         maxJumpKt: positive(
           env,
@@ -116,7 +89,6 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           s.maxJumpKt,
           warnings,
         ),
-        alpha: fraction(env, "STABILIZER_SMOOTHING", s.alpha, warnings),
         headingMinMoveM: positive(
           env,
           "STABILIZER_HEADING_MIN_M",

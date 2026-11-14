@@ -22,6 +22,8 @@ export interface MovementTrack {
   aircraftType?: string;
   vehicleFleet?: string;
   lifecycle?: string;
+  /** Laju vertikal / climb-descent rate (ft/min). Positif = naik, negatif = turun. */
+  verticalRate?: number;
 }
 
 export interface WeatherContextData {

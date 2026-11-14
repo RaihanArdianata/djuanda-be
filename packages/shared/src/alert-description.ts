@@ -85,7 +85,7 @@ export interface ZoneView {
 /** Angka dan teks tambahan di `alerts.data` yang dipakai untuk menjelaskan sebab dan jarak. */
 export interface AlertFacts {
   domain: string | null;
-  /** Sub-kategori STCA: AIR_HIGH | AIR_LOW_CROSSING | AIR_LOW_DOME | SURFACE. */
+  /** Sub-kategori STCA: AIR_HIGH | AIR_MID | AIR_CLOSE | AIR_LOW_CROSSING | AIR_LOW_DOME | SURFACE. */
   category: string | null;
   relatedCallsign: string | null;
   reason: string | null;
@@ -262,6 +262,8 @@ function zoneLabel(zone: ZoneView | null, fallback: string): string {
 function stcaUsesMeters(f: AlertFacts): boolean {
   return (
     f.domain === "SURFACE" ||
+    f.category === "AIR_MID" ||
+    f.category === "AIR_CLOSE" ||
     f.category === "AIR_LOW_CROSSING" ||
     f.category === "AIR_LOW_DOME"
   );
@@ -304,7 +306,7 @@ function stcaVertical(f: AlertFacts): string {
 function stcaGap(f: AlertFacts): string {
   const { distance, limit } = stcaFigures(f);
   if (distance === null) return "";
-  const current = f.category === "AIR_LOW_DOME";
+  const current = f.category === "AIR_LOW_DOME" || f.category === "AIR_CLOSE";
   const inTime =
     !current && f.predictedTimeSeconds !== null
       ? ` dalam ${Math.round(f.predictedTimeSeconds)} detik`

@@ -248,6 +248,9 @@ logger.info(
     stabilizer: conditioningConfig.stabilizer.enabled
       ? conditioningConfig.stabilizer.options
       : false,
+    mlat: conditioningConfig.mlat.enabled
+      ? conditioningConfig.mlat.options
+      : false,
   },
   "track conditioning",
 );

@@ -5,6 +5,7 @@ import {
 } from "../../context/advisory.context";
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getWeatherContext } from "../../context/weather.context";
+import type { AlertArea } from "./alert-area";
 import type {
   AerodromeContextData,
   AlertContext,
@@ -16,6 +17,7 @@ export interface BuildDetectionContextInput {
   airportId: string;
   timestamp: Date;
   tracks: MovementTrack[];
+  alertArea?: AlertArea | null;
 }
 
 function pick<T>(
@@ -51,6 +53,7 @@ export async function buildAlertContext(
     airportId: input.airportId,
     timestamp: input.timestamp,
     tracks: input.tracks,
+    alertArea: input.alertArea ?? null,
     weather: pick(weather, "weather", input.airportId),
     aerodrome: pick(aerodrome, "aerodrome", input.airportId),
     aftn: pick(aftn, "aftn", input.airportId),

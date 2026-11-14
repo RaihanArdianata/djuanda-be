@@ -4,6 +4,7 @@ import type {
   NotamMessage,
   TafParsedData,
 } from "@repo/database";
+import type { AlertArea } from "./alert-area";
 
 export interface MovementTrack {
   trackId: string;
@@ -21,6 +22,8 @@ export interface MovementTrack {
   aircraftType?: string;
   vehicleFleet?: string;
   lifecycle?: string;
+  /** Laju vertikal / climb-descent rate (ft/min). Positif = naik, negatif = turun. */
+  verticalRate?: number;
 }
 
 export interface WeatherContextData {
@@ -125,6 +128,8 @@ export interface AlertContext {
   tracks: MovementTrack[];
   airportId: string;
   timestamp: Date;
+  /** Area alert bandara (ARP + radius); null/undefined = tanpa batas zona STCA 2/3. */
+  alertArea?: AlertArea | null;
   weather?: WeatherContextData | null;
   aerodrome?: AerodromeContextData | null;
   aftn?: AftnContextData | null;

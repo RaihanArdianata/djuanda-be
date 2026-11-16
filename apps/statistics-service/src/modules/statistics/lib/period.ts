@@ -103,7 +103,6 @@ export interface PeriodBucket {
   period: string;
   periodStart: string;
   periodEnd: string;
-  hourKeys: string[];
 }
 export function computePeriodBuckets(
   period: PeriodType,
@@ -124,7 +123,6 @@ export function computePeriodBuckets(
           period: label,
           periodStart: `${day}T${hh}:00:00`,
           periodEnd: `${day}T${hh}:59:59`,
-          hourKeys: [label],
         });
       }
     }
@@ -136,7 +134,6 @@ export function computePeriodBuckets(
       period: day,
       periodStart: day,
       periodEnd: day,
-      hourKeys: hourKeysForDayRange(day, day),
     }));
   }
 
@@ -154,7 +151,6 @@ export function computePeriodBuckets(
       period: periodStart,
       periodStart,
       periodEnd,
-      hourKeys: hourKeysForDayRange(periodStart, periodEnd),
     });
     cursor = addDaysUtc(chunkEnd, 1);
   }

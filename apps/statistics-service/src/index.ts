@@ -11,6 +11,7 @@ const port: string | number = process.env.STATISTICS_SERVICE_PORT || 3010;
 
 const server = Bun.serve({
   port,
+  idleTimeout: 60,
   fetch: app.fetch,
 });
 

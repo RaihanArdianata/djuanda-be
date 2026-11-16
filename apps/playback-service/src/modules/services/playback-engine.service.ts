@@ -10,6 +10,7 @@ import {
   getSessionRecord,
   saveSessionRecord,
 } from "./playback-session.service";
+import { contextInForceAtSeek, cursorIndexAfterSeek } from "./timeline-cursor";
 
 const TICK_MS = Number(process.env.PLAYBACK_TICK_MS ?? 500);
 
@@ -109,12 +110,17 @@ export async function applyControl(
       session.cursor = Math.min(Math.max(control.value, fromMs), toMs);
       // Re-point the cursor index to match the new position so we don't
       // replay already-past events or skip ones we jumped backward over.
-      engine.cursorIndex = engine.timeline.findIndex(
-        (e) => e.ts > session.cursor,
+      engine.cursorIndex = cursorIndexAfterSeek(
+        engine.timeline,
+        session.cursor,
       );
-      if (engine.cursorIndex === -1)
-        engine.cursorIndex = engine.timeline.length;
       await saveSessionRecord(session);
+      for (const event of contextInForceAtSeek(
+        engine.timeline,
+        session.cursor,
+      )) {
+        await redis.publish(streamChannel(sessionId), JSON.stringify(event));
+      }
       break;
     }
     case "set_speed": {

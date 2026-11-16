@@ -645,7 +645,7 @@ export const evaluateMovement = async (
   }
 
   const ctx = await buildAlertContext(
-    input,
+    { ...input, alertArea: area },
     aerodromePromise,
     contextNeeds(rules),
   );

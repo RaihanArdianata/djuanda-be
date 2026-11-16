@@ -18,7 +18,6 @@ const defaultRules = [
       twinMaxSpeedDiffKt: 15,
       staleGraceSeconds: 20,
       occupancyStickyMs: 5000,
-      reopenWindowSeconds: 300,
     },
     documentation: {
       parameters: {
@@ -30,8 +29,6 @@ const defaultRules = [
           "Alert aktif yang kandidatnya tidak terlihat lagi baru dibersihkan setelah masa ini (detik). Meredam kedip dari jitter posisi di batas area. Bawaan 20.",
         occupancyStickyMs:
           "Runway atau taxiway tetap berstatus terisi selama ini (ms) setelah target terakhir terlihat di dalamnya. Meredam kedip status di batas poligon. Bawaan 5000.",
-        reopenWindowSeconds:
-          "Kejadian yang sama muncul lagi dalam sekian detik setelah alertnya selesai: alert lama dibuka kembali, bukan dibuat yang baru. 0 = mati. Bawaan 300.",
       },
       notes:
         "Nilai env ALERT_TWIN_RADIUS_M, ALERT_TWIN_MAX_SPEED_DIFF_KT, ALERT_STALE_GRACE_SECONDS, dan ALERT_OCCUPANCY_STICKY_MS menjadi nilai awal; isian di sini menggantikannya tanpa restart, dan yang dikosongkan kembali ke env.",
@@ -75,28 +72,43 @@ const defaultRules = [
     type: "STCA",
     enabled: true,
     description:
-      "Short Term Conflict Alert — Critical bila jalur dua target diprediksi berpotongan (jarak terdekat di bawah batas horizontal) dalam waktu prediksi, dan selisih tingginya sama dengan atau di bawah batas vertikal. STCA darat hanya untuk target yang dilaporkan di darat (onGround).",
+      "Short Term Conflict Alert — memprediksi jarak 2 objek dalam waktu beberapa detik ke depan.",
     configuration: {
       predictionTimeSeconds: 60,
+      highSeparationMeters: 5000,
+      minAltitudeFt: 1500,
+      midSeparationMeters: 3000,
+      midAltitudeFt: 1000,
+      closeSeparationMeters: 50,
       minimumHorizontalSeparationNm: 3,
       minimumVerticalSeparationFt: 1000,
       requireAltitude: true,
-      includeSurface: false,
+      includeSurface: true,
       surfaceMinimumSeparationMeters: 50,
       surfacePredictionTimeSeconds: 10,
     },
     documentation: {
       parameters: {
         predictionTimeSeconds:
-          "Waktu prediksi ke depan (detik). Dihitung titik terdekat kedua track selama rentang ini (gerak lurus, kecepatan tetap), bukan hanya posisi di ujung waktu.",
+          "Waktu prediksi ke depan (detik) untuk memperkirakan posisi kedua track (kategori AIR_HIGH dan AIR_MID). Bawaan 60.",
+        highSeparationMeters:
+          "AIR_HIGH: jarak horizontal minimum (meter) antara dua track di atas 1500 ft. Bawaan 5000.",
+        minAltitudeFt:
+          "AIR_HIGH: batas bawah ketinggian (feet). Pasangan pesawat harus memiliki ketinggian >= ini untuk masuk kategori AIR_HIGH. Bawaan 1500.",
+        midSeparationMeters:
+          "AIR_MID: jarak horizontal minimum (meter) antara dua track pada rentang ketinggian menengah. Bawaan 3000.",
+        midAltitudeFt:
+          "AIR_MID: batas bawah ketinggian (feet) untuk kategori menengah. Ketinggian harus > ini dan < minAltitudeFt. Bawaan 1000.",
+        closeSeparationMeters:
+          "AIR_CLOSE: jarak 2D langsung saat ini (meter) tanpa prediksi. Bawaan 50.",
         minimumHorizontalSeparationNm:
-          "Jarak horizontal minimum (nautical miles) antara dua track.",
+          "AIR_HIGH: jarak horizontal minimum (nautical miles) fallback bila highSeparationMeters tidak diset. Bawaan 3.",
         minimumVerticalSeparationFt:
-          "Batas selisih ketinggian (feet): STCA hanya bila selisih tinggi kedua track sama dengan atau di bawah nilai ini. Lebih dari ini dianggap terpisah vertikal walau jalurnya berpotongan. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
+          "AIR: batas selisih ketinggian (feet). STCA hanya bila selisih tinggi kedua track sama dengan atau di bawah nilai ini; lebih dari ini dianggap terpisah vertikal walau jalurnya berpotongan. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
         requireAltitude:
           "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:
-          "true = STCA darat ikut menyala: dua target yang dilaporkan di darat (onGround true: taksi, parkir, kendaraan) dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Bawaan false (konflik di darat ditangani aturan incursion).",
+          "true = STCA darat ikut menyala: dua target di darat dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Alert membawa data.domain SURFACE dan data.category SURFACE.",
         surfaceMinimumSeparationMeters:
           "STCA darat: jarak minimum (meter) antara dua target di darat. Bawaan 50. Hanya dipakai bila includeSurface true.",
         surfacePredictionTimeSeconds:
@@ -104,16 +116,16 @@ const defaultRules = [
       },
       examples: [
         {
-          name: "2 pesawat di udara, posisi sama",
+          name: "AIR_HIGH — 2 pesawat di atas 1500 ft, dekat",
           topic: "asmgcs.tracks",
           explanation:
-            "Kirim 2 track di udara (onGround false) pada posisi sama / sangat dekat. Jarak 0 NM < 3 NM akan trigger STCA. Target di darat tidak dihitung.",
+            "Dua track di 3000 ft pada posisi sama. data.domain=AIR, data.category=AIR_HIGH. Ambang 3 NM / 1000 ft / 60 dtk.",
           payloads: [
             {
               eventType: "TRACK_UPDATED",
               timestamp: "2026-05-30T12:00:00.000Z",
               data: {
-                trackId: "STCA-1",
+                trackId: "STCA-HIGH-1",
                 airportId: "WARR",
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
@@ -122,14 +134,14 @@ const defaultRules = [
                 groundSpeedKt: 150,
                 heading: 90,
                 onGround: false,
-                callsign: "STCA1",
+                callsign: "HIGH1",
               },
             },
             {
               eventType: "TRACK_UPDATED",
               timestamp: "2026-05-30T12:00:00.000Z",
               data: {
-                trackId: "STCA-2",
+                trackId: "STCA-HIGH-2",
                 airportId: "WARR",
                 targetType: "AIRCRAFT",
                 latitude: -7.3798,
@@ -138,49 +150,148 @@ const defaultRules = [
                 groundSpeedKt: 150,
                 heading: 270,
                 onGround: false,
-                callsign: "STCA2",
+                callsign: "HIGH2",
+              },
+            },
+          ],
+        },
+        {
+          name: "AIR_MID — 2 pesawat 1400 ft, prediksi jarak 2 km (<= 3 km)",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua track 1400 ft (>1000 ft, <1500 ft), prediksi jarak terpisah 2 km. data.category=AIR_MID.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-MID-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 1400,
+                groundSpeedKt: 80,
+                heading: 90,
+                onGround: false,
+                callsign: "MID1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-MID-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7886,
+                altitudeFt: 1400,
+                groundSpeedKt: 80,
+                heading: 270,
+                onGround: false,
+                callsign: "MID2",
+              },
+            },
+          ],
+        },
+        {
+          name: "AIR_CLOSE — 400 ft / 30 kt, jarak saat ini < 50 m",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua pesawat 400 ft / 30 kt (masih udara) jarak saat ini ~40 m (< 50 m). data.category=AIR_CLOSE. Jarak 2D saat ini, bukan prediksi.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-CLOSE-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 400,
+                groundSpeedKt: 30,
+                heading: 90,
+                onGround: false,
+                callsign: "CLOSE1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-CLOSE-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7871,
+                altitudeFt: 400,
+                groundSpeedKt: 30,
+                heading: 270,
+                onGround: false,
+                callsign: "CLOSE2",
+              },
+            },
+          ],
+        },
+        {
+          name: "SURFACE — 2 target di darat < 50 m",
+          topic: "asmgcs.tracks",
+          explanation:
+            "Dua track onGround pada posisi hampir sama. data.domain=SURFACE, data.category=SURFACE. Ambang 50 m / 10 dtk. includeSurface harus true.",
+          payloads: [
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-GND-1",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.7868,
+                altitudeFt: 0,
+                groundSpeedKt: 5,
+                heading: 90,
+                onGround: true,
+                callsign: "GND1",
+              },
+            },
+            {
+              eventType: "TRACK_UPDATED",
+              timestamp: "2026-05-30T12:00:00.000Z",
+              data: {
+                trackId: "STCA-GND-2",
+                airportId: "WARR",
+                targetType: "AIRCRAFT",
+                latitude: -7.3797,
+                longitude: 112.78685,
+                altitudeFt: 0,
+                groundSpeedKt: 5,
+                heading: 270,
+                onGround: true,
+                callsign: "GND2",
               },
             },
           ],
         },
       ],
       notes:
-        "Track harus berada di bandara WARR. Kalau hanya 1 track, tidak ada pasangan untuk dicek.",
+        "type tetap STCA. Frontend membedakan STCA Udara / STCA Darat dari data.domain (AIR|SURFACE) dan sub-kategori dari data.category (AIR_HIGH|AIR_MID|AIR_CLOSE|SURFACE). Evaluasi ladder berurutan: AIR_CLOSE -> AIR_MID -> AIR_HIGH. 400 ft / 30 kt adalah udara (plafon taksi 100 ft). Track harus berada di bandara WARR. Kalau hanya 1 track, tidak ada pasangan untuk dicek.",
     },
   },
   {
     type: "RUNWAY_INCURSION",
     enabled: true,
     description:
-      "Runway Incursion Alert — dua target atau lebih berada di runway aktif yang sama. Critical: dua target ber-identitas, dan salah satunya melaju sedikitnya 30 kt atau keduanya berjarak 500 m atau kurang. Warning: dua target ber-identitas yang pelan dan berjauhan. Info: salah satunya tanpa identitas.",
+      "Runway Incursion Alert — memicu alert saat track memasuki runway yang sedang aktif.",
     configuration: {
       active: true,
-      confirmSeconds: 3,
-      criticalSpeedKt: 30,
-      criticalSeparationMeters: 500,
-      unidentifiedConfirmSeconds: 15,
-      reportUnidentifiedAlone: false,
-      aloneConfirmSeconds: 10,
-      enterMarginM: 3,
     },
     documentation: {
       parameters: {
         active:
           "Filter runway aktif saja. Kalau true, hanya runway dengan active=true yang dipantau.",
-        confirmSeconds:
-          "Kondisi harus bertahan selama ini (detik) tanpa terputus sebelum alert dibuat. Bawaan 3.",
-        criticalSpeedKt:
-          "Salah satu target melaju sama dengan atau lebih dari ini (kt), yaitu sedang lepas landas atau mendarat, membuat konflik Critical seberapa jauh pun jaraknya. Bawaan 30.",
-        criticalSeparationMeters:
-          "Dua target ber-identitas yang berjarak sama dengan atau kurang dari ini (meter) di runway yang sama menjadi Critical; lebih jauh dan pelan menjadi Warning. Bawaan 500.",
-        unidentifiedConfirmSeconds:
-          "Konflik yang melibatkan target tanpa identitas menjadi alert Info setelah bertahan selama ini (detik). Bawaan 15.",
-        reportUnidentifiedAlone:
-          "true = satu target tanpa identitas yang sendirian di runway aktif dilaporkan sebagai Info. Bawaan false: kendaraan tanpa nama yang melintas itu umum.",
-        aloneConfirmSeconds:
-          "Lama target tanpa identitas yang sendirian harus berada di runway sebelum dilaporkan (detik). Hanya berlaku bila reportUnidentifiedAlone true. Bawaan 10.",
-        enterMarginM:
-          "Target dianggap di dalam runway hanya bila sedikitnya sejauh ini (meter) dari tepinya, supaya goyangan posisi di garis batas tidak dihitung masuk. Bawaan 3.",
       },
       examples: [
         {
@@ -211,48 +322,21 @@ const defaultRules = [
         },
       ],
       notes:
-        "Critical saat dua target ber-identitas di runway aktif yang sama dan salah satunya melaju 30 kt atau lebih, atau keduanya berjarak 500 m atau kurang. Warning saat keduanya ber-identitas tetapi pelan dan berjauhan. Info saat salah satunya tanpa identitas. Target tanpa identitas tidak pernah Critical atau Warning. Yang dideteksi adalah konflik dua target; masuk tanpa izin ATC tidak bisa dinilai karena data izin tidak tersedia. Aerodrome feature di aerodrome-service harus punya polygon runway dan airportId WARR.",
+        "Aerodrome feature di aerodrome-service harus punya polygon runway dan airportId WARR.",
     },
   },
   {
     type: "TAXIWAY_APRON_INCURSION",
     enabled: true,
     description:
-      "Taxiway / Apron Incursion Alert — dua target yang saling mendekat di taxiway atau apron. Berdampingan atau mengikuti bukan alert. Critical: dua target ber-identitas, salah satunya bergerak, dan dalam 10 detik akan sedekat 25 m atau kurang. Warning: saling mendekat dan sudah dalam 80 m (taxiway) atau 40 m (apron). Info: salah satunya tanpa identitas.",
+      "Taxiway / Apron Incursion Alert — memicu alert saat track keluar dari expected route atau masuk ke area taxiway/apron.",
     configuration: {
       maxDistanceMeters: 50,
-      criticalSeparationMeters: 25,
-      warningSeparationMeters: 80,
-      apronWarningSeparationMeters: 40,
-      movingKt: 3,
-      closingHorizonSeconds: 10,
-      confirmSeconds: 3,
-      restrictedConfirmSeconds: 5,
-      unidentifiedConfirmSeconds: 15,
-      enterMarginM: 3,
     },
     documentation: {
       parameters: {
         maxDistanceMeters:
           "Jarak toleransi (meter) dari expected route atau untuk tetap dianggap on-route.",
-        criticalSeparationMeters:
-          "Dua target ber-identitas yang saling mendekat dan dalam beberapa detik ke depan akan sedekat ini (meter) atau kurang menjadi Critical. Bawaan 25.",
-        warningSeparationMeters:
-          "Dua target di taxiway yang saling mendekat dan sudah sedekat ini (meter) atau kurang menjadi Warning. Bawaan 80.",
-        apronWarningSeparationMeters:
-          "Sama untuk apron (meter); lebih pendek karena stand berdekatan. Bawaan 40.",
-        movingKt:
-          "Sedikitnya salah satu target harus melaju sama dengan atau lebih dari ini (kt); dua target yang sama-sama diam tidak pernah menjadi alert. Bawaan 3.",
-        closingHorizonSeconds:
-          "Seberapa jauh ke depan (detik) gerak kedua target diperhitungkan untuk menilai apakah mereka saling mendekat. Bawaan 10.",
-        confirmSeconds:
-          "Kondisi harus bertahan selama ini (detik) tanpa terputus sebelum alert dibuat. Bawaan 3.",
-        restrictedConfirmSeconds:
-          "Lama target ber-identitas harus berada di permukaan RESTRICTED atau INACTIVE sebelum menjadi Warning (detik). Bawaan 5.",
-        unidentifiedConfirmSeconds:
-          "Alert Info untuk target tanpa identitas dibuat setelah bertahan selama ini (detik). Bawaan 15.",
-        enterMarginM:
-          "Target dianggap di dalam permukaan hanya bila sedikitnya sejauh ini (meter) dari tepinya. Bawaan 3.",
         expectedRoute:
           "Array koordinat [[lat,lon], ...] rute yang diharapkan — opsional. Kalau tidak diisi, rule pakai polygon taxiway/apron.",
       },
@@ -285,35 +369,19 @@ const defaultRules = [
         },
       ],
       notes:
-        "Critical saat dua target ber-identitas saling mendekat, salah satunya bergerak, dan dalam 10 detik akan sedekat 25 m atau kurang. Warning saat saling mendekat dan sudah dalam 80 m (taxiway) atau 40 m (apron), atau saat target ber-identitas berada di permukaan RESTRICTED/INACTIVE. Info saat salah satu target tanpa identitas. Dua target yang sama-sama diam (parkir berdampingan, antre) tidak pernah menjadi alert. Kalau expectedRoute diisi, alert muncul saat track menyimpang lebih dari maxDistanceMeters dari rute (Warning; Info untuk target tanpa identitas).",
+        "Kalau expectedRoute diisi, alert trigger saat track off-route lebih dari maxDistanceMeters. Kalau tidak, trigger saat masuk polygon taxiway/apron.",
     },
   },
   {
     type: "AREA_PENETRATION",
     enabled: true,
     description:
-      "Area Penetration Alert — target di darat berada di area terbatas. Critical: target ber-identitas melintasi area berstatus CLOSED dengan kecepatan 15 kt atau lebih. Warning: target ber-identitas di area terbatas selama 5 detik. Info: target tanpa identitas di area terbatas selama 15 detik.",
-    configuration: {
-      confirmSeconds: 5,
-      unidentifiedConfirmSeconds: 15,
-      criticalAreaStatuses: ["CLOSED"],
-      criticalMovingKt: 15,
-      enterMarginM: 5,
-    },
+      "Area Penetration Alert — memicu alert saat track memasuki area terbatas / kritis.",
+    configuration: {},
     documentation: {
       parameters: {
         areas:
           "Array area restricted yang akan dipantau. Kalau tidak diisi, rule pakai area dari aerodrome context.",
-        confirmSeconds:
-          "Lama target ber-identitas harus berada di area terbatas sebelum alert dibuat (detik). Bawaan 5.",
-        unidentifiedConfirmSeconds:
-          "Lama target tanpa identitas harus berada di area terbatas sebelum alert Info dibuat (detik). Bawaan 15.",
-        criticalAreaStatuses:
-          'Daftar status area yang membuat pelintas berkecepatan menjadi Critical, mis. ["CLOSED"]. Bawaan ["CLOSED"].',
-        criticalMovingKt:
-          "Target ber-identitas yang melaju sama dengan atau lebih dari ini (kt) di area berstatus Critical dianggap sedang melintasinya. Bawaan 15.",
-        enterMarginM:
-          "Target dianggap di dalam area hanya bila sedikitnya sejauh ini (meter) dari tepinya, supaya goyangan di garis batas tidak memicu alert berulang. Bawaan 5.",
       },
       examples: [
         {
@@ -344,7 +412,7 @@ const defaultRules = [
         },
       ],
       notes:
-        "Critical saat target ber-identitas melintasi area berstatus CLOSED dengan kecepatan 15 kt atau lebih. Warning saat target ber-identitas berada di area terbatas selama 5 detik. Info saat target tanpa identitas berada di area terbatas selama 15 detik. Target tanpa identitas tidak pernah Critical atau Warning. Area harus ditandai restricted di aerodrome-service dan punya airportId WARR.",
+        "Area harus ditandai restricted di aerodrome-service dan punya airportId WARR.",
     },
   },
   {

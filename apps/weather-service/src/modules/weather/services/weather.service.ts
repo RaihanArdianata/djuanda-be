@@ -6,7 +6,7 @@ import {
   weatherObservations,
   weatherSyncMetadata,
 } from "@repo/database";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { env } from "@/config/env";
 import { isForecastStale, isObservationStale } from "../lib/staleness";
 import type { GetObservationHistoryParams } from "../validator/weather.validator";
@@ -237,25 +237,31 @@ export async function getLatestObservation(
   };
 }
 
+// ponytail: one shared where-builder so history query and count stay consistent
+function observationHistoryWhere(
+  params: GetObservationHistoryParams,
+): ReturnType<typeof and> {
+  const resolvedStation = params.station ?? env.WEATHER_STATION_ICAO;
+  return and(
+    eq(weatherObservations.station, resolvedStation),
+    params.kind ? eq(weatherObservations.kind, params.kind) : undefined,
+    params.from ? gte(weatherObservations.observedAt, params.from) : undefined,
+    params.to ? lte(weatherObservations.observedAt, params.to) : undefined,
+  );
+}
+
 export async function getObservationHistory(
   params: GetObservationHistoryParams,
 ): Promise<CurrentObservationResult[]> {
-  const resolvedStation = params.station ?? env.WEATHER_STATION_ICAO;
-
-  const whereClause = params.kind
-    ? and(
-        eq(weatherObservations.station, resolvedStation),
-        eq(weatherObservations.kind, params.kind),
-      )
-    : eq(weatherObservations.station, resolvedStation);
-
   const observations = await db.query.weatherObservations.findMany({
-    where: whereClause,
+    where: observationHistoryWhere(params),
     orderBy: desc(weatherObservations.observedAt),
     limit: params.size,
     offset: (params.page - 1) * params.size,
   });
-  const sync = await getWeatherSyncMetadata(resolvedStation);
+  const sync = await getWeatherSyncMetadata(
+    params.station ?? env.WEATHER_STATION_ICAO,
+  );
 
   return observations.map((observation) => {
     const stale = isObservationStale(observation.observedAt);
@@ -275,16 +281,7 @@ export async function getObservationHistory(
 export async function getObservationHistoryCount(
   params: GetObservationHistoryParams,
 ): Promise<number> {
-  const resolvedStation = params.station ?? env.WEATHER_STATION_ICAO;
-
-  const whereClause = params.kind
-    ? and(
-        eq(weatherObservations.station, resolvedStation),
-        eq(weatherObservations.kind, params.kind),
-      )
-    : eq(weatherObservations.station, resolvedStation);
-
-  return await db.$count(weatherObservations, whereClause);
+  return await db.$count(weatherObservations, observationHistoryWhere(params));
 }
 
 export async function getActiveForecast(

@@ -144,15 +144,30 @@ Setiap aturan di tabel `alert_rules` memiliki kolom `configuration` JSON. Contoh
 ```json
 {
   "predictionTimeSeconds": 60,
-  "minimumHorizontalSeparationNm": 3
+  "minimumHorizontalSeparationNm": 3,
+  "includeSurface": true
 }
 ```
 
-- `predictionTimeSeconds`: berapa detik ke depan posisi diprediksi.
-- `minimumHorizontalSeparationNm`: jarak horizontal minimum (nautical miles) sebelum dianggap konflik.
-- `minimumVerticalSeparationFt`: selisih tinggi minimum (ft); dua pesawat yang selisihnya sama atau lebih tidak dianggap konflik. Bawaan 1000 bila tidak diisi; `0` atau `null` mematikan pemeriksaan vertikal.
+`type` tetap `STCA`. Frontend membedakan **STCA Udara** vs **STCA Darat** dari `data.domain` (`AIR` | `SURFACE`). Sub-kategori ada di `data.category`. Alert lama tanpa `category` ditampilkan sebagai "Tanpa kategori".
+
+| `data.category` | Domain | Ambang | Zona |
+|---|---|---|---|
+| `AIR_HIGH` | AIR | 3 NM / 1000 ft / prediksi **satu titik** t+60 dtk | salah satu **≥ 1500 ft**, atau di luar radius darat; volume dipotong kubah elipsoid `ALERT_AREA` (10.000 ft hanya di pusat, 15 NM hanya di ketinggian 0) |
+| `AIR_LOW_CROSSING` | AIR | prediksi **satu titik** t+60 dtk, jarak < 500 m, selisih vertikal ≤ 100 m | keduanya **< 1500 ft** dan ≤ radius darat (`groundRadiusM`, bawaan 5000 m) |
+| `AIR_LOW_DOME` | AIR | jarak **2D saat ini** ≤ 140 m; **tanpa cek vertikal**; keduanya **< 1000 ft** | ≤ 50% radius darat (2500 m), pesawat ↔ pesawat |
+| `SURFACE` | SURFACE | prediksi **satu titik** t+10 dtk, 50 m | keduanya di darat (`includeSurface: true`), di dalam radius darat |
+
+Presedensi tumpang tindih: kubah (3) → crossing (2) → tinggi (1). Keduanya < 1500 ft **di dalam 5 km** tidak memakai fallback 3 NM. Keduanya < 1500 ft **di luar 5 km** (masih di dalam kubah udara) dinilai sebagai `AIR_HIGH` (3 NM). Tanpa aturan `ALERT_AREA`, kategori 2/3 tidak punya zona (tidak trigger); kategori 1 tanpa batas atas.
+
+`data.category` **dikunci** saat alert dibuat (TTL klaim ~300 dtk / sampai clear). `data.zone` adalah bukti pemilihan, **bukan** batas zona untuk digambar: `distanceFromCenterM` = jarak terjauh ke ARP, `altitudeFt` = ketinggian minimum pasangan, `radiusM` = radius nominal kategori (bukan plafon kubah).
+
+- `predictionTimeSeconds`: berapa detik ke depan posisi diprediksi (AIR_HIGH dan AIR_LOW_CROSSING).
+- `minimumHorizontalSeparationNm`: jarak horizontal minimum (nautical miles) untuk AIR_HIGH.
+- `minimumVerticalSeparationFt`: selisih tinggi minimum (ft) untuk AIR_HIGH. Bawaan 1000; `0` atau `null` mematikan pemeriksaan vertikal.
 - `requireAltitude`: bawaan `true`; track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. `false` mengembalikan perilaku lama (hanya jarak horizontal).
-- `includeSurface`: bawaan `false`. `true` menyalakan **STCA darat**, dinilai terpisah dari STCA udara (alert-nya membawa `data.domain` = `AIR` atau `SURFACE`): dua target di darat, dengan `surfaceMinimumSeparationMeters` (bawaan 50 m) dan `surfacePredictionTimeSeconds` (bawaan 10 detik). Pasangan campuran udara-darat tidak dinilai (urusan aturan incursion).
+- `includeSurface`: `true` (seed) menyalakan **STCA darat**, dinilai terpisah dari STCA udara. Dua target di darat, dengan `surfaceMinimumSeparationMeters` (bawaan 50 m) dan `surfacePredictionTimeSeconds` (bawaan 10 detik). Pasangan campuran udara-darat tidak dinilai (urusan aturan incursion).
+- **Udara vs darat:** `onGround=true` selalu darat. Target rendah dan lambat dianggap darat hanya bila altitude **≤ 100 ft** dan kecepatan **< 40 kt** (plafon taksi, sama dengan connection-service). **400 ft / 30 kt tetap udara.** Tanpa flag, hanya altitude > 500 ft yang jelas udara. Aturan incursion (cek > 500 ft sendiri) tidak berubah.
 
 ### ALERT_AREA
 

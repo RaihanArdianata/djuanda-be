@@ -276,4 +276,36 @@ describe("GET /history", () => {
     expect(res.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_ERROR");
   });
+
+  it("forwards from/to date range filters to the service", async () => {
+    getObservationHistory.mockResolvedValue([]);
+    getObservationHistoryCount.mockResolvedValue(0);
+
+    await weatherRoute.request(
+      "/history?from=2026-07-01T00:00:00Z&to=2026-07-31",
+    );
+
+    expect(getObservationHistory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: new Date("2026-07-01T00:00:00Z"),
+        to: new Date("2026-07-31"),
+      }),
+    );
+    expect(getObservationHistoryCount).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: new Date("2026-07-01T00:00:00Z"),
+        to: new Date("2026-07-31"),
+      }),
+    );
+  });
+
+  it("rejects a from that is after to with a validation error", async () => {
+    const res = await weatherRoute.request(
+      "/history?from=2026-07-31&to=2026-07-01",
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
 });

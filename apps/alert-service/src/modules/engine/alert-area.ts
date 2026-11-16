@@ -83,7 +83,10 @@ export function alertAreaFrom(
 }
 
 /** Jarak great-circle (haversine) dari pusat area, meter. */
-function distanceFromCenterM(track: MovementTrack, area: AlertArea): number {
+export function distanceFromCenterM(
+  track: MovementTrack,
+  area: AlertArea,
+): number {
   const toRad = (deg: number): number => (deg * Math.PI) / 180;
   const dLat = toRad(track.latitude - area.centerLatitude);
   const dLon = toRad(track.longitude - area.centerLongitude);

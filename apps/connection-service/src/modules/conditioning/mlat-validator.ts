@@ -38,6 +38,12 @@ export interface MlatValidatorOptions {
   maxStaleMs: number;
   /** Waktu tanpa pembaruan sebelum state dibersihkan, ms (bawaan 120.000). */
   forgetAfterMs: number;
+  /**
+   * Batas ketinggian maksimum pesawat yang masih ditampilkan, ft (bawaan 5000).
+   * Area cakupan MLAT terbatas di sekitar bandara; pesawat di atas batas ini
+   * dianggap di luar cakupan sensor dan tidak andal. 0 = tanpa batas.
+   */
+  maxAltitudeFt: number;
   now?: () => number;
 }
 
@@ -52,6 +58,7 @@ export const DEFAULT_MLAT_VALIDATOR_OPTIONS: MlatValidatorOptions = {
   recoveryThreshold: 3,
   maxStaleMs: 10_000,
   forgetAfterMs: 120_000,
+  maxAltitudeFt: 5000,
 };
 
 export type MlatVerdict =
@@ -178,6 +185,19 @@ function validateConfidence(
   return null;
 }
 
+function validateAltitude(
+  pos: FusedTrackEvent["position"],
+  maxAltitudeFt: number,
+): string | null {
+  if (maxAltitudeFt <= 0) return null;
+  const alt = pos?.alt;
+  if (alt === undefined || !Number.isFinite(alt)) return null;
+  if (alt > maxAltitudeFt) {
+    return `ketinggian (${Math.round(alt)} ft) melebihi batas cakupan MLAT (${maxAltitudeFt} ft)`;
+  }
+  return null;
+}
+
 function handleValidReport(
   st: TrackState,
   pos: NonNullable<FusedTrackEvent["position"]>,
@@ -284,6 +304,9 @@ export function createMlatValidator(
         )
       : null;
     if (jumpErr) return jumpErr;
+
+    const altErr = validateAltitude(pos, opts.maxAltitudeFt);
+    if (altErr) return altErr;
 
     return validateConfidence(event.confidence, opts.minConfidence);
   }

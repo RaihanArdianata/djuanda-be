@@ -181,6 +181,13 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           true,
         ),
         maxStaleMs: positive(env, "MLAT_MAX_STALE_MS", m.maxStaleMs, warnings),
+        maxAltitudeFt: positive(
+          env,
+          "MLAT_MAX_ALTITUDE_FT",
+          m.maxAltitudeFt,
+          warnings,
+          true,
+        ),
       },
     },
   };

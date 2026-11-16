@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createMlatValidator, isAircraft, isMlatTrack } from "./mlat-validator";
-import { clock, track } from "./test-support";
+import { clock, offset, track } from "./test-support";
 
 describe("mlat-validator helpers", () => {
   test("isMlatTrack identifies MLAT protocols and sources", () => {
@@ -46,9 +46,9 @@ describe("mlat-validator helpers", () => {
 
 describe("mlat-validator altitude ceiling", () => {
   test("holds and then retracts aircraft above max altitude", () => {
-    const v = createMlatValidator({ maxAltitudeFt: 5000, now: clock });
+    const v = createMlatValidator({ maxAltitudeFt: 5000, now: clock().now });
     const high = track({ trackId: "GA999", icao24: "71C999" });
-    high.position = { ...high.position!, alt: 12000, onGround: false };
+    high.position = { ...offset(0, 0), alt: 12000, onGround: false };
     expect(v.check(high)).toEqual({
       action: "hold",
       reason: "ketinggian (12000 ft) melebihi batas cakupan MLAT (5000 ft)",
@@ -58,11 +58,11 @@ describe("mlat-validator altitude ceiling", () => {
       reason: "ketinggian (12000 ft) melebihi batas cakupan MLAT (5000 ft)",
     });
     // pesawat sempat tampil (valid), lalu naik di atas batas → retract
-    const v2 = createMlatValidator({ maxAltitudeFt: 5000, now: clock });
+    const v2 = createMlatValidator({ maxAltitudeFt: 5000, now: clock().now });
     const rising = track({ trackId: "GA996", icao24: "71C996" });
-    rising.position = { ...rising.position!, alt: 3000, onGround: false };
+    rising.position = { ...offset(0, 0), alt: 3000, onGround: false };
     expect(v2.check(rising)).toEqual({ action: "pass" });
-    rising.position = { ...rising.position!, alt: 12000, onGround: false };
+    rising.position = { ...offset(0, 0), alt: 12000, onGround: false };
     expect(v2.check(rising)).toEqual({
       action: "hold",
       reason: "ketinggian (12000 ft) melebihi batas cakupan MLAT (5000 ft)",
@@ -75,14 +75,14 @@ describe("mlat-validator altitude ceiling", () => {
 
     // pesawat di bawah batas tetap pass
     const ok = track({ trackId: "GA998", icao24: "71C998" });
-    ok.position = { ...ok.position!, alt: 3000, onGround: false };
+    ok.position = { ...offset(0, 0), alt: 3000, onGround: false };
     expect(v.check(ok)).toEqual({ action: "pass" });
   });
 
   test("maxAltitudeFt=0 disables the ceiling", () => {
-    const v = createMlatValidator({ maxAltitudeFt: 0, now: clock });
+    const v = createMlatValidator({ maxAltitudeFt: 0, now: clock().now });
     const high = track({ trackId: "GA997", icao24: "71C997" });
-    high.position = { ...high.position!, alt: 12000, onGround: false };
+    high.position = { ...offset(0, 0), alt: 12000, onGround: false };
     expect(v.check(high)).toEqual({ action: "pass" });
   });
 });

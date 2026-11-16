@@ -298,8 +298,7 @@ function summaryFromIncidents(
   return {
     total: incidents.length,
     byCategory,
-    needsAction: incidents.filter((i) => i.verificationCounts.unverified > 0)
-      .length,
+    needsAction: incidents.filter((i) => i.needsAction).length,
   };
 }
 

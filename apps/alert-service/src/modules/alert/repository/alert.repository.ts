@@ -503,6 +503,27 @@ export const findRecentlyClearedAlert = async (
   return row;
 };
 
+/**
+ * Naikkan severity alert yang masih aktif (mis. Warning menjadi Critical saat dua pesawat makin dekat), dan gabungkan `patch` ke datanya.
+ * Hanya menaikkan: pemanggil sudah memastikan severity baru lebih tinggi.
+ */
+export const escalateAlertSeverity = async (
+  alertId: string,
+  severity: string,
+  patch: Record<string, unknown>,
+): Promise<Alert | undefined> => {
+  const [row] = await db
+    .update(alerts)
+    .set({
+      severity,
+      updatedAt: new Date(),
+      data: sql`coalesce(${alerts.data}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+    })
+    .where(and(eq(alerts.alertId, alertId), eq(alerts.status, "ACTIVE")))
+    .returning();
+  return row;
+};
+
 /** Buka kembali alert yang selesai: aktif lagi, jejak penyelesaiannya dihapus, dan hitungan pembukaan ulang naik. */
 export const reopenAlert = async (id: string): Promise<Alert | undefined> => {
   const [row] = await db

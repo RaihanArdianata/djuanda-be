@@ -80,8 +80,7 @@ export async function listIncidentsService(
       incidents: matched.length,
       alerts: matched.reduce((sum, i) => sum + i.count, 0),
       byType: incidentCountByType(matched),
-      needsAction: matched.filter((i) => i.verificationCounts.unverified > 0)
-        .length,
+      needsAction: matched.filter((i) => i.needsAction).length,
     },
   };
 }

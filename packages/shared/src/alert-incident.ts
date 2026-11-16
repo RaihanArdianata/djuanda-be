@@ -68,6 +68,11 @@ export interface Incident {
   };
   /** Alert yang belum diverifikasi padahal anggota lain sudah (datang setelah verifikasi): "Terapkan juga". */
   newAfterVerification: number;
+  /**
+   * Ada alert Warning atau Critical yang belum dinilai. Alert Info hanya untuk diketahui: ia tidak membuat kejadian "perlu tindakan", jadi
+   * kejadian yang isinya hanya Info tidak masuk hitungan itu.
+   */
+  needsAction: boolean;
 }
 
 const SEVERITY_RANK: Readonly<Record<string, number>> = {
@@ -157,6 +162,12 @@ function toIncident(d: Draft): Incident {
     if (rel && rel !== d.subject.callsign) related.add(rel);
   }
   const roll = rollUp(members);
+  const needsAction = members.some(
+    (m) =>
+      !["VERIFIED", "FALSE_ALARM"].includes(
+        m.verificationStatus.toUpperCase(),
+      ) && severityRank(m.severity) >= severityRank("WARNING"),
+  );
   return {
     id: d.first.alertId,
     kind: d.subject.kind,
@@ -174,6 +185,7 @@ function toIncident(d: Draft): Incident {
     verification: roll.verification,
     verificationCounts: roll.counts,
     newAfterVerification: roll.newAfterVerification,
+    needsAction,
   };
 }
 

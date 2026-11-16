@@ -66,3 +66,20 @@ export function distanceToPolylineMeters(
   }
   return min;
 }
+
+/** Titik di dalam poligon dan sedikitnya `marginM` meter dari tepinya (histeresis: goyangan di garis batas tidak dihitung "masuk"). */
+export function insideBy(
+  point: LatLon,
+  polygon: Polygon,
+  marginM: number,
+): boolean {
+  if (!pointInPolygon(point, polygon)) return false;
+  if (marginM <= 0) return true;
+  const first = polygon[0];
+  const last = polygon[polygon.length - 1];
+  const ring =
+    first && last && (first[0] !== last[0] || first[1] !== last[1])
+      ? [...polygon, first]
+      : polygon;
+  return distanceToPolylineMeters(point, ring) >= marginM;
+}

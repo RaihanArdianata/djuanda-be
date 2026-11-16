@@ -22,6 +22,22 @@ describe("engineSettingsFromEnv", () => {
       engineSettingsFromEnv({ ALERT_TWIN_RADIUS_M: "0" }).twinRadiusM,
     ).toBe(0);
   });
+
+  it("reopens an alert that just ended for 5 minutes by default, and 0 turns it off", () => {
+    expect(engineSettingsFromEnv({}).reopenWindowSeconds).toBe(300);
+    expect(
+      engineSettingsFromEnv({ ALERT_REOPEN_WINDOW_SECONDS: "0" })
+        .reopenWindowSeconds,
+    ).toBe(0);
+    expect(
+      engineSettingsFromEnv({ ALERT_REOPEN_WINDOW_SECONDS: "120" })
+        .reopenWindowSeconds,
+    ).toBe(120);
+    expect(
+      engineSettingsFromEnv({ ALERT_REOPEN_WINDOW_SECONDS: "abc" })
+        .reopenWindowSeconds,
+    ).toBe(300);
+  });
 });
 
 describe("resolveEngineSettings", () => {

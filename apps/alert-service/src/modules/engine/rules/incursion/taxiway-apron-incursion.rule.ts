@@ -1,4 +1,8 @@
-import { getTrackHistory, type TrackHistoryRecord } from "../../track-history";
+import {
+  isIdentified,
+  isMovingAbove,
+  isOnSurface,
+} from "../../policy/identity";
 import type {
   AlertCandidate,
   AlertContext,
@@ -9,8 +13,24 @@ import { readableName } from "../geometry/feature-name";
 import {
   distanceToPolylineMeters,
   haversineMeters,
-  pointInPolygon,
+  insideBy,
 } from "../geometry/geometry";
+import { approach } from "../geometry/motion";
+
+/**
+ * Taxiway/Apron Incursion. Dua pesawat di taxiway atau apron yang sama itu normal (mengikuti di taxiway, parkir berdampingan di stand), jadi
+ * keberadaan bersama TIDAK menjadi alert. Yang dinilai adalah bahaya:
+ *
+ *  - CRITICAL: dua target ber-identitas, salah satunya bergerak, yang dalam `closingHorizonSeconds` ke depan akan sedekat `criticalSeparationMeters`
+ *    atau kurang (mendekat).
+ *  - WARNING: dua target ber-identitas, salah satunya bergerak, saling mendekat dan sudah dalam `warningSeparationMeters` (taxiway) atau
+ *    `apronWarningSeparationMeters` (apron). Atau target ber-identitas di permukaan berstatus INACTIVE/RESTRICTED.
+ *  - INFO: hal yang sama, tetapi salah satu pihaknya tanpa identitas (bisa gema sensor atau kendaraan yang tidak melapor nama), setelah bertahan
+ *    lebih lama. Tidak perlu tindakan.
+ *
+ * Tiap alert menunggu `confirmSeconds` (kondisi harus bertahan tanpa terputus) sebelum dibuat, dan target dianggap di dalam permukaan
+ * hanya bila sedikitnya `enterMarginM` dari tepinya (goyangan di garis batas tidak dihitung masuk).
+ */
 
 interface SurfaceConfig {
   id: string;
@@ -21,19 +41,71 @@ interface SurfaceConfig {
   polygon: [number, number][];
 }
 
-/** Track tanpa flag onGround tapi altitude MSL di atas ini jelas airborne —
- *  melintas di atas footprint polygon ≠ berada di permukaan. */
-const AIRBORNE_ALTITUDE_FT = 500;
+type Severity = "INFO" | "WARNING" | "CRITICAL";
 
-function isOnSurface(t: MovementTrack): boolean {
-  if (t.onGround === false) return false;
-  if (
-    t.onGround === undefined &&
-    t.altitude !== undefined &&
-    t.altitude > AIRBORNE_ALTITUDE_FT
-  )
-    return false;
-  return true;
+const DEFAULTS = {
+  criticalSeparationMeters: 25,
+  warningSeparationMeters: 80,
+  apronWarningSeparationMeters: 40,
+  movingKt: 3,
+  closingHorizonSeconds: 10,
+  confirmSeconds: 3,
+  restrictedConfirmSeconds: 5,
+  unidentifiedConfirmSeconds: 15,
+  routeConfirmSeconds: 10,
+  enterMarginM: 3,
+} as const;
+
+interface Params {
+  criticalM: number;
+  taxiwayWarningM: number;
+  apronWarningM: number;
+  movingKt: number;
+  horizonS: number;
+  confirmS: number;
+  restrictedConfirmS: number;
+  unidentifiedConfirmS: number;
+  enterMarginM: number;
+}
+
+/** Angka positif dari konfigurasi; selain itu `fallback`. */
+function positive(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : fallback;
+}
+
+function paramsFrom(config: Record<string, unknown>): Params {
+  return {
+    criticalM: positive(
+      config.criticalSeparationMeters,
+      DEFAULTS.criticalSeparationMeters,
+    ),
+    // `taxiwayProximityMeters` (pengaturan lama) tetap berlaku sebagai jarak peringatan di taxiway.
+    taxiwayWarningM: positive(
+      config.warningSeparationMeters,
+      positive(config.taxiwayProximityMeters, DEFAULTS.warningSeparationMeters),
+    ),
+    apronWarningM: positive(
+      config.apronWarningSeparationMeters,
+      DEFAULTS.apronWarningSeparationMeters,
+    ),
+    movingKt: positive(config.movingKt, DEFAULTS.movingKt),
+    horizonS: positive(
+      config.closingHorizonSeconds,
+      DEFAULTS.closingHorizonSeconds,
+    ),
+    confirmS: positive(config.confirmSeconds, DEFAULTS.confirmSeconds),
+    restrictedConfirmS: positive(
+      config.restrictedConfirmSeconds,
+      DEFAULTS.restrictedConfirmSeconds,
+    ),
+    unidentifiedConfirmS: positive(
+      config.unidentifiedConfirmSeconds,
+      DEFAULTS.unidentifiedConfirmSeconds,
+    ),
+    enterMarginM: positive(config.enterMarginM, DEFAULTS.enterMarginM),
+  };
 }
 
 function checkOffRoute(
@@ -53,10 +125,11 @@ function checkOffRoute(
     alertId: `TAXIWAY_APRON_INCURSION|${ctx.airportId}|${track.trackId}-ROUTE`,
     airportId: ctx.airportId,
     type: "TAXIWAY_APRON_INCURSION",
-    severity: "WARNING",
+    severity: isIdentified(track) ? "WARNING" : "INFO",
     status: "ACTIVE",
     trackId: track.trackId,
     triggeredAt: ctx.timestamp,
+    confirmSeconds: DEFAULTS.routeConfirmSeconds,
     data: {
       reason: "OFF_ROUTE",
       distanceMeters: distance,
@@ -67,26 +140,25 @@ function checkOffRoute(
   };
 }
 
-function isTrackEnteringSurface(
-  track: MovementTrack,
-  polygon: [number, number][],
-): boolean {
-  const history = getTrackHistory(track.trackId, 5);
-  if (history.length < 2) return true;
-  const previous = history[history.length - 2] as TrackHistoryRecord;
-  return !pointInPolygon([previous.latitude, previous.longitude], polygon);
+interface CandidateInput {
+  track: MovementTrack;
+  surface: SurfaceConfig;
+  ctx: Pick<AlertContext, "airportId" | "timestamp">;
+  severity: Severity;
+  confirmSeconds: number;
+  reason: "CLOSING" | "RESTRICTED_ENTRY";
+  related?: MovementTrack;
+  distanceMeters?: number;
+  closestMeters?: number;
+  criticalMeters: number;
+  warningMeters?: number;
 }
 
-function buildSurfaceCandidate(
-  track: MovementTrack,
-  surface: SurfaceConfig,
-  ctx: Pick<AlertContext, "airportId" | "timestamp">,
-  relatedTrack?: MovementTrack,
-  criticalMeters?: number,
-): AlertCandidate {
+function buildSurfaceCandidate(input: CandidateInput): AlertCandidate {
+  const { track, surface, ctx, related } = input;
   const callsign = track.callsign ?? track.trackId;
-  const relatedCallsign = relatedTrack
-    ? (relatedTrack.callsign ?? relatedTrack.trackId)
+  const relatedCallsign = related
+    ? (related.callsign ?? related.trackId)
     : undefined;
   const featureName = readableName(surface.name);
   const featureStatus = surface.status ?? "ACTIVE";
@@ -94,31 +166,20 @@ function buildSurfaceCandidate(
     ? ` yang sedang dipakai ${relatedCallsign}`
     : "";
 
-  let severity: "WARNING" | "CRITICAL" = "WARNING";
-  let distanceMeters: number | null = null;
-  if (relatedTrack && criticalMeters !== undefined) {
-    distanceMeters = haversineMeters(
-      [track.latitude, track.longitude],
-      [relatedTrack.latitude, relatedTrack.longitude],
-    );
-    if (distanceMeters <= criticalMeters) {
-      severity = "CRITICAL";
-    }
-  }
-
   return {
     alertId: `TAXIWAY_APRON_INCURSION|${ctx.airportId}|${track.trackId}-${surface.id}`,
     airportId: ctx.airportId,
     type: "TAXIWAY_APRON_INCURSION",
-    severity,
+    severity: input.severity,
     status: "ACTIVE",
     trackId: track.trackId,
-    relatedTrackId: relatedTrack?.trackId,
+    relatedTrackId: related?.trackId,
     aerodromeFeatureId: surface.id,
     triggeredAt: ctx.timestamp,
+    confirmSeconds: input.confirmSeconds,
     data: {
       track,
-      relatedTrack,
+      relatedTrack: related,
       surface,
       surfaceId: surface.id,
       surfaceName: featureName ?? null,
@@ -126,8 +187,11 @@ function buildSurfaceCandidate(
       surfaceStatus: featureStatus,
       callsign,
       relatedCallsign,
-      distanceMeters,
-      criticalMeters,
+      distanceMeters: input.distanceMeters ?? null,
+      closestMeters: input.closestMeters ?? null,
+      criticalMeters: input.criticalMeters,
+      warningMeters: input.warningMeters ?? null,
+      reason: input.reason,
       message: `${callsign} memasuki ${featureName ?? "taxiway/apron"}${relatedText}`,
       latitude: track.latitude,
       longitude: track.longitude,
@@ -135,56 +199,119 @@ function buildSurfaceCandidate(
   };
 }
 
-/** ≥2 tracks on the same surface → conflict candidates (intruder vs occupant). */
-function collectConflictCandidates(
+/** Pelaku adalah yang bergerak lebih cepat; yang lain dianggap penghuni. */
+function orderByMotion(
+  a: MovementTrack,
+  b: MovementTrack,
+): [MovementTrack, MovementTrack] {
+  return (a.groundSpeed ?? 0) >= (b.groundSpeed ?? 0) ? [a, b] : [b, a];
+}
+
+/** Dua target di permukaan yang sama: kandidat alert bila salah satunya bergerak, mereka saling mendekat, dan sudah dalam jarak peringatan. */
+function judgePair(
+  a: MovementTrack,
+  b: MovementTrack,
+  surface: SurfaceConfig,
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+  p: Params,
+): AlertCandidate | null {
+  // Dua target yang sama-sama diam (parkir berdampingan, antre) tidak berbahaya.
+  if (!isMovingAbove(a, p.movingKt) && !isMovingAbove(b, p.movingKt))
+    return null;
+
+  const warningM =
+    surface.type === "APRON" ? p.apronWarningM : p.taxiwayWarningM;
+  const ap = approach(a, b, p.horizonS);
+  if (!ap.closing || ap.distanceM > warningM) return null;
+
+  const identified = isIdentified(a) && isIdentified(b);
+  const severity: Severity = !identified
+    ? "INFO"
+    : ap.closestM <= p.criticalM
+      ? "CRITICAL"
+      : "WARNING";
+  const [intruder, occupant] = orderByMotion(a, b);
+  return buildSurfaceCandidate({
+    track: intruder,
+    surface,
+    ctx,
+    severity,
+    confirmSeconds: identified ? p.confirmS : p.unidentifiedConfirmS,
+    reason: "CLOSING",
+    related: occupant,
+    distanceMeters: haversineMeters(
+      [intruder.latitude, intruder.longitude],
+      [occupant.latitude, occupant.longitude],
+    ),
+    closestMeters: ap.closestM,
+    criticalMeters: p.criticalM,
+    warningMeters: warningM,
+  });
+}
+
+function collectConflicts(
   surface: SurfaceConfig,
   inside: MovementTrack[],
   ctx: Pick<AlertContext, "airportId" | "timestamp">,
-  criticalMeters: number,
-  taxiwayProximityMeters: number,
+  p: Params,
 ): AlertCandidate[] {
-  const entrants = inside.filter((t) =>
-    isTrackEnteringSurface(t, surface.polygon),
-  );
-  const occupants = inside.filter(
-    (t) => !isTrackEnteringSurface(t, surface.polygon),
-  );
-  const occupant = occupants[0] ?? inside[0];
-
-  // Aprons legitimately hold many parked aircraft. Sharing the polygon
-  // alone is not a conflict there — require actual proximity
-  // (criticalMeters) to another track on it. Taxiways keep
-  // the stricter shared-surface semantics: two tracks on one taxiway is
-  // already a conflict regardless of spacing.
-  const isApron = surface.type === "APRON";
-  // Dua pesawat di satu taxiway (antre, mengikuti) umumnya normal. Bila `taxiwayProximityMeters` diisi, taxiway juga hanya dihitung
-  // bila keduanya sedekat itu; kosong/0 = perilaku lama (berbagi taxiway saja sudah konflik).
-  const needsProximity = isApron || taxiwayProximityMeters > 0;
-  const proximityMeters = isApron ? criticalMeters : taxiwayProximityMeters;
-  const isTooClose = (t: MovementTrack): boolean =>
-    inside.some(
-      (o) =>
-        o.trackId !== t.trackId &&
-        haversineMeters([t.latitude, t.longitude], [o.latitude, o.longitude]) <=
-          proximityMeters,
-    );
-
-  const intruders = (
-    entrants.length > 0
-      ? entrants
-      : inside.filter((t) => t.trackId !== occupant.trackId)
-  ).filter(
-    (t) => t.trackId !== occupant.trackId && (!needsProximity || isTooClose(t)),
-  );
-
   const candidates: AlertCandidate[] = [];
-  for (const intruder of intruders) {
-    if (intruder.trackId === occupant.trackId) continue;
-    candidates.push(
-      buildSurfaceCandidate(intruder, surface, ctx, occupant, criticalMeters),
-    );
+  for (let i = 0; i < inside.length; i++) {
+    for (let j = i + 1; j < inside.length; j++) {
+      const candidate = judgePair(
+        inside[i] as MovementTrack,
+        inside[j] as MovementTrack,
+        surface,
+        ctx,
+        p,
+      );
+      if (candidate) candidates.push(candidate);
+    }
   }
   return candidates;
+}
+
+function collectRestricted(
+  surface: SurfaceConfig,
+  inside: MovementTrack[],
+  ctx: Pick<AlertContext, "airportId" | "timestamp">,
+  p: Params,
+): AlertCandidate[] {
+  return inside.map((track) => {
+    const identified = isIdentified(track);
+    return buildSurfaceCandidate({
+      track,
+      surface,
+      ctx,
+      severity: identified ? "WARNING" : "INFO",
+      confirmSeconds: identified
+        ? p.restrictedConfirmS
+        : p.unidentifiedConfirmS,
+      reason: "RESTRICTED_ENTRY",
+      criticalMeters: p.criticalM,
+    });
+  });
+}
+
+const SEVERITY_ORDER: Record<string, number> = {
+  INFO: 0,
+  WARNING: 1,
+  CRITICAL: 2,
+};
+
+/** Satu candidate per alertId; bila ada dua (masuk area terlarang dan mendekat sekaligus), yang severity-nya lebih tinggi dipakai. */
+function dedupe(candidates: AlertCandidate[]): AlertCandidate[] {
+  const byId = new Map<string, AlertCandidate>();
+  for (const c of candidates) {
+    const known = byId.get(c.alertId);
+    if (
+      !known ||
+      (SEVERITY_ORDER[c.severity] ?? 0) > (SEVERITY_ORDER[known.severity] ?? 0)
+    ) {
+      byId.set(c.alertId, c);
+    }
+  }
+  return [...byId.values()];
 }
 
 function evaluateSurfaces(
@@ -193,47 +320,27 @@ function evaluateSurfaces(
   ctx: Pick<AlertContext, "airportId" | "timestamp">,
   config: Record<string, unknown>,
 ): AlertCandidate[] {
+  const p = paramsFrom(config);
   const candidates: AlertCandidate[] = [];
-  const criticalMeters =
-    (config.criticalSeparationMeters as number | undefined) ?? 50;
-  const proximity = config.taxiwayProximityMeters;
-  const taxiwayProximityMeters =
-    typeof proximity === "number" && Number.isFinite(proximity) && proximity > 0
-      ? proximity
-      : 0;
 
   for (const surface of surfaces) {
     const inside = tracks.filter(
       (t) =>
         isOnSurface(t) &&
-        pointInPolygon([t.latitude, t.longitude], surface.polygon),
+        insideBy([t.latitude, t.longitude], surface.polygon, p.enterMarginM),
     );
     if (inside.length === 0) continue;
 
-    // A lone track inside an ACTIVE surface is just parked/taxiing — normal
-    // ops, not an incursion. Single-entry only alerts on surfaces that are
-    // explicitly closed or restricted (INACTIVE/RESTRICTED), where any
-    // occupancy is by definition unauthorized.
-    const restrictedEntry =
+    const restricted =
       surface.status === "INACTIVE" || surface.status === "RESTRICTED";
-    if (inside.length === 1) {
-      if (restrictedEntry)
-        candidates.push(buildSurfaceCandidate(inside[0], surface, ctx));
-      continue;
+    if (restricted)
+      candidates.push(...collectRestricted(surface, inside, ctx, p));
+    if (inside.length >= 2) {
+      candidates.push(...collectConflicts(surface, inside, ctx, p));
     }
-
-    candidates.push(
-      ...collectConflictCandidates(
-        surface,
-        inside,
-        ctx,
-        criticalMeters,
-        taxiwayProximityMeters,
-      ),
-    );
   }
 
-  return candidates;
+  return dedupe(candidates);
 }
 
 export const taxiwayApronIncursionRule: DetectionRule = {

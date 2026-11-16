@@ -164,4 +164,9 @@ export interface AlertCandidate {
   aerodromeFeatureId?: string;
   triggeredAt: Date;
   data: Record<string, unknown>;
+  /**
+   * Kondisi harus bertahan sekian detik tanpa terputus sebelum alert dibuat (lihat policy/confirmation.ts). Tidak disimpan di database.
+   * Kosong atau 0 = langsung.
+   */
+  confirmSeconds?: number;
 }

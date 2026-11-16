@@ -1,6 +1,9 @@
 import { FEATURE_STATUS_VALUES, LAYER_VALUES } from "@repo/database";
 import z from "zod";
 
+/** Warna fitur pilihan operator (Aerodrome Studio): #RRGGBB, dibaca peta Studio dan peta utama. */
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
 export const geometrySchema = z.object({
   type: z.enum([
     "Point",
@@ -18,7 +21,13 @@ export const createFeatureSchema = z.object({
   name: z.string().max(255).optional(),
   status: z.enum(FEATURE_STATUS_VALUES).optional(),
   geometry: geometrySchema,
-  properties: z.record(z.string(), z.any()).default({}),
+  properties: z
+    .record(z.string(), z.any())
+    .default({})
+    .refine((p) => p.color === undefined || HEX_COLOR.test(String(p.color)), {
+      message: "properties.color harus berformat #RRGGBB",
+      path: ["color"],
+    }),
 });
 
 export const updateFeatureSchema = createFeatureSchema.partial();

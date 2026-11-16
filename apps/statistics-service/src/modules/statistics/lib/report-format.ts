@@ -188,6 +188,7 @@ export const ALERT_CATEGORIES: ReadonlyArray<{
 export const SEVERITY_LABEL: Readonly<Record<string, string>> = {
   CRITICAL: "Critical",
   WARNING: "Warning",
+  INFO: "Info",
 };
 
 /** Nama bandara untuk judul; kode lain tampil sebagai kodenya saja. */

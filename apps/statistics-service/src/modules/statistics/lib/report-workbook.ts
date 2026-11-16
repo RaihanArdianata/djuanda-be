@@ -192,7 +192,7 @@ function highlights(ctx: Context): string[] {
   } else {
     const d = stats.dominantCategory;
     lines.push(
-      `Total ${result.alerts.total.toLocaleString("id-ID")} alert${result.alerts.incidents.total > 0 ? `, setara ${result.alerts.incidents.total.toLocaleString("id-ID")} kejadian setelah alert yang sama digabung (${result.alerts.incidents.needsAction.toLocaleString("id-ID")} kejadian belum selesai dinilai)` : ""} (${stats.alertCritical.toLocaleString("id-ID")} Critical, ${stats.alertWarning.toLocaleString("id-ID")} Warning).${d ? ` Kategori dominan: ${d.label} sebanyak ${d.count.toLocaleString("id-ID")} (${Math.round(pct(d.count, result.alerts.total) * 100)}%).` : ""}`,
+      `Total ${result.alerts.total.toLocaleString("id-ID")} alert${result.alerts.incidents.total > 0 ? `, setara ${result.alerts.incidents.total.toLocaleString("id-ID")} kejadian setelah alert yang sama digabung (${result.alerts.incidents.needsAction.toLocaleString("id-ID")} kejadian belum selesai dinilai)` : ""} (${stats.alertCritical.toLocaleString("id-ID")} Critical, ${stats.alertWarning.toLocaleString("id-ID")} Warning, ${stats.alertInfo.toLocaleString("id-ID")} Info).${d ? ` Kategori dominan: ${d.label} sebanyak ${d.count.toLocaleString("id-ID")} (${Math.round(pct(d.count, result.alerts.total) * 100)}%).` : ""}`,
     );
     if (stats.peakAlert) {
       lines.push(
@@ -739,7 +739,7 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
   const { result, stats } = ctx;
   const ws = wb.addWorksheet(SHEET.alerts);
   configureSheet(ws, { tab: TAB.alerts });
-  setWidths(ws, [34, 14, 16, 14, 14]);
+  setWidths(ws, [34, 14, 16, 14, 14, 14]);
 
   const severityNote = severityText(ctx.options.severity);
   writeTitleBlock(
@@ -747,7 +747,7 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
     6,
     `RINGKASAN ALERT - PERIODE ${formatDateShort(result.startDate).toUpperCase()} S.D. ${formatDateShort(result.endDate).toUpperCase()}`,
     subtitle(ctx),
-    `Filter keparahan: ${severityNote}. Critical dan Warning dihitung dari rincian alert yang tercatat.`,
+    `Filter keparahan: ${severityNote}. Critical, Warning, dan Info dihitung dari rincian alert yang tercatat. Alert Info hanya untuk diketahui dan tidak dihitung perlu tindakan.`,
   );
 
   writeHeaderRow(ws, 5, [
@@ -756,6 +756,7 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
     "% dari Total",
     "Critical",
     "Warning",
+    "Info",
   ]);
   const dataStart = 6;
   const dataEnd = dataStart + stats.categories.length - 1;
@@ -780,6 +781,7 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
         },
         { value: c.critical, kind: "input", fmt: FMT.int },
         { value: c.warning, kind: "input", fmt: FMT.int },
+        { value: c.info, kind: "input", fmt: FMT.int },
       ],
       i % 2 === 1,
     );
@@ -806,6 +808,7 @@ function buildAlertSummarySheet(wb: ExcelJs.Workbook, ctx: Context): void {
     },
     sumCol("E", stats.alertCritical),
     sumCol("F", stats.alertWarning),
+    sumCol("G", stats.alertInfo),
   ]);
 
   ws.addConditionalFormatting({
@@ -845,6 +848,14 @@ const VERIFICATION_LABEL: Readonly<Record<string, string>> = {
   VERIFIED: "Valid alert",
   FALSE_ALARM: "False alert",
 };
+
+/** Warna sel tingkat keparahan: Critical merah, Warning kuning, Info biru. */
+function severityTone(severity: string): { font: string; fill: string } {
+  if (severity === "CRITICAL")
+    return { font: COLOR.critical, fill: COLOR.criticalSoft };
+  if (severity === "INFO") return { font: COLOR.info, fill: COLOR.infoSoft };
+  return { font: COLOR.warning, fill: COLOR.warningSoft };
+}
 
 function verificationLabel(status: string): string {
   return VERIFICATION_LABEL[status.toUpperCase()] ?? status;
@@ -922,7 +933,7 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
   const bands = incidentBands(rows);
   rows.forEach((d, i) => {
     const severity = d.severity.toUpperCase();
-    const critical = severity === "CRITICAL";
+    const tone = severityTone(severity);
     writeBodyRow(
       ws,
       6 + i,
@@ -940,8 +951,8 @@ function buildAlertLogSheet(wb: ExcelJs.Workbook, ctx: Context): void {
           value: SEVERITY_LABEL[severity] ?? d.severity,
           align: "center",
           bold: true,
-          fontArgb: critical ? COLOR.critical : COLOR.warning,
-          fillArgb: critical ? COLOR.criticalSoft : COLOR.warningSoft,
+          fontArgb: tone.font,
+          fillArgb: tone.fill,
         },
         { value: d.description, wrap: true },
         { value: verificationLabel(d.verification.status), align: "center" },
@@ -1152,6 +1163,15 @@ function buildLegendSheet(wb: ExcelJs.Workbook, ctx: Context): void {
     },
     "Alert peringatan.",
     true,
+  );
+  pair(
+    {
+      value: "Info",
+      fontArgb: COLOR.info,
+      fillArgb: COLOR.infoSoft,
+      bold: true,
+    },
+    "Alert untuk diketahui; tidak perlu tindakan dan tidak dihitung sebagai perlu tindakan.",
   );
 
   row += 1;

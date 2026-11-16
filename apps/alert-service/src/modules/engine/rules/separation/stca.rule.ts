@@ -42,9 +42,10 @@ function buildCandidate(
   a: AlertContext["tracks"][0],
   b: AlertContext["tracks"][0],
   pairKey: string,
-  distanceNm: number,
+  conflict: Conflict,
   p: PoolParams,
 ): AlertCandidate {
+  const distanceNm = conflict.distanceNm;
   const callsignA = a.callsign ?? a.trackId;
   const callsignB = b.callsign ?? b.trackId;
   const surface = p.domain === "SURFACE";
@@ -65,12 +66,13 @@ function buildCandidate(
       domain: p.domain,
       callsign: callsignA,
       relatedCallsign: callsignB,
-      message: `${callsignA} and ${callsignB} predicted below minimum separation (${separation} in ${p.horizonSeconds}s${surface ? ", surface" : ""})`,
+      message: `${callsignA} and ${callsignB} predicted below minimum separation (${separation} in ${Math.round(conflict.timeSeconds)}s${surface ? ", surface" : ""})`,
       latitude: (a.latitude + b.latitude) / 2,
       longitude: (a.longitude + b.longitude) / 2,
       track: trackSnapshot(a),
       relatedTrack: trackSnapshot(b),
-      predictedTimeSeconds: p.horizonSeconds,
+      predictedTimeSeconds: Math.round(conflict.timeSeconds),
+      predictionHorizonSeconds: p.horizonSeconds,
       horizontalSeparationNm: distanceNm,
       minimumHorizontalSeparationNm: p.limitNm,
       ...(surface && {
@@ -86,25 +88,60 @@ function buildCandidate(
   };
 }
 
-/** Jarak (NM) pada waktu prediksi bila pasangan ini terlalu dekat; `undefined` bila tidak (atau tidak dinilai). */
-function conflictDistanceNm(
+interface Conflict {
+  /** Jarak horizontal (NM) pada titik terdekat. */
+  distanceNm: number;
+  /** Detik dari sekarang sampai titik terdekat itu. */
+  timeSeconds: number;
+}
+
+/**
+ * Titik terdekat kedua target dalam `horizonSeconds` ke depan, dengan gerak lurus dan kecepatan tetap. Berbeda dengan memeriksa jarak
+ * hanya di ujung waktu prediksi: dua pesawat yang jalurnya berpotongan lalu saling melewati sebelum waktu itu tetap tertangkap.
+ */
+function closestApproach(
+  a: AlertContext["tracks"][0],
+  b: AlertContext["tracks"][0],
+  horizonSeconds: number,
+): Conflict {
+  const cosLat = Math.cos((((a.latitude + b.latitude) / 2) * Math.PI) / 180);
+  // Posisi b relatif terhadap a (NM): timur dan utara.
+  const rx = (b.longitude - a.longitude) * 60 * cosLat;
+  const ry = (b.latitude - a.latitude) * 60;
+  const vel = (t: AlertContext["tracks"][0]): [number, number] => {
+    const rad = ((t.heading ?? 0) * Math.PI) / 180;
+    const nmPerS = (t.groundSpeed ?? 0) / 3600;
+    return [Math.sin(rad) * nmPerS, Math.cos(rad) * nmPerS];
+  };
+  const [ax, ay] = vel(a);
+  const [bx, by] = vel(b);
+  const vx = bx - ax;
+  const vy = by - ay;
+  const v2 = vx * vx + vy * vy;
+  const t =
+    v2 === 0
+      ? 0
+      : Math.max(0, Math.min(horizonSeconds, -(rx * vx + ry * vy) / v2));
+  return { distanceNm: Math.hypot(rx + vx * t, ry + vy * t), timeSeconds: t };
+}
+
+/** Konflik pasangan ini bila jalurnya mendekat di bawah batas dalam waktu prediksi; `undefined` bila tidak (atau tidak dinilai). */
+function findConflict(
   a: AlertContext["tracks"][0],
   b: AlertContext["tracks"][0],
   p: PoolParams,
-): number | undefined {
+): Conflict | undefined {
   // Callsign sama = satu pesawat yang terlihat dua kali (dua trackId dari dua jalur feed), bukan dua pesawat yang berdekatan.
   if (a.callsign && a.callsign === b.callsign) return undefined;
 
+  // Selisih tinggi sama dengan atau di bawah batas = masih konflik; lebih dari itu terpisah vertikal.
   if (p.verticalFt !== undefined) {
     if (a.altitude === undefined || b.altitude === undefined) return undefined;
-    if (Math.abs(a.altitude - b.altitude) >= p.verticalFt) return undefined;
+    if (Math.abs(a.altitude - b.altitude) > p.verticalFt) return undefined;
   }
 
-  const distanceNm = haversineNm(
-    predict(a, p.horizonSeconds),
-    predict(b, p.horizonSeconds),
-  );
-  return distanceNm < p.limitNm ? distanceNm : undefined;
+  const conflict = closestApproach(a, b, p.horizonSeconds);
+  return conflict.distanceNm < p.limitNm ? conflict : undefined;
 }
 
 /** Pasangan di dalam satu kumpulan target (semua di udara, atau semua di darat) yang diperkirakan terlalu dekat. */
@@ -124,9 +161,9 @@ function evaluatePool(
       if (seen.has(pairKey)) continue;
       seen.add(pairKey);
 
-      const distanceNm = conflictDistanceNm(a, b, p);
-      if (distanceNm !== undefined) {
-        candidates.push(buildCandidate(ctx, a, b, pairKey, distanceNm, p));
+      const conflict = findConflict(a, b, p);
+      if (conflict) {
+        candidates.push(buildCandidate(ctx, a, b, pairKey, conflict, p));
       }
     }
   }
@@ -163,7 +200,8 @@ export const stcaRule: DetectionRule = {
     // STCA darat (`includeSurface: true`): dua target di darat (taksi, parkir, kendaraan) dengan ambang sendiri dalam meter.
     // Pasangan campuran (satu di udara, satu di darat) tidak dinilai: itu urusan aturan incursion.
     if (config.includeSurface === true) {
-      const surface = ctx.tracks.filter((t) => !isAirborne(t));
+      // Hanya target yang dilaporkan di darat (onGround true); yang tanpa flag atau rendah-lambat tidak ditebak.
+      const surface = ctx.tracks.filter((t) => t.onGround === true);
       candidates.push(
         ...evaluatePool(ctx, surface, {
           domain: "SURFACE",
@@ -211,50 +249,4 @@ function trackSnapshot(track: AlertContext["tracks"][0]): {
     onGround: track.onGround ?? null,
     timestamp: track.timestamp.toISOString(),
   };
-}
-
-function predict(
-  track: AlertContext["tracks"][0],
-  seconds: number,
-): { latitude: number; longitude: number } {
-  const speedKnots = track.groundSpeed ?? 0;
-  const heading = track.heading ?? 0;
-  const distanceNm = (speedKnots * seconds) / 3600;
-
-  const latRad = (track.latitude * Math.PI) / 180;
-  const lonRad = (track.longitude * Math.PI) / 180;
-  const bearing = (heading * Math.PI) / 180;
-
-  const lat2 = Math.asin(
-    Math.sin(latRad) * Math.cos(distanceNm / 3440) +
-      Math.cos(latRad) * Math.sin(distanceNm / 3440) * Math.cos(bearing),
-  );
-  const lon2 =
-    lonRad +
-    Math.atan2(
-      Math.sin(bearing) * Math.sin(distanceNm / 3440) * Math.cos(latRad),
-      Math.cos(distanceNm / 3440) - Math.sin(latRad) * Math.sin(lat2),
-    );
-
-  return {
-    latitude: (lat2 * 180) / Math.PI,
-    longitude: (lon2 * 180) / Math.PI,
-  };
-}
-
-function haversineNm(
-  a: { latitude: number; longitude: number },
-  b: { latitude: number; longitude: number },
-): number {
-  const R = 3440;
-  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
-  const dLon = ((b.longitude - a.longitude) * Math.PI) / 180;
-  const lat1 = (a.latitude * Math.PI) / 180;
-  const lat2 = (b.latitude * Math.PI) / 180;
-
-  const h =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  return 2 * R * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }

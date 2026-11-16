@@ -372,3 +372,73 @@ describe("altitude and vertical separation", () => {
     ).toBe(0);
   });
 });
+
+describe("stcaRule: closest approach within the prediction time", () => {
+  const run = (
+    tracks: AlertContext["tracks"],
+    config: Record<string, unknown> = {},
+  ) =>
+    stcaRule.evaluate(
+      { airportId: "WARR", timestamp: now, tracks },
+      {
+        predictionTimeSeconds: 60,
+        minimumHorizontalSeparationNm: 3,
+        ...config,
+      },
+    );
+
+  // Dua pesawat 6 NM berpapasan di tengah (arah berlawanan, 200 kt): jarak di detik 60 sudah 3,3 NM lagi, tetapi di tengah jalan nol.
+  const head = (id: string, lonOffsetNm: number, heading: number) => ({
+    ...trackA,
+    trackId: id,
+    latitude: -7.385,
+    longitude: 112.77 + lonOffsetNm / 60 / Math.cos((7.385 * Math.PI) / 180),
+    groundSpeed: 200,
+    heading,
+  });
+
+  test("tracks that cross paths and pass each other before the prediction time are still caught", () => {
+    const [alert] = run([head("W", -3, 90), head("E", 3, 270)]);
+    expect(alert).toBeDefined();
+    expect(alert?.data.predictedTimeSeconds).toBe(54);
+  });
+
+  test("tracks that never come within the limit in the prediction time are not", () => {
+    expect(run([head("W", -10, 90), head("E", 10, 270)])).toHaveLength(0);
+  });
+
+  test("a vertical gap exactly equal to the setting still counts as a conflict; one above it does not", () => {
+    const low = { ...head("W", -3, 90), altitude: 3000 };
+    expect(
+      run([low, { ...head("E", 3, 270), altitude: 4000 }], {
+        minimumVerticalSeparationFt: 1000,
+      }),
+    ).toHaveLength(1);
+    expect(
+      run([low, { ...head("E", 3, 270), altitude: 4001 }], {
+        minimumVerticalSeparationFt: 1000,
+      }),
+    ).toHaveLength(0);
+  });
+
+  test("the surface STCA only takes targets reported on the ground", () => {
+    const g = (id: string, lon: number, onGround: boolean | undefined) => ({
+      ...trackA,
+      trackId: id,
+      altitude: 0,
+      groundSpeed: 5,
+      heading: 90,
+      latitude: -7.385,
+      longitude: lon,
+      onGround,
+    });
+    const near = 112.77;
+    const cfg = { includeSurface: true };
+    expect(
+      run([g("G1", near, true), g("G2", near + 0.0001, true)], cfg),
+    ).toHaveLength(1);
+    expect(
+      run([g("G1", near, true), g("G2", near + 0.0001, undefined)], cfg),
+    ).toHaveLength(0);
+  });
+});

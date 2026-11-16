@@ -75,7 +75,7 @@ const defaultRules = [
     type: "STCA",
     enabled: true,
     description:
-      "Short Term Conflict Alert — memprediksi jarak 2 objek dalam waktu beberapa detik ke depan.",
+      "Short Term Conflict Alert — Critical bila jalur dua target diprediksi berpotongan (jarak terdekat di bawah batas horizontal) dalam waktu prediksi, dan selisih tingginya sama dengan atau di bawah batas vertikal. STCA darat hanya untuk target yang dilaporkan di darat (onGround).",
     configuration: {
       predictionTimeSeconds: 60,
       minimumHorizontalSeparationNm: 3,
@@ -88,15 +88,15 @@ const defaultRules = [
     documentation: {
       parameters: {
         predictionTimeSeconds:
-          "Waktu prediksi ke depan (detik) untuk memperkirakan posisi kedua track.",
+          "Waktu prediksi ke depan (detik). Dihitung titik terdekat kedua track selama rentang ini (gerak lurus, kecepatan tetap), bukan hanya posisi di ujung waktu.",
         minimumHorizontalSeparationNm:
           "Jarak horizontal minimum (nautical miles) antara dua track.",
         minimumVerticalSeparationFt:
-          "Jarak vertikal minimum (feet): dua track yang selisih tingginya sama atau lebih dari ini tidak memicu STCA walau dekat secara horizontal. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
+          "Batas selisih ketinggian (feet): STCA hanya bila selisih tinggi kedua track sama dengan atau di bawah nilai ini. Lebih dari ini dianggap terpisah vertikal walau jalurnya berpotongan. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
         requireAltitude:
           "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:
-          "true = STCA darat ikut menyala: dua target di darat (taksi, parkir, kendaraan) dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Bawaan false (konflik di darat ditangani aturan incursion).",
+          "true = STCA darat ikut menyala: dua target yang dilaporkan di darat (onGround true: taksi, parkir, kendaraan) dinilai terpisah dari STCA udara, dengan ambang sendiri di bawah. Bawaan false (konflik di darat ditangani aturan incursion).",
         surfaceMinimumSeparationMeters:
           "STCA darat: jarak minimum (meter) antara dua target di darat. Bawaan 50. Hanya dipakai bila includeSurface true.",
         surfacePredictionTimeSeconds:

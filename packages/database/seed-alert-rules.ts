@@ -107,7 +107,7 @@ const defaultRules = [
         minimumHorizontalSeparationNm:
           "AIR_HIGH: jarak horizontal minimum (nautical miles) fallback bila highSeparationMeters tidak diset. Bawaan 3.",
         minimumVerticalSeparationFt:
-          "AIR: jarak vertikal minimum (feet). Dua track yang selisih tingginya sama atau lebih dari ini tidak memicu STCA walau dekat secara horizontal. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
+          "AIR: batas selisih ketinggian (feet). STCA hanya bila selisih tinggi kedua track sama dengan atau di bawah nilai ini; lebih dari ini dianggap terpisah vertikal walau jalurnya berpotongan. Bawaan 1000; isi 0 untuk mematikan pemeriksaan vertikal.",
         requireAltitude:
           "true (bawaan) = track yang tidak melaporkan ketinggian (banyak track radar) tidak ikut STCA. false = ikut dihitung, hanya jarak horizontal yang dinilai.",
         includeSurface:

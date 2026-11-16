@@ -286,7 +286,7 @@ function conflictDistanceNm(
         : a.altitude !== undefined && b.altitude !== undefined
           ? Math.abs(a.altitude - b.altitude)
           : undefined;
-    if (vert === undefined || vert >= p.verticalFt) return undefined;
+    if (vert === undefined || vert > p.verticalFt) return undefined;
   }
 
   const endPa = predict(a, p.horizonSeconds);
@@ -409,7 +409,7 @@ function tryMidCandidate(
     pa.altitude != null &&
     pb.altitude != null
   ) {
-    if (Math.abs(pa.altitude - pb.altitude) >= t.highVerticalFt)
+    if (Math.abs(pa.altitude - pb.altitude) > t.highVerticalFt)
       return undefined;
   }
 
@@ -487,7 +487,7 @@ function isVerticalSeparated(
   if (limitFt === undefined || altA === undefined || altB === undefined) {
     return false;
   }
-  return Math.abs(altA - altB) >= limitFt;
+  return Math.abs(altA - altB) > limitFt;
 }
 
 function evaluateAirPair(
@@ -608,7 +608,8 @@ export const stcaRule: DetectionRule = {
     // STCA darat (`includeSurface: true`): dua target di darat (taksi, parkir, kendaraan) dengan ambang sendiri dalam meter.
     // Pasangan campuran (satu di udara, satu di darat) tidak dinilai: itu urusan aturan incursion.
     if (config.includeSurface === true) {
-      const surface = ctx.tracks.filter((t) => !isAirborne(t));
+      // Hanya target yang dilaporkan di darat (onGround true); yang tanpa flag atau rendah-lambat tidak ditebak.
+      const surface = ctx.tracks.filter((t) => t.onGround === true);
       const minM = numberOr(
         config.surfaceMinimumSeparationMeters,
         DEFAULT_SURFACE_MIN_SEPARATION_M,

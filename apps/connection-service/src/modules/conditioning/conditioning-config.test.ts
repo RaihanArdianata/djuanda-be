@@ -21,6 +21,14 @@ describe("conditioningConfigFromEnv", () => {
       maxAirJumpKt: 1000,
       headingMinMoveM: 10,
     });
+    expect(c.mlat.enabled).toBe(true);
+    expect(c.mlat.options).toMatchObject({
+      maxGroundSpeedKt: 100,
+      maxAirSpeedKt: 700,
+      minConfidence: 0.4,
+      unreliableThreshold: 3,
+      recoveryThreshold: 3,
+    });
     expect(c.warnings).toEqual([]);
   });
 
@@ -32,6 +40,9 @@ describe("conditioningConfigFromEnv", () => {
       expect(
         conditioningConfigFromEnv({ TRACK_STABILIZER_ENABLED: v }).stabilizer
           .enabled,
+      ).toBe(false);
+      expect(
+        conditioningConfigFromEnv({ MLAT_VALIDATION_ENABLED: v }).mlat.enabled,
       ).toBe(false);
     }
     expect(
@@ -48,6 +59,12 @@ describe("conditioningConfigFromEnv", () => {
       STABILIZER_STAND_KT: "8",
       STABILIZER_RADIUS_M: "30",
       STABILIZER_MOVE_RADIUS_M: "5",
+      MLAT_MAX_GROUND_SPEED_KT: "90",
+      MLAT_MAX_AIR_SPEED_KT: "650",
+      MLAT_MIN_CONFIDENCE: "0.5",
+      MLAT_UNRELIABLE_THRESHOLD: "4",
+      MLAT_RECOVERY_THRESHOLD: "2",
+      MLAT_MAX_STALE_MS: "8000",
     });
     expect(c.ghost.options).toMatchObject({
       radiusM: 25,
@@ -59,6 +76,14 @@ describe("conditioningConfigFromEnv", () => {
       radiusM: 30,
       moveRadiusM: 5,
     });
+    expect(c.mlat.options).toMatchObject({
+      maxGroundSpeedKt: 90,
+      maxAirSpeedKt: 650,
+      minConfidence: 0.5,
+      unreliableThreshold: 4,
+      recoveryThreshold: 2,
+      maxStaleMs: 8000,
+    });
   });
 
   it("falls back to the default, with a warning, for a value it cannot use", () => {
@@ -67,12 +92,16 @@ describe("conditioningConfigFromEnv", () => {
       GHOST_MIN_REPORTS: "2.5",
       STABILIZER_MOVE_RADIUS_M: "0",
       STABILIZER_STAND_KT: "-3",
+      MLAT_MIN_CONFIDENCE: "2.0",
+      MLAT_UNRELIABLE_THRESHOLD: "0",
     });
     expect(c.ghost.options.radiusM).toBe(40);
     expect(c.ghost.options.minReports).toBe(3);
     expect(c.stabilizer.options.moveRadiusM).toBe(3);
     expect(c.stabilizer.options.standKt).toBe(6);
-    expect(c.warnings).toHaveLength(4);
+    expect(c.mlat.options.minConfidence).toBe(0.4);
+    expect(c.mlat.options.unreliableThreshold).toBe(3);
+    expect(c.warnings).toHaveLength(6);
   });
 });
 
@@ -82,9 +111,18 @@ describe("createConditioning", () => {
     const cfg = conditioningConfigFromEnv({});
     cfg.ghost.options.now = c.now;
     cfg.stabilizer.options.now = c.now;
+    cfg.mlat.options.now = c.now;
     const cond = createConditioning(cfg);
 
-    cond.admit(track({ trackId: "sjy", icao24: "8a06b3", north: 0, east: 0 }));
+    cond.admit(
+      track({
+        trackId: "sjy",
+        icao24: "8a06b3",
+        north: 0,
+        east: 0,
+        groundSpeed: 10,
+      }),
+    );
     expect(
       cond.admit(
         track({ trackId: "echo", icao24: "r1-1-278", north: 6, east: 0 }),
@@ -105,16 +143,17 @@ describe("createConditioning", () => {
     expect(out.trackId).toBe("sjy");
   });
 
-  it("does nothing when both stages are off", () => {
+  it("does nothing when all stages are off", () => {
     const cfg = conditioningConfigFromEnv({
       GHOST_FILTER_ENABLED: "false",
       TRACK_STABILIZER_ENABLED: "false",
+      MLAT_VALIDATION_ENABLED: "false",
     });
     const cond = createConditioning(cfg);
     const e = track({ trackId: "echo", icao24: "r1-1-278" });
     expect(cond.admit(e).event).toBe(e);
     expect(cond.stabilize(e)).toBe(e);
-    expect(cond.stats()).toEqual({ ghost: null, stabilizer: null });
+    expect(cond.stats()).toEqual({ ghost: null, stabilizer: null, mlat: null });
   });
 
   it("turns a retraction into a dropped event with a reason", () => {

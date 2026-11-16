@@ -1,6 +1,10 @@
 import { type Env, str } from "../feed/feed-env";
 import { DEFAULT_GHOST_OPTIONS, type GhostFilterOptions } from "./ghost-filter";
 import {
+  DEFAULT_MLAT_VALIDATOR_OPTIONS,
+  type MlatValidatorOptions,
+} from "./mlat-validator";
+import {
   DEFAULT_STABILIZER_OPTIONS,
   type StabilizerOptions,
 } from "./track-stabilizer";
@@ -8,6 +12,7 @@ import {
 export interface ConditioningConfig {
   ghost: { enabled: boolean; options: GhostFilterOptions };
   stabilizer: { enabled: boolean; options: StabilizerOptions };
+  mlat: { enabled: boolean; options: MlatValidatorOptions };
   warnings: string[];
 }
 
@@ -29,6 +34,23 @@ function positive(
     return n;
   warnings.push(
     `${key}="${raw}" is not a positive ${integer ? "whole " : ""}number — using ${fallback}`,
+  );
+  return fallback;
+}
+
+/** Angka pecahan dari env; nilai bawaan (dengan peringatan) bila diisi tetapi tidak bisa dipakai. */
+function fraction(
+  env: Env,
+  key: string,
+  fallback: number,
+  warnings: string[],
+): number {
+  const raw = str(env[key]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (Number.isFinite(n) && n > 0 && n <= 1) return n;
+  warnings.push(
+    `${key}="${raw}" is not between 0 (exclusive) and 1 — using ${fallback}`,
   );
   return fallback;
 }
@@ -55,6 +77,7 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
   const warnings: string[] = [];
   const g = DEFAULT_GHOST_OPTIONS;
   const s = DEFAULT_STABILIZER_OPTIONS;
+  const m = DEFAULT_MLAT_VALIDATOR_OPTIONS;
   return {
     warnings,
     ghost: {
@@ -101,6 +124,65 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           "STABILIZER_HEADING_MIN_M",
           s.headingMinMoveM,
           warnings,
+        ),
+      },
+    },
+    mlat: {
+      enabled: !isOff(env.MLAT_VALIDATION_ENABLED),
+      options: {
+        ...m,
+        enabled: !isOff(env.MLAT_VALIDATION_ENABLED),
+        maxGroundSpeedKt: positive(
+          env,
+          "MLAT_MAX_GROUND_SPEED_KT",
+          m.maxGroundSpeedKt,
+          warnings,
+        ),
+        maxAirSpeedKt: positive(
+          env,
+          "MLAT_MAX_AIR_SPEED_KT",
+          m.maxAirSpeedKt,
+          warnings,
+        ),
+        maxGroundJumpSpeedKt: positive(
+          env,
+          "MLAT_MAX_GROUND_JUMP_KT",
+          m.maxGroundJumpSpeedKt,
+          warnings,
+        ),
+        maxAirJumpSpeedKt: positive(
+          env,
+          "MLAT_MAX_AIR_JUMP_KT",
+          m.maxAirJumpSpeedKt,
+          warnings,
+        ),
+        minConfidence: fraction(
+          env,
+          "MLAT_MIN_CONFIDENCE",
+          m.minConfidence,
+          warnings,
+        ),
+        unreliableThreshold: positive(
+          env,
+          "MLAT_UNRELIABLE_THRESHOLD",
+          m.unreliableThreshold,
+          warnings,
+          true,
+        ),
+        recoveryThreshold: positive(
+          env,
+          "MLAT_RECOVERY_THRESHOLD",
+          m.recoveryThreshold,
+          warnings,
+          true,
+        ),
+        maxStaleMs: positive(env, "MLAT_MAX_STALE_MS", m.maxStaleMs, warnings),
+        maxAltitudeFt: positive(
+          env,
+          "MLAT_MAX_ALTITUDE_FT",
+          m.maxAltitudeFt,
+          warnings,
+          true,
         ),
       },
     },

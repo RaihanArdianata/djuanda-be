@@ -837,3 +837,64 @@ describe("deteksi potensi perpotongan jalur pergerakan pesawat CPA (Task 5)", ()
     expect(results.length).toBe(0);
   });
 });
+
+describe("STCA: selisih ketinggian inklusif dan darat hanya onGround", () => {
+  const run = (tracks: MovementTrack[], config: Record<string, unknown> = {}) =>
+    stcaRule.evaluate(
+      { airportId: "WARR", timestamp: now, tracks },
+      {
+        predictionTimeSeconds: 60,
+        minimumHorizontalSeparationNm: 3,
+        ...config,
+      },
+    );
+
+  const head = (
+    id: string,
+    lonOffsetNm: number,
+    heading: number,
+    altitude: number,
+  ): MovementTrack => ({
+    ...trackA,
+    trackId: id,
+    altitude,
+    latitude: -7.385,
+    longitude: 112.77 + lonOffsetNm / 60 / Math.cos((7.385 * Math.PI) / 180),
+    groundSpeed: 200,
+    heading,
+  });
+
+  test("selisih tinggi tepat sama dengan batas masih konflik, lebih dari itu tidak", () => {
+    const cfg = { minimumVerticalSeparationFt: 1000 };
+    expect(
+      run([head("W", -3, 90, 5000), head("E", 3, 270, 6000)], cfg),
+    ).toHaveLength(1);
+    expect(
+      run([head("W", -3, 90, 5000), head("E", 3, 270, 6001)], cfg),
+    ).toHaveLength(0);
+  });
+
+  test("STCA darat hanya mengambil target yang dilaporkan onGround", () => {
+    const g = (
+      id: string,
+      lon: number,
+      onGround: boolean | undefined,
+    ): MovementTrack => ({
+      ...trackA,
+      trackId: id,
+      altitude: 0,
+      groundSpeed: 5,
+      heading: 90,
+      latitude: -7.385,
+      longitude: lon,
+      onGround,
+    });
+    const cfg = { includeSurface: true };
+    expect(
+      run([g("G1", 112.77, true), g("G2", 112.7701, true)], cfg),
+    ).toHaveLength(1);
+    expect(
+      run([g("G1", 112.77, true), g("G2", 112.7701, undefined)], cfg),
+    ).toHaveLength(0);
+  });
+});

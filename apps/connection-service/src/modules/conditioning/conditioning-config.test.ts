@@ -18,6 +18,7 @@ describe("conditioningConfigFromEnv", () => {
       radiusM: 15,
       moveRadiusM: 3,
       maxJumpKt: 80,
+      maxAirJumpKt: 1000,
       headingMinMoveM: 10,
     });
     expect(c.warnings).toEqual([]);

@@ -47,7 +47,8 @@ function positive(
  *   STABILIZER_STAND_KT          di bawah ini (knot) dianggap diam atau merayap (6)
  *   STABILIZER_RADIUS_M          zona mati saat diam atau merayap: derau sejauh ini tidak menggeser posisi, meter (15)
  *   STABILIZER_MOVE_RADIUS_M     zona mati saat bergerak normal; sekaligus selisih posisi tampil dan sensor, meter (3)
- *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dan dari 3x kecepatan pesawat sendiri = lonjakan palsu (80)
+ *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dan dari 3x kecepatan pesawat sendiri = lonjakan palsu di permukaan (80)
+ *   STABILIZER_MAX_AIR_JUMP_KT   sama untuk pesawat di udara; satu laporan pencilan puluhan km tidak masuk ke jejak (1000)
  *   STABILIZER_HEADING_MIN_M     arah baru dihitung dari gerak sejauh ini, meter (10)
  */
 export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
@@ -87,6 +88,12 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           env,
           "STABILIZER_MAX_JUMP_KT",
           s.maxJumpKt,
+          warnings,
+        ),
+        maxAirJumpKt: positive(
+          env,
+          "STABILIZER_MAX_AIR_JUMP_KT",
+          s.maxAirJumpKt,
           warnings,
         ),
         headingMinMoveM: positive(

@@ -6,7 +6,7 @@ import {
   userRoles,
   users,
 } from "@repo/database";
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 type UserRolesType = typeof userRoles.$inferSelect;
 type PermissionType = typeof permissions.$inferSelect;
@@ -14,6 +14,13 @@ type RolePermissionType = typeof rolePermissions.$inferSelect;
 type UserType = typeof users.$inferSelect;
 
 type ListRolesWithUserCountType = UserRolesType & { userCount: number };
+
+export type DeleteRoleBlocker = "ACTIVE_USERS" | "AUDIT_RECORDS";
+
+export type DeleteRoleResult =
+  | { status: "DELETED"; role: UserRolesType }
+  | { status: "NOT_FOUND" }
+  | { status: "IN_USE"; blocker: DeleteRoleBlocker };
 
 export async function listRoles(): Promise<ListRolesWithUserCountType[]> {
   const results = await db
@@ -24,7 +31,10 @@ export async function listRoles(): Promise<ListRolesWithUserCountType[]> {
       userCount: count(users.id),
     })
     .from(userRoles)
-    .leftJoin(users, eq(userRoles.id, users.roleId))
+    .leftJoin(
+      users,
+      and(eq(userRoles.id, users.roleId), isNull(users.deletedAt)),
+    )
     .groupBy(userRoles.id, userRoles.name, userRoles.description);
 
   return results;
@@ -50,12 +60,47 @@ export async function updateRole(
   return role ?? null;
 }
 
-export async function deleteRole(id: number): Promise<UserRolesType> {
-  const [role] = await db
-    .delete(userRoles)
-    .where(eq(userRoles.id, id))
-    .returning();
-  return role ?? null;
+export async function deleteRole(id: number): Promise<DeleteRoleResult> {
+  return await db.transaction(async (tx) => {
+    const [role] = await tx
+      .select()
+      .from(userRoles)
+      .where(eq(userRoles.id, id))
+      .limit(1)
+      .for("update");
+    if (!role) return { status: "NOT_FOUND" };
+
+    const [activeUser] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.roleId, id), isNull(users.deletedAt)))
+      .limit(1);
+    if (activeUser) return { status: "IN_USE", blocker: "ACTIVE_USERS" };
+    const [auditRecord] = await tx
+      .select({ id: auditRoleChanges.id })
+      .from(auditRoleChanges)
+      .where(
+        or(
+          eq(auditRoleChanges.oldRoleId, id),
+          eq(auditRoleChanges.newRoleId, id),
+        ),
+      )
+      .limit(1);
+    if (auditRecord) return { status: "IN_USE", blocker: "AUDIT_RECORDS" };
+    await tx
+      .update(users)
+      .set({ roleId: null })
+      .where(and(eq(users.roleId, id), isNotNull(users.deletedAt)));
+
+    await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, id));
+
+    const [deleted] = await tx
+      .delete(userRoles)
+      .where(eq(userRoles.id, id))
+      .returning();
+
+    return { status: "DELETED", role: deleted };
+  });
 }
 
 export async function listPermissions(): Promise<PermissionType[]> {

@@ -6,14 +6,14 @@ import {
   type AlertDetailRow,
   type AlertDetailsByCategory,
   type AlertIncidentSummary,
-  groupAlertDetails,
+  analyzeAlertRows,
   KNOWN_ALERT_TYPES,
   NO_INCIDENTS,
-  summarizeIncidents,
 } from "../lib/alert-detail";
 import {
   computePeriodBuckets,
   exclusiveEndBoundaryJakarta,
+  type PeriodType,
   startOfDayJakarta,
 } from "../lib/period";
 import type { GetOperationalStatisticsParams } from "../validator/statistics.validator";
@@ -70,19 +70,27 @@ export interface OperationalStatisticsResult {
 }
 
 type MovementType = "takeoff" | "landing";
-type MovementAggGroup = "total" | "hour_track" | "hour_aircraft";
+type MovementAggGroup =
+  | "total"
+  | "hour"
+  | "bucket"
+  | "bucket_label"
+  | "bucket_type_label";
 
 interface MovementAggQueryRow {
   grp: MovementAggGroup;
+  /** Kunci jam `YYYY-MM-DDTHH:00` (grp `hour`). */
   hour_bucket: string | null;
-  track_id: string | null;
-  aircraft: number | null;
-  takeoff: number;
-  landing: number;
-  movement_type: MovementType | null;
+  /** Kunci bucket periode = `PeriodBucket.period` (grp `bucket*`). */
+  bucket: string | null;
   aircraft_label: string | null;
+  movement_type: MovementType | null;
+  /** Jumlah track unik (`total`, `hour`, `bucket`) atau track per label (`bucket_label`). */
+  aircraft: number | null;
+  takeoff: number | null;
+  landing: number | null;
   event_count: number | null;
-  aircraft_last_at: string | null;
+  last_at: string | null;
   [column: string]: string | number | null;
 }
 
@@ -92,21 +100,28 @@ interface MovementTotals {
   landing: number;
 }
 
-interface HourMovementEntry {
-  trackIds: Set<string>;
-  trackLabels: Map<string, string>;
-  takeoff: number;
-  landing: number;
-}
-
 interface AircraftStat {
   count: number;
   at: string | null;
 }
 
-interface HourAircraftEntry {
-  takeoff: Map<string, AircraftStat>;
-  landing: Map<string, AircraftStat>;
+/** Ringkasan satu jam: `aircraft` = track unik pada jam itu. */
+interface HourAgg {
+  aircraft: number;
+  takeoff: number;
+  landing: number;
+}
+
+/** Ringkasan satu bucket periode (hari/minggu/bulan/jam). */
+interface BucketAgg {
+  /** Track unik di seluruh bucket (dihitung DB, bukan penjumlahan antar jam). */
+  aircraft: number;
+  takeoff: number;
+  landing: number;
+  /** Label pesawat -> jumlah track unik berlabel itu. */
+  aircraftLabels: Map<string, number>;
+  takeoffAircraft: Map<string, AircraftStat>;
+  landingAircraft: Map<string, AircraftStat>;
 }
 
 interface PeakHour {
@@ -116,64 +131,33 @@ interface PeakHour {
 
 interface ParsedMovementAgg {
   totals: MovementTotals;
-  hourMovementMap: Map<string, HourMovementEntry>;
-  hourAircraftMap: Map<string, HourAircraftEntry>;
+  hourMap: Map<string, HourAgg>;
+  bucketMap: Map<string, BucketAgg>;
   peakHour: PeakHour | null;
 }
 
-function applyTotalRow(totals: MovementTotals, row: MovementAggQueryRow): void {
-  totals.aircraft = row.aircraft ?? 0;
-  totals.takeoff = row.takeoff;
-  totals.landing = row.landing;
-}
-
-function applyHourTrackRow(
-  hourMovementMap: Map<string, HourMovementEntry>,
-  row: MovementAggQueryRow,
-): void {
-  if (!(row.hour_bucket && row.track_id)) return;
-
-  let entry = hourMovementMap.get(row.hour_bucket);
+function getOrCreateBucket(
+  bucketMap: Map<string, BucketAgg>,
+  key: string,
+): BucketAgg {
+  let entry = bucketMap.get(key);
   if (!entry) {
     entry = {
-      trackIds: new Set<string>(),
-      trackLabels: new Map<string, string>(),
+      aircraft: 0,
       takeoff: 0,
       landing: 0,
+      aircraftLabels: new Map<string, number>(),
+      takeoffAircraft: new Map<string, AircraftStat>(),
+      landingAircraft: new Map<string, AircraftStat>(),
     };
-    hourMovementMap.set(row.hour_bucket, entry);
+    bucketMap.set(key, entry);
   }
-  entry.trackIds.add(row.track_id);
-  entry.trackLabels.set(row.track_id, row.aircraft_label ?? row.track_id);
-  entry.takeoff += row.takeoff;
-  entry.landing += row.landing;
+  return entry;
 }
 
-function applyHourAircraftRow(
-  hourAircraftMap: Map<string, HourAircraftEntry>,
-  row: MovementAggQueryRow,
-): void {
-  if (!(row.hour_bucket && row.movement_type && row.aircraft_label)) return;
-
-  let entry = hourAircraftMap.get(row.hour_bucket);
-  if (!entry) {
-    entry = {
-      takeoff: new Map<string, AircraftStat>(),
-      landing: new Map<string, AircraftStat>(),
-    };
-    hourAircraftMap.set(row.hour_bucket, entry);
-  }
-  entry[row.movement_type].set(row.aircraft_label, {
-    count: row.event_count ?? 0,
-    at: row.aircraft_last_at ?? null,
-  });
-}
-
-function computePeakHour(
-  hourMovementMap: Map<string, HourMovementEntry>,
-): PeakHour | null {
+function computePeakHour(hourMap: Map<string, HourAgg>): PeakHour | null {
   let peak: PeakHour | null = null;
-  for (const [hour, entry] of hourMovementMap) {
+  for (const [hour, entry] of hourMap) {
     const movement = entry.takeoff + entry.landing;
     if (!peak || movement > peak.movement) {
       peak = { hour, movement };
@@ -181,14 +165,14 @@ function computePeakHour(
   }
   return peak;
 }
+
 function computePeakTrafficHour(
-  hourMovementMap: Map<string, HourMovementEntry>,
+  hourMap: Map<string, HourAgg>,
 ): PeakHour | null {
   let peak: PeakHour | null = null;
-  for (const [hour, entry] of hourMovementMap) {
-    const aircraftCount = entry.trackIds.size;
-    if (!peak || aircraftCount > peak.movement) {
-      peak = { hour, movement: aircraftCount };
+  for (const [hour, entry] of hourMap) {
+    if (!peak || entry.aircraft > peak.movement) {
+      peak = { hour, movement: entry.aircraft };
     }
   }
   return peak;
@@ -199,16 +183,17 @@ interface TrafficMetrics {
   peakTrafficMovement: number;
   peakTrafficHour: string | null;
 }
+
 function computeTrafficMetrics(
-  hourMovementMap: Map<string, HourMovementEntry>,
+  hourMap: Map<string, HourAgg>,
   rangeHours: number,
 ): TrafficMetrics {
   let sumHourlyAircraft = 0;
-  for (const entry of hourMovementMap.values()) {
-    sumHourlyAircraft += entry.trackIds.size;
+  for (const entry of hourMap.values()) {
+    sumHourlyAircraft += entry.aircraft;
   }
 
-  const peak = computePeakTrafficHour(hourMovementMap);
+  const peak = computePeakTrafficHour(hourMap);
 
   return {
     averageTrafficPerHour:
@@ -218,33 +203,81 @@ function computeTrafficMetrics(
   };
 }
 
+function rowCounts(row: MovementAggQueryRow): MovementTotals {
+  return {
+    aircraft: row.aircraft ?? 0,
+    takeoff: row.takeoff ?? 0,
+    landing: row.landing ?? 0,
+  };
+}
+
+function applyBucketRow(
+  bucketMap: Map<string, BucketAgg>,
+  row: MovementAggQueryRow,
+): void {
+  if (!row.bucket) return;
+  Object.assign(getOrCreateBucket(bucketMap, row.bucket), rowCounts(row));
+}
+
+function applyBucketLabelRow(
+  bucketMap: Map<string, BucketAgg>,
+  row: MovementAggQueryRow,
+): void {
+  if (!row.bucket || !row.aircraft_label) return;
+  getOrCreateBucket(bucketMap, row.bucket).aircraftLabels.set(
+    row.aircraft_label,
+    row.aircraft ?? 0,
+  );
+}
+
+function applyBucketTypeLabelRow(
+  bucketMap: Map<string, BucketAgg>,
+  row: MovementAggQueryRow,
+): void {
+  if (!row.bucket || !row.aircraft_label || !row.movement_type) return;
+  const entry = getOrCreateBucket(bucketMap, row.bucket);
+  const target =
+    row.movement_type === "takeoff"
+      ? entry.takeoffAircraft
+      : entry.landingAircraft;
+  target.set(row.aircraft_label, {
+    count: row.event_count ?? 0,
+    at: row.last_at ?? null,
+  });
+}
+
+/**
+ * Baris `hour` datang terurut naik menurut jam (ORDER BY di query), sehingga
+ * pada nilai puncak yang sama jam paling awal yang dipilih.
+ */
 export function parseMovementAggRows(
   rows: MovementAggQueryRow[],
 ): ParsedMovementAgg {
   const totals: MovementTotals = { aircraft: 0, takeoff: 0, landing: 0 };
-  const hourMovementMap = new Map<string, HourMovementEntry>();
-  const hourAircraftMap = new Map<string, HourAircraftEntry>();
+  const hourMap = new Map<string, HourAgg>();
+  const bucketMap = new Map<string, BucketAgg>();
 
   for (const row of rows) {
     switch (row.grp) {
       case "total":
-        applyTotalRow(totals, row);
+        Object.assign(totals, rowCounts(row));
         break;
-      case "hour_track":
-        applyHourTrackRow(hourMovementMap, row);
+      case "hour":
+        if (row.hour_bucket) hourMap.set(row.hour_bucket, rowCounts(row));
         break;
-      case "hour_aircraft":
-        applyHourAircraftRow(hourAircraftMap, row);
+      case "bucket":
+        applyBucketRow(bucketMap, row);
+        break;
+      case "bucket_label":
+        applyBucketLabelRow(bucketMap, row);
+        break;
+      case "bucket_type_label":
+        applyBucketTypeLabelRow(bucketMap, row);
         break;
     }
   }
 
-  return {
-    totals,
-    hourMovementMap,
-    hourAircraftMap,
-    peakHour: computePeakHour(hourMovementMap),
-  };
+  return { totals, hourMap, bucketMap, peakHour: computePeakHour(hourMap) };
 }
 
 interface AlertTrendRow {
@@ -346,25 +379,6 @@ function timeRangeWhere(
   return and(...conditions);
 }
 
-function latestAt(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return a > b ? a : b;
-}
-
-function mergeAircraftCounts(
-  target: Map<string, AircraftStat>,
-  source: Map<string, AircraftStat>,
-): void {
-  for (const [aircraft, stat] of source) {
-    const existing = target.get(aircraft);
-    target.set(aircraft, {
-      count: (existing?.count ?? 0) + stat.count,
-      at: latestAt(existing?.at ?? null, stat.at),
-    });
-  }
-}
-
 function toAircraftBreakdown(
   counts: Map<string, AircraftStat>,
 ): AircraftMovementBreakdown[] {
@@ -383,32 +397,18 @@ function toAircraftBreakdown(
   });
 }
 
-/** Kelompokkan track per label pesawat; `count` = jumlah track unik (jumlah semua count = `aircraft`). */
-function toAircraftList(trackLabels: Map<string, string>): AircraftListItem[] {
-  const counts = new Map<string, number>();
-  for (const label of trackLabels.values()) {
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return Array.from(counts, ([aircraft, count]) => ({ aircraft, count })).sort(
-    (a, b) => a.aircraft.localeCompare(b.aircraft),
-  );
-}
-
-/** Gabungkan label per track; label yang lebih dulu tercatat dipertahankan. */
-function mergeTrackLabels(
-  target: Map<string, string>,
-  source: Map<string, string>,
-): void {
-  for (const [trackId, label] of source) {
-    if (!target.has(trackId)) target.set(trackId, label);
-  }
+/** Urutkan label pesawat; `count` = jumlah track unik (jumlah semua count = `aircraft`). */
+function toAircraftList(labelCounts: Map<string, number>): AircraftListItem[] {
+  return Array.from(labelCounts, ([aircraft, count]) => ({
+    aircraft,
+    count,
+  })).sort((a, b) => a.aircraft.localeCompare(b.aircraft));
 }
 
 export function buildTrend(
   params: GetOperationalStatisticsParams,
-  hourMovementMap: Map<string, HourMovementEntry>,
-  hourAlertMap: Map<string, number>,
-  hourAircraftMap: Map<string, HourAircraftEntry>,
+  bucketMap: Map<string, BucketAgg>,
+  bucketAlertMap: Map<string, number>,
 ): OperationalTrendPoint[] {
   const buckets = computePeriodBuckets(
     params.period,
@@ -418,42 +418,26 @@ export function buildTrend(
     params.endTime,
   );
 
-  return buckets.map(({ period, periodStart, periodEnd, hourKeys }) => {
-    const trackIds = new Set<string>();
-    const trackLabels = new Map<string, string>();
-    const takeoffAircraftCounts = new Map<string, AircraftStat>();
-    const landingAircraftCounts = new Map<string, AircraftStat>();
-    let takeoff = 0;
-    let landing = 0;
-    let alertCount = 0;
-
-    for (const hourKey of hourKeys) {
-      const movement = hourMovementMap.get(hourKey);
-      if (movement) {
-        for (const trackId of movement.trackIds) trackIds.add(trackId);
-        mergeTrackLabels(trackLabels, movement.trackLabels);
-        takeoff += movement.takeoff;
-        landing += movement.landing;
-      }
-
-      alertCount += hourAlertMap.get(hourKey) ?? 0;
-
-      const aircraftEntry = hourAircraftMap.get(hourKey);
-      if (aircraftEntry) {
-        mergeAircraftCounts(takeoffAircraftCounts, aircraftEntry.takeoff);
-        mergeAircraftCounts(landingAircraftCounts, aircraftEntry.landing);
-      }
-    }
+  return buckets.map(({ period, periodStart, periodEnd }) => {
+    const agg = bucketMap.get(period);
+    const takeoff = agg?.takeoff ?? 0;
+    const landing = agg?.landing ?? 0;
+    const takeoffAircraftCounts =
+      agg?.takeoffAircraft ?? new Map<string, AircraftStat>();
+    const landingAircraftCounts =
+      agg?.landingAircraft ?? new Map<string, AircraftStat>();
 
     const point: OperationalTrendPoint = {
       period,
-      aircraft: trackIds.size,
-      aircraftList: toAircraftList(trackLabels),
+      aircraft: agg?.aircraft ?? 0,
+      aircraftList: toAircraftList(
+        agg?.aircraftLabels ?? new Map<string, number>(),
+      ),
       groundVehicle: 0,
       takeoff,
       landing,
       totalMovement: takeoff + landing,
-      alerts: alertCount,
+      alerts: bucketAlertMap.get(period) ?? 0,
       takeoffAircraftCount: takeoffAircraftCounts.size,
       landingAircraftCount: landingAircraftCounts.size,
       takeoffAircraft: toAircraftBreakdown(takeoffAircraftCounts),
@@ -466,11 +450,43 @@ export function buildTrend(
   });
 }
 
+const DEFAULT_AIRPORT_ID = "WARR";
+
+/**
+ * Kunci bucket periode dihitung di PostgreSQL dari timestamp lokal Jakarta
+ * (`timestamp without time zone`) dan harus identik dengan
+ * `computePeriodBuckets(...).period`:
+ * - hourly  -> `YYYY-MM-DDTHH:00`
+ * - daily   -> tanggal
+ * - weekly  -> Senin minggu itu (ISO), dipotong ke `startDate` pada minggu pertama
+ * - monthly -> tanggal 1 bulan itu, dipotong ke `startDate` pada bulan pertama
+ */
+export function bucketKeyExpr(
+  period: PeriodType,
+  localTimestamp: SQL,
+  startDate: string,
+): SQL<string> {
+  switch (period) {
+    case "hourly":
+      return sql<string>`to_char(date_trunc('hour', ${localTimestamp}), 'YYYY-MM-DD"T"HH24:00')`;
+    case "daily":
+      return sql<string>`to_char((${localTimestamp})::date, 'YYYY-MM-DD')`;
+    case "weekly":
+      return sql<string>`to_char(GREATEST(date_trunc('week', ${localTimestamp})::date, ${startDate}::date), 'YYYY-MM-DD')`;
+    case "monthly":
+      return sql<string>`to_char(GREATEST(date_trunc('month', ${localTimestamp})::date, ${startDate}::date), 'YYYY-MM-DD')`;
+  }
+}
+
 export async function getOperationalStatistics(
   params: GetOperationalStatisticsParams,
 ): Promise<OperationalStatisticsResult> {
   const rangeStart = startOfDayJakarta(params.startDate);
   const rangeEndExclusive = exclusiveEndBoundaryJakarta(params.endDate);
+  const rangeStartIso = rangeStart.toISOString();
+  // Semua query selalu dibatasi satu bandara (sama dengan default laporan Excel).
+  const airportId =
+    params.airportId ?? process.env.AEROSWARM_AIRPORT_ID ?? DEFAULT_AIRPORT_ID;
 
   const alertWhereClause = and(
     timeRangeWhere(
@@ -478,7 +494,7 @@ export async function getOperationalStatistics(
       alerts.airportId,
       rangeStart,
       rangeEndExclusive,
-      params.airportId,
+      airportId,
       timeOfDayWhere(alerts.triggeredAt, params.startTime, params.endTime),
     ),
     severityWhere(params.severity),
@@ -489,214 +505,325 @@ export async function getOperationalStatistics(
     aeroswarmMovements.airportId,
     rangeStart,
     rangeEndExclusive,
-    params.airportId,
+    airportId,
     timeOfDayWhere(aeroswarmMovements.at, params.startTime, params.endTime),
   );
-  const alertBucketExpr = sql<string>`to_char(date_trunc('hour', ${alerts.triggeredAt} at time zone 'Asia/Jakarta'), 'YYYY-MM-DD"T"HH24:00')`;
+
+  // Alert: bucket periode dihitung di DB, jadi hasilnya <= jumlah bucket (bukan per jam).
+  const alertBucketExpr = bucketKeyExpr(
+    params.period,
+    sql`(${alerts.triggeredAt} AT TIME ZONE 'Asia/Jakarta')`,
+    params.startDate,
+  );
+  // Movement: `hour_local` adalah timestamp lokal Jakarta yang dibulatkan ke jam.
+  const movementBucketExpr = bucketKeyExpr(
+    params.period,
+    sql`hour_local`,
+    params.startDate,
+  );
   const typeFilter = (alertType: string): SQL<number> =>
     sql<number>`count(*) filter (where upper(${alerts.type}) = ${alertType})::int`;
 
+  // Tanpa db.transaction: pada node-postgres satu transaksi = satu koneksi, sehingga
+  // Promise.all di dalamnya tetap berjalan berurutan. Query ini hanya membaca, jadi
+  // dijalankan langsung di pool agar benar-benar paralel di koneksi terpisah.
   const [alertTrendRows, alertDetailResult, movementAggResult] =
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`SET LOCAL work_mem = '128MB'`);
-      await tx.execute(sql`SET LOCAL max_parallel_workers_per_gather = 4`);
-
-      return Promise.all([
-        tx
-          .select({
-            bucket: alertBucketExpr,
-            total: sql<number>`count(*)::int`,
-            runwayIncursion: typeFilter("RUNWAY_INCURSION"),
-            areaPenetration: typeFilter("AREA_PENETRATION"),
-            deviation: typeFilter("DEVIATION"),
-            taxiwayApronIncursion: typeFilter("TAXIWAY_APRON_INCURSION"),
-            stca: typeFilter("STCA"),
-          })
-          .from(alerts)
-          .where(alertWhereClause)
-          .groupBy(sql`1`),
-        tx.execute<AlertDetailRow>(sql`
+    await Promise.all([
+      db
+        .select({
+          bucket: alertBucketExpr,
+          total: sql<number>`count(*)::int`,
+          runwayIncursion: typeFilter("RUNWAY_INCURSION"),
+          areaPenetration: typeFilter("AREA_PENETRATION"),
+          deviation: typeFilter("DEVIATION"),
+          taxiwayApronIncursion: typeFilter("TAXIWAY_APRON_INCURSION"),
+          stca: typeFilter("STCA"),
+        })
+        .from(alerts)
+        .where(alertWhereClause)
+        .groupBy(sql`1`),
+      // Detail alert. Perubahan penting dibanding versi sebelumnya:
+      // 1. JSONB `alerts.data` dibaca SEKALI per baris lewat `jsonb_to_record` (LATERAL).
+      //    Sebelumnya ~57 operator `data -> 'x'` / `#>` masing-masing membuka ulang
+      //    (detoast + dekompresi) seluruh JSONB yang sama untuk setiap alert.
+      // 2. Riwayat VERIFY diagregasi sekali dari `alert_actions` (index
+      //    `alert_actions_created_at_idx`) lalu di-join per alert_id. Subquery `IN (SELECT ...
+      //    FROM alerts ...)` yang membaca ulang `alerts` dihapus. Aksi pada alert selalu
+      //    dibuat setelah alert dipicu, jadi `created_at >= awal rentang` tidak membuang
+      //    aksi milik alert di dalam rentang.
+      db.execute<AlertDetailRow>(sql`
+        SELECT
+          ${alerts.alertId} AS alert_id,
+          ${alerts.trackId} AS track_id,
+          ${alerts.airportId} AS airport_id,
+          ${alerts.type} AS type,
+          ${alerts.severity} AS severity,
+          ${alerts.relatedTrackId} AS related_track_id,
+          to_char(${alerts.triggeredAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS time,
+          ${alerts.verificationStatus} AS verification_status,
+          ${alerts.verifiedBy} AS verified_by,
+          to_char(${alerts.verifiedAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS verified_at,
+          ${alerts.verificationNote} AS verification_note,
+          history.verification_history AS verification_history,
+          jsonb_build_object(
+            'callsign', d."callsign",
+            'relatedCallsign', d."relatedCallsign",
+            'domain', d."domain",
+            'reason', d."reason",
+            'runwayName', d."runwayName",
+            'runwayStatus', d."runwayStatus",
+            'predictedTimeSeconds', d."predictedTimeSeconds",
+            'horizontalSeparationNm', d."horizontalSeparationNm",
+            'minimumHorizontalSeparationNm', d."minimumHorizontalSeparationNm",
+            'horizontalSeparationMeters', d."horizontalSeparationMeters",
+            'minimumSeparationMeters', d."minimumSeparationMeters",
+            'predictedVerticalSeparationFt', d."predictedVerticalSeparationFt",
+            'minimumVerticalSeparationFt', d."minimumVerticalSeparationFt",
+            'distanceMeters', d."distanceMeters",
+            'maxDistanceMeters', d."maxDistanceMeters",
+            'criticalMeters', d."criticalMeters",
+            'horizontalDistanceMeters', d."horizontalDistanceMeters",
+            'altitudeDeviationFt', d."altitudeDeviationFt",
+            'maxAltitudeDeviationFt', d."maxAltitudeDeviationFt",
+            'timeDeviationSeconds', d."timeDeviationSeconds",
+            'timeExceeded', d."timeExceeded",
+            'areaName', d."areaName",
+            'areaType', d."areaType",
+            'areaStatus', d."areaStatus",
+            'surfaceName', d."surfaceName",
+            'surfaceType', d."surfaceType",
+            'surfaceId', d."surfaceId",
+            'track', jsonb_build_object(
+              'callsign', d."track" -> 'callsign'
+            ),
+            'area', jsonb_build_object(
+              'id', d."area" -> 'id',
+              'name', d."area" -> 'name',
+              'type', d."area" -> 'type',
+              'status', d."area" -> 'status'
+            ),
+            'surface', jsonb_build_object(
+              'id', d."surface" -> 'id',
+              'name', d."surface" -> 'name',
+              'type', d."surface" -> 'type',
+              'status', d."surface" -> 'status'
+            )
+          ) AS detail_data
+        FROM ${alerts}
+        CROSS JOIN LATERAL jsonb_to_record(
+          CASE
+            WHEN jsonb_typeof(${alerts.data}) = 'object' THEN ${alerts.data}
+            ELSE '{}'::jsonb
+          END
+        ) AS d(
+          "callsign" jsonb,
+          "relatedCallsign" jsonb,
+          "domain" jsonb,
+          "reason" jsonb,
+          "runwayName" jsonb,
+          "runwayStatus" jsonb,
+          "predictedTimeSeconds" jsonb,
+          "horizontalSeparationNm" jsonb,
+          "minimumHorizontalSeparationNm" jsonb,
+          "horizontalSeparationMeters" jsonb,
+          "minimumSeparationMeters" jsonb,
+          "predictedVerticalSeparationFt" jsonb,
+          "minimumVerticalSeparationFt" jsonb,
+          "distanceMeters" jsonb,
+          "maxDistanceMeters" jsonb,
+          "criticalMeters" jsonb,
+          "horizontalDistanceMeters" jsonb,
+          "altitudeDeviationFt" jsonb,
+          "maxAltitudeDeviationFt" jsonb,
+          "timeDeviationSeconds" jsonb,
+          "timeExceeded" jsonb,
+          "areaName" jsonb,
+          "areaType" jsonb,
+          "areaStatus" jsonb,
+          "surfaceName" jsonb,
+          "surfaceType" jsonb,
+          "surfaceId" jsonb,
+          "track" jsonb,
+          "area" jsonb,
+          "surface" jsonb
+        )
+        LEFT JOIN (
           SELECT
-            ${alerts.alertId} AS alert_id,
-            ${alerts.trackId} AS track_id,
-            ${alerts.airportId} AS airport_id,
-            ${alerts.type} AS type,
-            ${alerts.severity} AS severity,
-            ${alerts.relatedTrackId} AS related_track_id,
-            to_char(${alerts.triggeredAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS time,
-            ${alerts.verificationStatus} AS verification_status,
-            ${alerts.verifiedBy} AS verified_by,
-            to_char(${alerts.verifiedAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00' AS verified_at,
-            ${alerts.verificationNote} AS verification_note,
-            (
-              SELECT jsonb_agg(
-                jsonb_build_object(
-                  'at', to_char(${alertActions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00',
-                  'by', ${alertActions.actorName},
-                  'from', ${alertActions.previousVerificationStatus},
-                  'to', ${alertActions.newVerificationStatus},
-                  'note', ${alertActions.note}
-                )
-                ORDER BY ${alertActions.createdAt}
+            ${alertActions.alertId} AS alert_id,
+            jsonb_agg(
+              jsonb_build_object(
+                'at', to_char(${alertActions.createdAt} AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') || '+07:00',
+                'by', ${alertActions.actorName},
+                'from', ${alertActions.previousVerificationStatus},
+                'to', ${alertActions.newVerificationStatus},
+                'note', ${alertActions.note}
               )
-              FROM ${alertActions}
-              WHERE ${alertActions.alertId} = ${alerts.alertId}
-                AND ${alertActions.action} = 'VERIFY'
-            ) AS verification_history,
-            jsonb_build_object(
-              'callsign', ${alerts.data} -> 'callsign',
-              'relatedCallsign', ${alerts.data} -> 'relatedCallsign',
-              'domain', ${alerts.data} -> 'domain',
-              'reason', ${alerts.data} -> 'reason',
-              'runwayName', ${alerts.data} -> 'runwayName',
-              'runwayStatus', ${alerts.data} -> 'runwayStatus',
-              'predictedTimeSeconds', ${alerts.data} -> 'predictedTimeSeconds',
-              'horizontalSeparationNm', ${alerts.data} -> 'horizontalSeparationNm',
-              'minimumHorizontalSeparationNm', ${alerts.data} -> 'minimumHorizontalSeparationNm',
-              'horizontalSeparationMeters', ${alerts.data} -> 'horizontalSeparationMeters',
-              'minimumSeparationMeters', ${alerts.data} -> 'minimumSeparationMeters',
-              'predictedVerticalSeparationFt', ${alerts.data} -> 'predictedVerticalSeparationFt',
-              'minimumVerticalSeparationFt', ${alerts.data} -> 'minimumVerticalSeparationFt',
-              'distanceMeters', ${alerts.data} -> 'distanceMeters',
-              'maxDistanceMeters', ${alerts.data} -> 'maxDistanceMeters',
-              'criticalMeters', ${alerts.data} -> 'criticalMeters',
-              'horizontalDistanceMeters', ${alerts.data} -> 'horizontalDistanceMeters',
-              'altitudeDeviationFt', ${alerts.data} -> 'altitudeDeviationFt',
-              'maxAltitudeDeviationFt', ${alerts.data} -> 'maxAltitudeDeviationFt',
-              'timeDeviationSeconds', ${alerts.data} -> 'timeDeviationSeconds',
-              'timeExceeded', ${alerts.data} -> 'timeExceeded',
-              'areaName', ${alerts.data} -> 'areaName',
-              'areaType', ${alerts.data} -> 'areaType',
-              'areaStatus', ${alerts.data} -> 'areaStatus',
-              'surfaceName', ${alerts.data} -> 'surfaceName',
-              'surfaceType', ${alerts.data} -> 'surfaceType',
-              'surfaceId', ${alerts.data} -> 'surfaceId',
-              'track', jsonb_build_object(
-                'callsign', ${alerts.data} #> '{track,callsign}'
-              ),
-              'area', jsonb_build_object(
-                'id', ${alerts.data} #> '{area,id}',
-                'name', ${alerts.data} #> '{area,name}',
-                'type', ${alerts.data} #> '{area,type}',
-                'status', ${alerts.data} #> '{area,status}'
-              ),
-              'surface', jsonb_build_object(
-                'id', ${alerts.data} #> '{surface,id}',
-                'name', ${alerts.data} #> '{surface,name}',
-                'type', ${alerts.data} #> '{surface,type}',
-                'status', ${alerts.data} #> '{surface,status}'
-              )
-            ) AS detail_data
-          FROM ${alerts}
-          WHERE ${alertWhereClause}
-            AND upper(${alerts.type}) IN (${sql.join(
-              KNOWN_ALERT_TYPES.map((type) => sql`${type}`),
-              sql`, `,
-            )})
-          ORDER BY ${alerts.triggeredAt} DESC, ${alerts.id} DESC
-        `),
-        tx.execute<MovementAggQueryRow>(sql`
-        WITH movement_base AS MATERIALIZED (
+              ORDER BY ${alertActions.createdAt}
+            ) AS verification_history
+          FROM ${alertActions}
+          WHERE ${alertActions.action} = 'VERIFY'
+            AND ${alertActions.createdAt} >= ${rangeStartIso}::timestamptz
+          GROUP BY ${alertActions.alertId}
+        ) AS history ON history.alert_id = ${alerts.alertId}
+        WHERE ${alertWhereClause}
+          AND upper(${alerts.type}) IN (${sql.join(
+            KNOWN_ALERT_TYPES.map((type) => sql`${type}`),
+            sql`, `,
+          )})
+        ORDER BY ${alerts.triggeredAt} DESC, ${alerts.id} DESC
+      `),
+      // Satu kali baca `aeroswarm_movements` (hanya kolom yang dibutuhkan, tanpa JSONB
+      // `data`), direduksi ke `ev` per (track, jam, type, label). Seluruh ringkasan
+      // diturunkan dari `ev`, jadi tabel tidak dibaca ulang dan tidak ada baris
+      // per-track/per-event yang dikirim ke JavaScript.
+      db.execute<MovementAggQueryRow>(sql`
+        WITH ev AS MATERIALIZED (
           SELECT
-            ${aeroswarmMovements.trackId} AS track_id,
-            ${aeroswarmMovements.type} AS type,
-            ${aeroswarmMovements.at} AS at,
-            date_trunc('hour', ${aeroswarmMovements.at} AT TIME ZONE 'Asia/Jakarta') AS hour_raw,
-            COALESCE(
-              NULLIF(${aeroswarmMovements.callsign}, ''),
-              ${aeroswarmMovements.icao24},
-              ${aeroswarmMovements.trackId}
-            ) AS aircraft_label
-          FROM ${aeroswarmMovements}
-          WHERE ${movementWhereClause}
+            m.track_id,
+            m.hour_local,
+            m.type,
+            m.aircraft_label,
+            count(*)::int AS cnt,
+            max(m.at) AS last_at
+          FROM (
+            SELECT
+              ${aeroswarmMovements.trackId} AS track_id,
+              ${aeroswarmMovements.type} AS type,
+              ${aeroswarmMovements.at} AS at,
+              date_trunc('hour', ${aeroswarmMovements.at} AT TIME ZONE 'Asia/Jakarta') AS hour_local,
+              COALESCE(
+                NULLIF(${aeroswarmMovements.callsign}, ''),
+                ${aeroswarmMovements.icao24},
+                ${aeroswarmMovements.trackId}
+              ) AS aircraft_label
+            FROM ${aeroswarmMovements}
+            WHERE ${movementWhereClause}
+          ) m
+          GROUP BY m.track_id, m.hour_local, m.type, m.aircraft_label
         ),
-        track_hour_agg AS MATERIALIZED (
+        track_hour AS (
           SELECT
             track_id,
-            hour_raw,
-            count(*) FILTER (WHERE type = 'takeoff')::int AS takeoff,
-            count(*) FILTER (WHERE type = 'landing')::int AS landing,
+            hour_local,
+            COALESCE(sum(cnt) FILTER (WHERE type = 'takeoff'), 0)::int AS takeoff,
+            COALESCE(sum(cnt) FILTER (WHERE type = 'landing'), 0)::int AS landing,
             max(aircraft_label) AS aircraft_label
-          FROM movement_base
-          GROUP BY track_id, hour_raw
+          FROM ev
+          GROUP BY track_id, hour_local
         ),
-        grand_total AS (
+        bucket_track AS (
           SELECT
-            count(DISTINCT track_id)::int AS aircraft,
+            ${movementBucketExpr} AS bucket,
+            track_id,
             sum(takeoff)::int AS takeoff,
-            sum(landing)::int AS landing
-          FROM track_hour_agg
-        ),
-        hour_type_aircraft AS (
-          SELECT
-            hour_raw,
-            type,
-            aircraft_label,
-            count(*)::int AS event_count,
-            max(at) AS last_at
-          FROM movement_base
-          GROUP BY hour_raw, type, aircraft_label
+            sum(landing)::int AS landing,
+            -- label dari jam paling awal track itu pada bucket (deterministik)
+            (array_agg(aircraft_label ORDER BY hour_local))[1] AS aircraft_label
+          FROM track_hour
+          GROUP BY 1, track_id
         )
         SELECT
-          'hour_track' AS grp,
-          to_char(hour_raw, 'YYYY-MM-DD"T"HH24:00') AS hour_bucket,
-          track_id::text AS track_id,
-          NULL::int AS aircraft,
-          takeoff,
-          landing,
-          NULL::text AS movement_type,
-          aircraft_label,
-          NULL::int AS event_count,
-          NULL::text AS aircraft_last_at
-        FROM track_hour_agg
-
-        UNION ALL
-
-        SELECT
-          'total' AS grp,
+          'total'::text AS grp,
           NULL::text AS hour_bucket,
-          NULL::text AS track_id,
-          aircraft,
-          takeoff,
-          landing,
-          NULL::text AS movement_type,
+          NULL::text AS bucket,
           NULL::text AS aircraft_label,
+          NULL::text AS movement_type,
+          count(DISTINCT track_id)::int AS aircraft,
+          COALESCE(sum(takeoff), 0)::int AS takeoff,
+          COALESCE(sum(landing), 0)::int AS landing,
           NULL::int AS event_count,
-          NULL::text AS aircraft_last_at
-        FROM grand_total
+          NULL::text AS last_at
+        FROM track_hour
 
         UNION ALL
 
         SELECT
-          'hour_aircraft' AS grp,
-          to_char(hour_raw, 'YYYY-MM-DD"T"HH24:00') AS hour_bucket,
-          NULL::text AS track_id,
-          NULL::int AS aircraft,
-          0 AS takeoff,
-          0 AS landing,
-          type AS movement_type,
+          'hour'::text,
+          to_char(hour_local, 'YYYY-MM-DD"T"HH24:00'),
+          NULL::text,
+          NULL::text,
+          NULL::text,
+          count(*)::int,
+          sum(takeoff)::int,
+          sum(landing)::int,
+          NULL::int,
+          NULL::text
+        FROM track_hour
+        GROUP BY hour_local
+
+        UNION ALL
+
+        SELECT
+          'bucket'::text,
+          NULL::text,
+          bucket,
+          NULL::text,
+          NULL::text,
+          count(*)::int,
+          sum(takeoff)::int,
+          sum(landing)::int,
+          NULL::int,
+          NULL::text
+        FROM bucket_track
+        GROUP BY bucket
+
+        UNION ALL
+
+        SELECT
+          'bucket_label'::text,
+          NULL::text,
+          bucket,
           aircraft_label,
-          event_count,
-          to_char(last_at AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS') AS aircraft_last_at
-        FROM hour_type_aircraft
+          NULL::text,
+          count(*)::int,
+          NULL::int,
+          NULL::int,
+          NULL::int,
+          NULL::text
+        FROM bucket_track
+        GROUP BY bucket, aircraft_label
+
+        UNION ALL
+
+        SELECT
+          'bucket_type_label'::text,
+          NULL::text,
+          ${movementBucketExpr},
+          aircraft_label,
+          type::text,
+          NULL::int,
+          NULL::int,
+          NULL::int,
+          sum(cnt)::int,
+          to_char(max(last_at) AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD"T"HH24:MI:SS')
+        FROM ev
+        WHERE type IN ('takeoff', 'landing')
+        GROUP BY 3, 4, 5
+
+        ORDER BY grp, hour_bucket
       `),
-      ]);
-    });
+    ]);
+
   const movementAggRows = (movementAggResult as { rows: MovementAggQueryRow[] })
     .rows;
   const {
     totals: movementTotals,
-    hourMovementMap,
-    hourAircraftMap,
+    hourMap,
+    bucketMap,
     peakHour: peakHourRow,
   } = parseMovementAggRows(movementAggRows);
-  const hourAlertMap = new Map(
+  const bucketAlertMap = new Map(
     alertTrendRows.map((row) => [row.bucket, row.total]),
   );
+  const alertDetailRows = (alertDetailResult as { rows: AlertDetailRow[] })
+    .rows;
+  // Satu kali pengelompokan kejadian untuk detail per kategori sekaligus ringkasan insiden.
+  const { details: alertDetails, incidents: alertIncidents } =
+    analyzeAlertRows(alertDetailRows);
   const alertTotals = buildAlertSummary(
     sumAlertTotals(alertTrendRows),
-    groupAlertDetails((alertDetailResult as { rows: AlertDetailRow[] }).rows),
-    summarizeIncidents((alertDetailResult as { rows: AlertDetailRow[] }).rows),
+    alertDetails,
+    alertIncidents,
   );
   const totalAircraft = movementTotals.aircraft;
   const totalTakeoff = movementTotals.takeoff;
@@ -712,14 +839,9 @@ export async function getOperationalStatistics(
     Math.round((totalMovement / rangeHours) * 100) / 100;
 
   const { averageTrafficPerHour, peakTrafficMovement, peakTrafficHour } =
-    computeTrafficMetrics(hourMovementMap, rangeHours);
+    computeTrafficMetrics(hourMap, rangeHours);
 
-  const trend = buildTrend(
-    params,
-    hourMovementMap,
-    hourAlertMap,
-    hourAircraftMap,
-  );
+  const trend = buildTrend(params, bucketMap, bucketAlertMap);
 
   return {
     period: params.period,

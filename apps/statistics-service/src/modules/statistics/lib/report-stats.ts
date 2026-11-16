@@ -13,6 +13,8 @@ export interface CategoryStat {
   count: number;
   critical: number;
   warning: number;
+  /** Alert Info: untuk diketahui, bukan untuk ditindak. */
+  info: number;
 }
 
 export interface RankedItem {
@@ -29,6 +31,7 @@ export interface ReportStats {
   categories: CategoryStat[];
   alertCritical: number;
   alertWarning: number;
+  alertInfo: number;
   dominantCategory: CategoryStat | null;
   topAircraft: RankedItem[];
   topAlertCallsigns: RankedItem[];
@@ -71,6 +74,7 @@ function categoryStat(
     count: alerts[key].count,
     critical: bySeverity("CRITICAL"),
     warning: bySeverity("WARNING"),
+    info: bySeverity("INFO"),
   };
 }
 
@@ -137,6 +141,7 @@ export function deriveReportStats(
     categories,
     alertCritical: categories.reduce((sum, c) => sum + c.critical, 0),
     alertWarning: categories.reduce((sum, c) => sum + c.warning, 0),
+    alertInfo: categories.reduce((sum, c) => sum + c.info, 0),
     dominantCategory: dominant,
     topAircraft: rank(aircraftCounts),
     topAlertCallsigns: rank(callsignCounts),

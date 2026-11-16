@@ -16,6 +16,8 @@ export const COLOR = {
   criticalSoft: "FFFDEDEC",
   warning: "FF9A6700",
   warningSoft: "FFFFF4D6",
+  info: "FF1F5FA8",
+  infoSoft: "FFEAF1F8",
   ok: "FF1E7B34",
   okSoft: "FFEAF6EC",
   bar: "FF9DC3E6",

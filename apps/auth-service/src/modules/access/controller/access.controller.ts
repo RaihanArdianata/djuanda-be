@@ -9,6 +9,7 @@ import {
   changeUserRole,
   createPermission,
   createRole,
+  type DeleteRoleBlocker,
   deletePermission,
   deleteRole,
   detachPermissionFromRole,
@@ -29,6 +30,19 @@ const FK_VIOLATION = "23503";
 const UNIQUE_VIOLATION = "23505";
 
 const pgErrorCode = (error: DatabaseError): string | undefined => error?.code;
+const hasPgErrorCode = (error: unknown, code: string): boolean => {
+  if (error instanceof DatabaseError) return pgErrorCode(error) === code;
+  const cause =
+    error instanceof Error
+      ? (error as Error & { cause?: unknown }).cause
+      : null;
+  return cause instanceof DatabaseError && pgErrorCode(cause) === code;
+};
+
+const ROLE_IN_USE_MESSAGES: Record<DeleteRoleBlocker, string> = {
+  ACTIVE_USERS: "Role masih dipakai oleh user aktif",
+  AUDIT_RECORDS: "Role masih tercatat di audit perubahan role",
+};
 
 const parseOrThrow = <T>(schema: z.ZodType<T>, body: unknown): T => {
   const parsed = schema.safeParse(body);
@@ -71,13 +85,18 @@ export const removeRole = catchAsync(async (c) => {
   const id = Number(c.req.param("id"));
 
   try {
-    const role = await deleteRole(id);
-    if (!role) throw new ApiError("NOT_FOUND", { message: "Role not found" });
+    const result = await deleteRole(id);
+    if (result.status === "NOT_FOUND")
+      throw new ApiError("NOT_FOUND", { message: "Role not found" });
+    if (result.status === "IN_USE")
+      throw new ApiError("CONFLICT", {
+        message: ROLE_IN_USE_MESSAGES[result.blocker],
+      });
 
-    return success(c, role, { message: "Role deleted successfully" });
+    return success(c, result.role, { message: "Role deleted successfully" });
   } catch (error: unknown) {
     if (error instanceof ApiError) throw error;
-    if (error instanceof DatabaseError && pgErrorCode(error) === FK_VIOLATION) {
+    if (hasPgErrorCode(error, FK_VIOLATION)) {
       throw new ApiError("CONFLICT", {
         message: "Role masih dipakai oleh user atau permission lain",
       });

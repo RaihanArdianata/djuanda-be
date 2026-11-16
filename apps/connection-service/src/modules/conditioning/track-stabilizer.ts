@@ -22,7 +22,9 @@ import {
  *    melaju 120 kt di landasan tidak dianggap melompat).
  *  - Arah dihitung dari gerak yang sebenarnya (minimal `headingMinMoveM`), bukan dari heading sensor yang berderau; selama belum bergerak
  *    jauh, arah terakhir dipertahankan.
- *  - Hanya target di permukaan (`onGround`). Pesawat di udara tidak disentuh.
+ *  - Pesawat di udara tidak dihaluskan dan tidak dibekukan; ia hanya melewati penolak lonjakan dengan batas fisik pesawat (`maxAirJumpKt`).
+ *    Sensor MLAT kadang melaporkan satu posisi pencilan puluhan kilometer jauhnya (mis. dari nomor track sensor lain dengan alamat Mode-S yang
+ *    sama), lalu kembali normal; tanpa penolakan, itu menjadi garis lurus panjang bolak-balik di jejak.
  */
 
 export interface StabilizerOptions {
@@ -32,8 +34,10 @@ export interface StabilizerOptions {
   radiusM: number;
   /** Zona mati saat bergerak normal (di atas `standKt`), meter. Sekaligus selisih posisi tampil dan posisi sensor. */
   moveRadiusM: number;
-  /** Langkah lebih cepat dari ini (knot), dan lebih dari 3 kali kecepatan pesawat sendiri, dianggap lonjakan palsu. */
+  /** Langkah lebih cepat dari ini (knot), dan lebih dari 3 kali kecepatan pesawat sendiri, dianggap lonjakan palsu di permukaan. */
   maxJumpKt: number;
+  /** Sama untuk pesawat di udara: tidak ada pesawat sipil yang menempuh jarak antar laporan secepat ini. */
+  maxAirJumpKt: number;
   /** Berapa laporan berturut-turut yang boleh ditolak sebagai lonjakan sebelum dianggap kenyataan. */
   maxRejects: number;
   /** Arah baru dihitung dari gerak sejauh ini, meter. */
@@ -48,6 +52,7 @@ export const DEFAULT_STABILIZER_OPTIONS: StabilizerOptions = {
   radiusM: 15,
   moveRadiusM: 3,
   maxJumpKt: 80,
+  maxAirJumpKt: 1_000,
   maxRejects: 2,
   headingMinMoveM: 10,
   forgetAfterMs: 120_000,
@@ -157,13 +162,12 @@ export function createTrackStabilizer(
     raw: LatLon,
     t: number,
     reportedKt: number,
+    floorKt: number,
   ): boolean {
-    const dtS = clamp((t - st.lastRaw.at) / 1000, MIN_DT_S, MAX_DT_S);
+    // Selang waktu sebenarnya (tidak dipotong dari atas): celah laporan 68 detik memberi pesawat 68 detik untuk menempuh jaraknya.
+    const dtS = Math.max((t - st.lastRaw.at) / 1000, MIN_DT_S);
     const impliedKt = distanceM(raw, st.lastRaw) / dtS / KT_TO_MPS;
-    const allowedKt = Math.max(
-      opts.maxJumpKt,
-      3 * Math.max(reportedKt, st.speed),
-    );
+    const allowedKt = Math.max(floorKt, 3 * Math.max(reportedKt, st.speed));
     return impliedKt > allowedKt;
   }
 
@@ -194,37 +198,67 @@ export function createTrackStabilizer(
     st.heading = headingFrom(st, next, sensorHeading);
   }
 
+  /** Target di permukaan: zona mati dengan tali, langkah dibatasi, arah dari gerak, dan kecepatan 0 saat tidak bergeser. */
+  function stabilizeOnGround(
+    event: FusedTrackEvent,
+    st: State,
+    raw: LatLon,
+    dtS: number,
+  ): FusedTrackEvent {
+    const slow = st.speed < opts.standKt;
+    const next = follow(st, raw, dtS, slow);
+    const moved = distanceM(next, st.out) > 0;
+    if (moved) moveTo(st, next, event.velocity?.heading);
+    // Tidak bergeser dan pelan: kecepatan dilaporkan 0, bukan derau 0 sampai 5 kt dari sensor.
+    const speedOut = !moved && slow ? 0 : event.velocity?.groundSpeed;
+    return withMotion(event, next, speedOut, st.heading);
+  }
+
+  /** Laporan pertama sebuah track: tampil apa adanya, arahnya dari sensor sampai target terbukti bergerak. */
+  function begin(
+    event: FusedTrackEvent,
+    raw: LatLon,
+    t: number,
+    reportedKt: number,
+  ): void {
+    states.set(event.trackId, {
+      out: raw,
+      lastRaw: { ...raw, at: t },
+      speed: reportedKt,
+      heading: event.velocity?.heading,
+      trail: [raw],
+      rejects: 0,
+      lastAt: t,
+    });
+  }
+
   return {
     apply(event: FusedTrackEvent): FusedTrackEvent {
       const id = event.trackId;
       const pos = event.position;
-      // Hanya target di permukaan; yang dihapus atau di udara dilepas dari state dan lewat apa adanya.
-      if (event.lifecycle === "dropped" || pos?.onGround !== true) {
+      // Track yang dihapus, atau tanpa posisi, dilepas dari state dan lewat apa adanya.
+      if (event.lifecycle === "dropped" || !pos) {
         states.delete(id);
         return event;
       }
+      const airborne = pos.onGround !== true;
 
       const t = now();
       const raw: LatLon = { lat: pos.lat, lon: pos.lon };
       const reportedKt = event.velocity?.groundSpeed ?? 0;
       const st = states.get(id);
 
-      // Laporan pertama: tampil apa adanya, arahnya dari sensor sampai target terbukti bergerak.
       if (!st) {
-        states.set(id, {
-          out: raw,
-          lastRaw: { ...raw, at: t },
-          speed: reportedKt,
-          heading: event.velocity?.heading,
-          trail: [raw],
-          rejects: 0,
-          lastAt: t,
-        });
+        begin(event, raw, t, reportedKt);
         return event;
       }
 
       // Lonjakan mustahil: tahan posisi tampil, dan lepas bila terus berlanjut (berarti nyata).
-      if (st.rejects < opts.maxRejects && isJump(st, raw, t, reportedKt)) {
+      const floorKt = airborne ? opts.maxAirJumpKt : opts.maxJumpKt;
+      if (
+        st.rejects < opts.maxRejects &&
+        isJump(st, raw, t, reportedKt, floorKt)
+      ) {
         st.rejects++;
         st.lastAt = t;
         counters.jumpsRejected++;
@@ -236,13 +270,15 @@ export function createTrackStabilizer(
       st.lastAt = t;
       st.speed = st.speed * 0.5 + reportedKt * 0.5;
 
-      const slow = st.speed < opts.standKt;
-      const next = follow(st, raw, dtS, slow);
-      const moved = distanceM(next, st.out) > 0;
-      if (moved) moveTo(st, next, event.velocity?.heading);
-      // Tidak bergeser dan pelan: kecepatan dilaporkan 0, bukan derau 0 sampai 5 kt dari sensor.
-      const speedOut = !moved && slow ? 0 : event.velocity?.groundSpeed;
-      return withMotion(event, next, speedOut, st.heading);
+      // Di udara hanya lonjakan yang ditolak; posisi dan arah dari sensor dipakai apa adanya.
+      if (airborne) {
+        st.out = raw;
+        st.trail = [raw];
+        st.heading = event.velocity?.heading;
+        return event;
+      }
+
+      return stabilizeOnGround(event, st, raw, dtS);
     },
 
     forget(trackId: string): void {

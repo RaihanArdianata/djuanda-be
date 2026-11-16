@@ -146,6 +146,83 @@ describe("track stabilizer: jumps", () => {
   });
 });
 
+describe("track stabilizer: airborne outliers (GIA349, 16 Nov 2026)", () => {
+  // Kecepatan pesawat sekitar 200 kt = 103 m/s ke timur; satu laporan per detik.
+  const air = (north: number, east: number, gs = 200) =>
+    at(north, east, gs, 100, { onGround: false });
+
+  it("keeps a single report 38 km away (another sensor track number with the same Mode-S) out of the track, and carries on normally", () => {
+    // Datanya: tn=3892 dilaporkan normal, satu laporan tn=1063 melompat 38 km dalam 1 detik, lalu kembali ke tn=3892.
+    const { stab, outs } = run(8, (i) =>
+      i === 4 ? air(18_200, 33_800) : air(0, i * 103),
+    );
+    const before = posOf(outs[3] as never);
+    // The spike is not shown: the position stays where the aircraft was.
+    expect(distanceM(posOf(outs[4] as never), before)).toBeLessThan(1);
+    // The report after it is accepted at once and is where the aircraft really is.
+    expect(distanceM(posOf(outs[5] as never), offset(0, 5 * 103))).toBeLessThan(
+      1,
+    );
+    // No long out-and-back line: no step between two shown positions is more than a normal second of flight plus a little.
+    for (let i = 1; i < outs.length; i++) {
+      expect(
+        distanceM(posOf(outs[i - 1] as never), posOf(outs[i] as never)),
+      ).toBeLessThan(220);
+    }
+    expect(stab.stats().jumpsRejected).toBe(1);
+  });
+
+  it("also rejects the 5.6 km out-and-back seen at 09:53:17 (tn=666)", () => {
+    const { stab, outs } = run(6, (i) =>
+      i === 3 ? air(-5_600, i * 103) : air(0, i * 103, 106),
+    );
+    expect(
+      distanceM(posOf(outs[3] as never), posOf(outs[2] as never)),
+    ).toBeLessThan(1);
+    expect(distanceM(posOf(outs[4] as never), offset(0, 4 * 103))).toBeLessThan(
+      1,
+    );
+    expect(stab.stats().jumpsRejected).toBe(1);
+  });
+
+  it("passes the airborne reports it accepts through untouched, heading and speed included", () => {
+    const { outs } = run(5, (i) => air(0, i * 103));
+    for (let i = 0; i < outs.length; i++) {
+      expect(
+        distanceM(posOf(outs[i] as never), offset(0, i * 103)),
+      ).toBeLessThan(0.01);
+      expect(outs[i]?.velocity?.groundSpeed).toBe(200);
+      expect(outs[i]?.velocity?.heading).toBe(100);
+    }
+  });
+
+  it("does not take a 10 km move after a 68 s gap in reports (290 kt) for a jump", () => {
+    const c = clock();
+    const stab = createTrackStabilizer({ now: c.now });
+    stab.apply(air(0, 0, 250));
+    c.advance(68_600);
+    const out = stab.apply(air(0, 10_245, 250));
+    expect(distanceM(posOf(out), offset(0, 10_245))).toBeLessThan(0.01);
+    expect(stab.stats().jumpsRejected).toBe(0);
+  });
+
+  it("believes a move that persists: the third report in a row at the new place is accepted", () => {
+    const { stab, outs } = run(6, (i) =>
+      i < 3 ? air(0, i * 103) : air(50_000, 50_000 + i * 103),
+    );
+    expect(
+      distanceM(posOf(outs[3] as never), posOf(outs[2] as never)),
+    ).toBeLessThan(1);
+    expect(
+      distanceM(posOf(outs[4] as never), posOf(outs[2] as never)),
+    ).toBeLessThan(1);
+    expect(
+      distanceM(posOf(outs[5] as never), offset(50_000, 50_000 + 5 * 103)),
+    ).toBeLessThan(1);
+    expect(stab.stats().jumpsRejected).toBe(2);
+  });
+});
+
 describe("track stabilizer: what it leaves alone", () => {
   it("passes an airborne target through unchanged", () => {
     const stab = createTrackStabilizer({ now: clock().now });

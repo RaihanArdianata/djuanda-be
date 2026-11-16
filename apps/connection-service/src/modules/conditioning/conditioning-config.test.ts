@@ -15,11 +15,10 @@ describe("conditioningConfigFromEnv", () => {
     expect(c.stabilizer.enabled).toBe(true);
     expect(c.stabilizer.options).toMatchObject({
       standKt: 6,
-      freezeAfter: 3,
-      radiusM: 20,
-      releaseReports: 2,
+      radiusM: 15,
+      moveRadiusM: 3,
       maxJumpKt: 80,
-      alpha: 0.6,
+      maxAirJumpKt: 1000,
       headingMinMoveM: 10,
     });
     expect(c.mlat.enabled).toBe(true);
@@ -59,8 +58,7 @@ describe("conditioningConfigFromEnv", () => {
       GHOST_MAX_AGE_MS: "1500",
       STABILIZER_STAND_KT: "8",
       STABILIZER_RADIUS_M: "30",
-      STABILIZER_SMOOTHING: "0.4",
-      STABILIZER_FREEZE_AFTER: "4",
+      STABILIZER_MOVE_RADIUS_M: "5",
       MLAT_MAX_GROUND_SPEED_KT: "90",
       MLAT_MAX_AIR_SPEED_KT: "650",
       MLAT_MIN_CONFIDENCE: "0.5",
@@ -76,8 +74,7 @@ describe("conditioningConfigFromEnv", () => {
     expect(c.stabilizer.options).toMatchObject({
       standKt: 8,
       radiusM: 30,
-      alpha: 0.4,
-      freezeAfter: 4,
+      moveRadiusM: 5,
     });
     expect(c.mlat.options).toMatchObject({
       maxGroundSpeedKt: 90,
@@ -93,14 +90,14 @@ describe("conditioningConfigFromEnv", () => {
     const c = conditioningConfigFromEnv({
       GHOST_RADIUS_M: "abc",
       GHOST_MIN_REPORTS: "2.5",
-      STABILIZER_SMOOTHING: "1.5",
+      STABILIZER_MOVE_RADIUS_M: "0",
       STABILIZER_STAND_KT: "-3",
       MLAT_MIN_CONFIDENCE: "2.0",
       MLAT_UNRELIABLE_THRESHOLD: "0",
     });
     expect(c.ghost.options.radiusM).toBe(40);
     expect(c.ghost.options.minReports).toBe(3);
-    expect(c.stabilizer.options.alpha).toBe(0.6);
+    expect(c.stabilizer.options.moveRadiusM).toBe(3);
     expect(c.stabilizer.options.standKt).toBe(6);
     expect(c.mlat.options.minConfidence).toBe(0.4);
     expect(c.mlat.options.unreliableThreshold).toBe(3);

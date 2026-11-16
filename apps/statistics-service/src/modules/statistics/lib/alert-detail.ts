@@ -178,8 +178,9 @@ export function normalizeAlertRow(
 
 export type AlertDetailsByCategory = Record<AlertCategoryKey, AlertDetail[]>;
 
-export function groupAlertDetails(
+function groupDetailsWithRefs(
   rows: AlertDetailRow[],
+  refs: Map<string, IncidentRef>,
 ): AlertDetailsByCategory {
   const grouped: AlertDetailsByCategory = {
     stca: [],
@@ -188,7 +189,6 @@ export function groupAlertDetails(
     ria: [],
     taia: [],
   };
-  const refs = incidentRefs(rows);
   for (const row of rows) {
     const normalized = normalizeAlertRow(row);
     if (!normalized) continue;
@@ -197,6 +197,12 @@ export function groupAlertDetails(
     grouped[normalized.category].push(detail);
   }
   return grouped;
+}
+
+export function groupAlertDetails(
+  rows: AlertDetailRow[],
+): AlertDetailsByCategory {
+  return groupDetailsWithRefs(rows, incidentRefs(rows));
 }
 
 // ---------------------------------------------------------------------------
@@ -243,16 +249,22 @@ function toIncidentInput(row: AlertDetailRow): IncidentAlertInput | null {
   };
 }
 
-/** Kejadian tiap alert pada periode itu, menurut Alert ID. Nomor mengikuti waktu mulai, terlama = 1. */
-export function incidentRefs(rows: AlertDetailRow[]): Map<string, IncidentRef> {
-  const inputs = rows
+type GroupedIncidents = ReturnType<typeof groupIncidents>;
+
+function toIncidentInputs(rows: AlertDetailRow[]): IncidentAlertInput[] {
+  return rows
     .map(toIncidentInput)
     .filter((r): r is IncidentAlertInput => r !== null);
-  const incidents = [...groupIncidents(inputs)].sort(
+}
+
+function refsFromIncidents(
+  incidents: GroupedIncidents,
+): Map<string, IncidentRef> {
+  const sorted = [...incidents].sort(
     (a, b) => a.startAt - b.startAt || a.id.localeCompare(b.id),
   );
   const refs = new Map<string, IncidentRef>();
-  incidents.forEach((incident, index) => {
+  sorted.forEach((incident, index) => {
     incident.alertIds.forEach((alertId, position) => {
       refs.set(alertId, {
         number: index + 1,
@@ -265,13 +277,9 @@ export function incidentRefs(rows: AlertDetailRow[]): Map<string, IncidentRef> {
   return refs;
 }
 
-export function summarizeIncidents(
-  rows: AlertDetailRow[],
+function summaryFromIncidents(
+  incidents: GroupedIncidents,
 ): AlertIncidentSummary {
-  const inputs = rows
-    .map(toIncidentInput)
-    .filter((r): r is IncidentAlertInput => r !== null);
-  const incidents = groupIncidents(inputs);
   const byCategory: Record<AlertCategoryKey, number> = {
     stca: 0,
     apa: 0,
@@ -292,5 +300,25 @@ export function summarizeIncidents(
     byCategory,
     needsAction: incidents.filter((i) => i.verificationCounts.unverified > 0)
       .length,
+  };
+}
+
+export function incidentRefs(rows: AlertDetailRow[]): Map<string, IncidentRef> {
+  return refsFromIncidents(groupIncidents(toIncidentInputs(rows)));
+}
+
+export function summarizeIncidents(
+  rows: AlertDetailRow[],
+): AlertIncidentSummary {
+  return summaryFromIncidents(groupIncidents(toIncidentInputs(rows)));
+}
+export function analyzeAlertRows(rows: AlertDetailRow[]): {
+  details: AlertDetailsByCategory;
+  incidents: AlertIncidentSummary;
+} {
+  const grouped = groupIncidents(toIncidentInputs(rows));
+  return {
+    details: groupDetailsWithRefs(rows, refsFromIncidents(grouped)),
+    incidents: summaryFromIncidents(grouped),
   };
 }

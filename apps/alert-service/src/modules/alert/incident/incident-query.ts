@@ -73,8 +73,7 @@ function matchesVerification(
   wanted: IncidentFilter["verification"],
 ): boolean {
   if (!wanted) return true;
-  if (wanted === "NEEDS_ACTION")
-    return incident.verificationCounts.unverified > 0;
+  if (wanted === "NEEDS_ACTION") return incident.needsAction;
   return incident.verification === wanted;
 }
 

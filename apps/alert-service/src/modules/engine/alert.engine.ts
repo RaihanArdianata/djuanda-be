@@ -6,6 +6,7 @@ import {
   db,
 } from "@repo/database";
 import { logger } from "@repo/logger";
+import { severityRank } from "@repo/shared/alert-incident";
 import { createCounter } from "@repo/shared/metrics";
 import { and, eq, lt } from "drizzle-orm";
 import {
@@ -25,6 +26,8 @@ import {
 import { getAerodromeContext } from "../../context/aerodrome.context";
 import { getAirportTracks } from "../../context/surveillance.context";
 import {
+  escalateAlertSeverity,
+  findAlertByAlertId,
   findRecentlyClearedAlert,
   reopenAlert,
 } from "../alert/repository/alert.repository";
@@ -47,6 +50,7 @@ import {
 } from "./alert-area";
 import { seedPostHistory, startPostHistory } from "./alert-post-history";
 import { buildAlertContext } from "./detection.context";
+import { createConfirmationGate } from "./policy/confirmation";
 import { detectionRules } from "./rules";
 import { createSameAircraftFilter, sameAircraftFromEnv } from "./same-aircraft";
 import {
@@ -202,6 +206,64 @@ function collectCandidates(
 const PENDING_CLAIM_VALUE = "__pending__";
 
 /**
+ * Kondisi harus bertahan `confirmSeconds` (lihat candidate) tanpa terputus lebih dari ini sebelum menjadi alert. Laporan yang kebetulan masuk
+ * area, goyangan di garis batas, dan gema sensor yang hilang dalam sedetik berhenti di sini.
+ */
+const confirmation = createConfirmationGate({ gapMs: 30_000 });
+
+/** Candidate yang kondisinya sudah bertahan cukup lama. Yang belum tetap dihitung bertahan, hanya belum dibuat alertnya. */
+function confirmed(candidates: AlertCandidate[]): AlertCandidate[] {
+  confirmation.sweep();
+  return candidates.filter((c) =>
+    confirmation.confirm(
+      `${c.type}|${buildEntityKey(c)}`,
+      c.confirmSeconds ?? 0,
+    ),
+  );
+}
+
+/** Severity alert aktif yang terakhir diketahui (kunci: alertId), supaya kenaikan severity tidak membaca database tiap evaluasi. */
+const knownSeverity = new Map<string, string>();
+const KNOWN_SEVERITY_LIMIT = 5_000;
+
+function rememberSeverity(alertId: string, severity: string): void {
+  if (knownSeverity.size >= KNOWN_SEVERITY_LIMIT) knownSeverity.clear();
+  knownSeverity.set(alertId, severity);
+}
+
+/** Candidate untuk alert yang sudah ada dengan severity lebih tinggi (Warning menjadi Critical): naikkan alertnya, jangan membuat yang baru. */
+async function escalateIfHigher(
+  alertId: string,
+  candidate: AlertCandidate,
+): Promise<void> {
+  let known = knownSeverity.get(alertId);
+  if (known === undefined) {
+    const current = await findAlertByAlertId(alertId);
+    if (current?.status !== "ACTIVE") return;
+    known = current.severity;
+    rememberSeverity(alertId, known);
+  }
+  if (severityRank(candidate.severity) <= severityRank(known)) return;
+
+  const { distanceMeters, closestMeters, reason, message } = candidate.data;
+  const updated = await escalateAlertSeverity(alertId, candidate.severity, {
+    escalatedFrom: known,
+    escalatedAt: new Date().toISOString(),
+    distanceMeters,
+    closestMeters,
+    reason,
+    message,
+  });
+  if (!updated) return;
+  rememberSeverity(alertId, updated.severity);
+  await publishAlertUpdated(updated);
+  logger.info(
+    { alertId, from: known, to: updated.severity, type: updated.type },
+    "alert severity escalated",
+  );
+}
+
+/**
  * Entitas yang sama muncul lagi tak lama setelah alertnya selesai (jitter di batas area, track yang putus sebentar): buka kembali alert
  * lama, bukan buat yang baru. Mati selama `reopenWindowSeconds` = 0. Mengembalikan alert yang dibuka, atau null bila tidak ada.
  */
@@ -270,6 +332,9 @@ async function registerCandidate(
     if (activeId && activeId !== PENDING_CLAIM_VALUE) {
       // Refresh TTL, jangan overwrite dengan candidate.alertId (bukan DB alertId).
       await setActiveAlert(airportId, candidate.type, entityKey, activeId);
+      await escalateIfHigher(activeId, candidate).catch((err: unknown) => {
+        logger.warn({ err, alertId: activeId }, "failed to escalate alert");
+      });
     }
     return null;
   }
@@ -302,8 +367,9 @@ async function registerCandidate(
 
   let stored: Alert;
   try {
+    const { confirmSeconds: _confirm, ...persisted } = candidate;
     stored = await registerAlert({
-      ...candidate,
+      ...persisted,
       relatedTrackId: candidate.relatedTrackId ?? null,
       notamId: null,
       ashtamId: null,
@@ -332,6 +398,7 @@ async function registerCandidate(
   ];
 
   await setActiveAlert(airportId, candidate.type, entityKey, stored.alertId);
+  rememberSeverity(stored.alertId, stored.severity);
   await publishAlertCreated(stored);
 
   logger.info(
@@ -604,7 +671,7 @@ export const evaluateMovement = async (
   const created: Alert[] = [];
   const updated: Alert[] = [];
 
-  for (const candidate of candidates) {
+  for (const candidate of confirmed(candidates)) {
     try {
       const stored = await registerCandidate(candidate, input.airportId);
       if (stored) created.push(stored);

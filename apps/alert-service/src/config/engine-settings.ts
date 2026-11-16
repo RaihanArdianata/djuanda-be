@@ -16,7 +16,7 @@ export interface EngineSettings {
   occupancyStickyMs: number;
   /**
    * Kejadian yang sama muncul lagi dalam sekian detik setelah alertnya selesai: alert lama dibuka kembali, bukan dibuat yang baru.
-   * Memicu ulang dalam hitungan detik (81% jeda antar alert di bawah semenit) membengkakkan jumlah alert. 0 = mati (bawaan).
+   * Memicu ulang dalam hitungan detik (81% jeda antar alert di bawah semenit) membengkakkan jumlah alert. Bawaan 300 detik; 0 = mati.
    */
   reopenWindowSeconds: number;
 }
@@ -25,6 +25,7 @@ export const ENGINE_RULE_TYPE = "ALERT_ENGINE";
 
 const DEFAULT_TWIN_RADIUS_M = 60;
 const DEFAULT_TWIN_MAX_SPEED_DIFF_KT = 15;
+const DEFAULT_REOPEN_WINDOW_SECONDS = 300;
 
 /** Angka tidak negatif; selain itu `fallback`. */
 const nonNegative = (value: unknown, fallback: number): number =>
@@ -50,7 +51,10 @@ export function engineSettingsFromEnv(
     ),
     staleGraceSeconds: alertServiceEnv.staleGraceSeconds,
     occupancyStickyMs: alertServiceEnv.occupancyStickyMs,
-    reopenWindowSeconds: 0,
+    reopenWindowSeconds: fromEnv(
+      env.ALERT_REOPEN_WINDOW_SECONDS,
+      DEFAULT_REOPEN_WINDOW_SECONDS,
+    ),
   };
 }
 

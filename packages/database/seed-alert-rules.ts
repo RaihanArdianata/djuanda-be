@@ -18,6 +18,7 @@ const defaultRules = [
       twinMaxSpeedDiffKt: 15,
       staleGraceSeconds: 20,
       occupancyStickyMs: 5000,
+      reopenWindowSeconds: 300,
     },
     documentation: {
       parameters: {
@@ -29,6 +30,8 @@ const defaultRules = [
           "Alert aktif yang kandidatnya tidak terlihat lagi baru dibersihkan setelah masa ini (detik). Meredam kedip dari jitter posisi di batas area. Bawaan 20.",
         occupancyStickyMs:
           "Runway atau taxiway tetap berstatus terisi selama ini (ms) setelah target terakhir terlihat di dalamnya. Meredam kedip status di batas poligon. Bawaan 5000.",
+        reopenWindowSeconds:
+          "Kejadian yang sama muncul lagi dalam sekian detik setelah alertnya selesai: alert lama dibuka kembali, bukan dibuat yang baru. 0 = mati. Bawaan 300.",
       },
       notes:
         "Nilai env ALERT_TWIN_RADIUS_M, ALERT_TWIN_MAX_SPEED_DIFF_KT, ALERT_STALE_GRACE_SECONDS, dan ALERT_OCCUPANCY_STICKY_MS menjadi nilai awal; isian di sini menggantikannya tanpa restart, dan yang dikosongkan kembali ke env.",
@@ -149,14 +152,35 @@ const defaultRules = [
     type: "RUNWAY_INCURSION",
     enabled: true,
     description:
-      "Runway Incursion Alert — memicu alert saat track memasuki runway yang sedang aktif.",
+      "Runway Incursion Alert — dua target atau lebih berada di runway aktif yang sama. Critical: dua target ber-identitas, dan salah satunya melaju sedikitnya 30 kt atau keduanya berjarak 500 m atau kurang. Warning: dua target ber-identitas yang pelan dan berjauhan. Info: salah satunya tanpa identitas.",
     configuration: {
       active: true,
+      confirmSeconds: 3,
+      criticalSpeedKt: 30,
+      criticalSeparationMeters: 500,
+      unidentifiedConfirmSeconds: 15,
+      reportUnidentifiedAlone: false,
+      aloneConfirmSeconds: 10,
+      enterMarginM: 3,
     },
     documentation: {
       parameters: {
         active:
           "Filter runway aktif saja. Kalau true, hanya runway dengan active=true yang dipantau.",
+        confirmSeconds:
+          "Kondisi harus bertahan selama ini (detik) tanpa terputus sebelum alert dibuat. Bawaan 3.",
+        criticalSpeedKt:
+          "Salah satu target melaju sama dengan atau lebih dari ini (kt), yaitu sedang lepas landas atau mendarat, membuat konflik Critical seberapa jauh pun jaraknya. Bawaan 30.",
+        criticalSeparationMeters:
+          "Dua target ber-identitas yang berjarak sama dengan atau kurang dari ini (meter) di runway yang sama menjadi Critical; lebih jauh dan pelan menjadi Warning. Bawaan 500.",
+        unidentifiedConfirmSeconds:
+          "Konflik yang melibatkan target tanpa identitas menjadi alert Info setelah bertahan selama ini (detik). Bawaan 15.",
+        reportUnidentifiedAlone:
+          "true = satu target tanpa identitas yang sendirian di runway aktif dilaporkan sebagai Info. Bawaan false: kendaraan tanpa nama yang melintas itu umum.",
+        aloneConfirmSeconds:
+          "Lama target tanpa identitas yang sendirian harus berada di runway sebelum dilaporkan (detik). Hanya berlaku bila reportUnidentifiedAlone true. Bawaan 10.",
+        enterMarginM:
+          "Target dianggap di dalam runway hanya bila sedikitnya sejauh ini (meter) dari tepinya, supaya goyangan posisi di garis batas tidak dihitung masuk. Bawaan 3.",
       },
       examples: [
         {
@@ -187,21 +211,48 @@ const defaultRules = [
         },
       ],
       notes:
-        "Aerodrome feature di aerodrome-service harus punya polygon runway dan airportId WARR.",
+        "Critical saat dua target ber-identitas di runway aktif yang sama dan salah satunya melaju 30 kt atau lebih, atau keduanya berjarak 500 m atau kurang. Warning saat keduanya ber-identitas tetapi pelan dan berjauhan. Info saat salah satunya tanpa identitas. Target tanpa identitas tidak pernah Critical atau Warning. Yang dideteksi adalah konflik dua target; masuk tanpa izin ATC tidak bisa dinilai karena data izin tidak tersedia. Aerodrome feature di aerodrome-service harus punya polygon runway dan airportId WARR.",
     },
   },
   {
     type: "TAXIWAY_APRON_INCURSION",
     enabled: true,
     description:
-      "Taxiway / Apron Incursion Alert — memicu alert saat track keluar dari expected route atau masuk ke area taxiway/apron.",
+      "Taxiway / Apron Incursion Alert — dua target yang saling mendekat di taxiway atau apron. Berdampingan atau mengikuti bukan alert. Critical: dua target ber-identitas, salah satunya bergerak, dan dalam 10 detik akan sedekat 25 m atau kurang. Warning: saling mendekat dan sudah dalam 80 m (taxiway) atau 40 m (apron). Info: salah satunya tanpa identitas.",
     configuration: {
       maxDistanceMeters: 50,
+      criticalSeparationMeters: 25,
+      warningSeparationMeters: 80,
+      apronWarningSeparationMeters: 40,
+      movingKt: 3,
+      closingHorizonSeconds: 10,
+      confirmSeconds: 3,
+      restrictedConfirmSeconds: 5,
+      unidentifiedConfirmSeconds: 15,
+      enterMarginM: 3,
     },
     documentation: {
       parameters: {
         maxDistanceMeters:
           "Jarak toleransi (meter) dari expected route atau untuk tetap dianggap on-route.",
+        criticalSeparationMeters:
+          "Dua target ber-identitas yang saling mendekat dan dalam beberapa detik ke depan akan sedekat ini (meter) atau kurang menjadi Critical. Bawaan 25.",
+        warningSeparationMeters:
+          "Dua target di taxiway yang saling mendekat dan sudah sedekat ini (meter) atau kurang menjadi Warning. Bawaan 80.",
+        apronWarningSeparationMeters:
+          "Sama untuk apron (meter); lebih pendek karena stand berdekatan. Bawaan 40.",
+        movingKt:
+          "Sedikitnya salah satu target harus melaju sama dengan atau lebih dari ini (kt); dua target yang sama-sama diam tidak pernah menjadi alert. Bawaan 3.",
+        closingHorizonSeconds:
+          "Seberapa jauh ke depan (detik) gerak kedua target diperhitungkan untuk menilai apakah mereka saling mendekat. Bawaan 10.",
+        confirmSeconds:
+          "Kondisi harus bertahan selama ini (detik) tanpa terputus sebelum alert dibuat. Bawaan 3.",
+        restrictedConfirmSeconds:
+          "Lama target ber-identitas harus berada di permukaan RESTRICTED atau INACTIVE sebelum menjadi Warning (detik). Bawaan 5.",
+        unidentifiedConfirmSeconds:
+          "Alert Info untuk target tanpa identitas dibuat setelah bertahan selama ini (detik). Bawaan 15.",
+        enterMarginM:
+          "Target dianggap di dalam permukaan hanya bila sedikitnya sejauh ini (meter) dari tepinya. Bawaan 3.",
         expectedRoute:
           "Array koordinat [[lat,lon], ...] rute yang diharapkan — opsional. Kalau tidak diisi, rule pakai polygon taxiway/apron.",
       },
@@ -234,19 +285,35 @@ const defaultRules = [
         },
       ],
       notes:
-        "Kalau expectedRoute diisi, alert trigger saat track off-route lebih dari maxDistanceMeters. Kalau tidak, trigger saat masuk polygon taxiway/apron.",
+        "Critical saat dua target ber-identitas saling mendekat, salah satunya bergerak, dan dalam 10 detik akan sedekat 25 m atau kurang. Warning saat saling mendekat dan sudah dalam 80 m (taxiway) atau 40 m (apron), atau saat target ber-identitas berada di permukaan RESTRICTED/INACTIVE. Info saat salah satu target tanpa identitas. Dua target yang sama-sama diam (parkir berdampingan, antre) tidak pernah menjadi alert. Kalau expectedRoute diisi, alert muncul saat track menyimpang lebih dari maxDistanceMeters dari rute (Warning; Info untuk target tanpa identitas).",
     },
   },
   {
     type: "AREA_PENETRATION",
     enabled: true,
     description:
-      "Area Penetration Alert — memicu alert saat track memasuki area terbatas / kritis.",
-    configuration: {},
+      "Area Penetration Alert — target di darat berada di area terbatas. Critical: target ber-identitas melintasi area berstatus CLOSED dengan kecepatan 15 kt atau lebih. Warning: target ber-identitas di area terbatas selama 5 detik. Info: target tanpa identitas di area terbatas selama 15 detik.",
+    configuration: {
+      confirmSeconds: 5,
+      unidentifiedConfirmSeconds: 15,
+      criticalAreaStatuses: ["CLOSED"],
+      criticalMovingKt: 15,
+      enterMarginM: 5,
+    },
     documentation: {
       parameters: {
         areas:
           "Array area restricted yang akan dipantau. Kalau tidak diisi, rule pakai area dari aerodrome context.",
+        confirmSeconds:
+          "Lama target ber-identitas harus berada di area terbatas sebelum alert dibuat (detik). Bawaan 5.",
+        unidentifiedConfirmSeconds:
+          "Lama target tanpa identitas harus berada di area terbatas sebelum alert Info dibuat (detik). Bawaan 15.",
+        criticalAreaStatuses:
+          'Daftar status area yang membuat pelintas berkecepatan menjadi Critical, mis. ["CLOSED"]. Bawaan ["CLOSED"].',
+        criticalMovingKt:
+          "Target ber-identitas yang melaju sama dengan atau lebih dari ini (kt) di area berstatus Critical dianggap sedang melintasinya. Bawaan 15.",
+        enterMarginM:
+          "Target dianggap di dalam area hanya bila sedikitnya sejauh ini (meter) dari tepinya, supaya goyangan di garis batas tidak memicu alert berulang. Bawaan 5.",
       },
       examples: [
         {
@@ -277,7 +344,7 @@ const defaultRules = [
         },
       ],
       notes:
-        "Area harus ditandai restricted di aerodrome-service dan punya airportId WARR.",
+        "Critical saat target ber-identitas melintasi area berstatus CLOSED dengan kecepatan 15 kt atau lebih. Warning saat target ber-identitas berada di area terbatas selama 5 detik. Info saat target tanpa identitas berada di area terbatas selama 15 detik. Target tanpa identitas tidak pernah Critical atau Warning. Area harus ditandai restricted di aerodrome-service dan punya airportId WARR.",
     },
   },
   {

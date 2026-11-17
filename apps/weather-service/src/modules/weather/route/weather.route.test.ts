@@ -269,12 +269,44 @@ describe("GET /history", () => {
     );
   });
 
-  it("rejects a kind other than METAR/SPECI with a validation error", async () => {
+  it("rejects a kind other than METAR/SPECI/TAF with a validation error", async () => {
     const res = await weatherRoute.request("/history?kind=BOGUS");
     const body = await res.json();
 
     expect(res.status).toBe(400);
     expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns TAF history when kind=TAF", async () => {
+    const sampleTafItem = {
+      station: "WARR",
+      kind: "TAF",
+      observedAt: "2026-07-08T05:00:00.000Z",
+      issuedAt: "2026-07-08T05:00:00.000Z",
+      validFrom: "2026-07-08T06:00:00.000Z",
+      validTo: "2026-07-08T18:00:00.000Z",
+      raw: "TAF WARR 080500Z 0806/0818 09008KT 9000 SCT018",
+      forecast: { periods: [], partial: false },
+      stale: false,
+      sync: {
+        lastSuccessfulSyncAt: null,
+        lastSyncStatus: "NEVER",
+        lastAttemptAt: null,
+        lastSyncError: null,
+      },
+    };
+    getObservationHistory.mockResolvedValue([sampleTafItem]);
+    getObservationHistoryCount.mockResolvedValue(1);
+
+    const res = await weatherRoute.request("/history?kind=TAF");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].kind).toBe("TAF");
+    expect(getObservationHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "TAF" }),
+    );
   });
 
   it("forwards from/to date range filters to the service", async () => {

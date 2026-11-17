@@ -6,7 +6,7 @@ import {
   weatherObservations,
   weatherSyncMetadata,
 } from "@repo/database";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { env } from "@/config/env";
 import { isForecastStale, isObservationStale } from "../lib/staleness";
 import type { GetObservationHistoryParams } from "../validator/weather.validator";
@@ -22,6 +22,21 @@ export interface CurrentObservationResult {
   sync: WeatherSyncMetadataResult;
 }
 
+export interface TafHistoryItem {
+  station: string;
+  kind: "TAF";
+  observedAt: string; // = issuedAt for consistent sorting
+  issuedAt: string;
+  validFrom: string;
+  validTo: string;
+  raw: string;
+  forecast: TafParsedData;
+  stale: boolean;
+  sync: WeatherSyncMetadataResult;
+}
+
+export type WeatherHistoryItem = CurrentObservationResult | TafHistoryItem;
+
 export interface ForecastResult {
   station: string;
   issuedAt: string;
@@ -33,7 +48,7 @@ export interface ForecastResult {
   sync: WeatherSyncMetadataResult;
 }
 
-export type ObservationKind = "METAR" | "SPECI";
+export type ObservationKind = "METAR" | "SPECI" | "TAF";
 export type WeatherSyncStatus = "NEVER" | "SYNCING" | "SUCCESS" | "FAILED";
 
 export interface WeatherSyncMetadataResult {
@@ -250,20 +265,87 @@ function observationHistoryWhere(
   );
 }
 
+function forecastHistoryWhere(
+  params: GetObservationHistoryParams,
+): ReturnType<typeof and> {
+  const resolvedStation = params.station ?? env.WEATHER_STATION_ICAO;
+  return and(
+    eq(weatherForecasts.station, resolvedStation),
+    params.from ? gte(weatherForecasts.issuedAt, params.from) : undefined,
+    params.to ? lte(weatherForecasts.issuedAt, params.to) : undefined,
+  );
+}
+
 export async function getObservationHistory(
   params: GetObservationHistoryParams,
-): Promise<CurrentObservationResult[]> {
-  const observations = await db.query.weatherObservations.findMany({
+): Promise<WeatherHistoryItem[]> {
+  const resolvedStation = params.station ?? env.WEATHER_STATION_ICAO;
+  const sync = await getWeatherSyncMetadata(resolvedStation);
+
+  // kind = TAF → query forecasts only
+  if (params.kind === "TAF") {
+    const forecasts = await db.query.weatherForecasts.findMany({
+      where: forecastHistoryWhere(params),
+      orderBy: desc(weatherForecasts.issuedAt),
+      limit: params.size,
+      offset: (params.page - 1) * params.size,
+    });
+
+    return forecasts.map((forecast) => {
+      const stale = isForecastStale(forecast.validTo);
+      return {
+        station: forecast.station,
+        kind: "TAF",
+        observedAt: forecast.issuedAt.toISOString(),
+        issuedAt: forecast.issuedAt.toISOString(),
+        validFrom: forecast.validFrom.toISOString(),
+        validTo: forecast.validTo.toISOString(),
+        raw: forecast.raw,
+        forecast: forecast.parsed,
+        stale,
+        sync,
+      };
+    });
+  }
+
+  // kind = METAR/SPECI → query observations only
+  if (params.kind === "METAR" || params.kind === "SPECI") {
+    const observations = await db.query.weatherObservations.findMany({
+      where: observationHistoryWhere(params),
+      orderBy: desc(weatherObservations.observedAt),
+      limit: params.size,
+      offset: (params.page - 1) * params.size,
+    });
+
+    return observations.map((observation) => {
+      const stale = isObservationStale(observation.observedAt);
+      return {
+        station: observation.station,
+        kind: observation.kind,
+        observedAt: observation.observedAt.toISOString(),
+        raw: observation.raw,
+        parsed: observation.parsed,
+        stale,
+        staleSince: stale ? observation.observedAt.toISOString() : null,
+        sync,
+      };
+    });
+  }
+
+  // kind kosong → UNION ALL observations + forecasts, diurutkan observedAt desc
+  // Untuk type-safety, fetch masing-masing lalu merge & sort di server-side
+  const obsObservations = await db.query.weatherObservations.findMany({
     where: observationHistoryWhere(params),
     orderBy: desc(weatherObservations.observedAt),
-    limit: params.size,
-    offset: (params.page - 1) * params.size,
   });
-  const sync = await getWeatherSyncMetadata(
-    params.station ?? env.WEATHER_STATION_ICAO,
-  );
 
-  return observations.map((observation) => {
+  const tafForecasts = await db.query.weatherForecasts.findMany({
+    where: forecastHistoryWhere(params),
+    orderBy: desc(weatherForecasts.issuedAt),
+  });
+
+  // Map observations to WeatherHistoryItem
+  const obsItems: WeatherHistoryItem[] = obsObservations.map((observation) => {
     const stale = isObservationStale(observation.observedAt);
     return {
       station: observation.station,
@@ -276,12 +358,61 @@ export async function getObservationHistory(
       sync,
     };
   });
+
+  // Map forecasts to WeatherHistoryItem
+  const tafItems: WeatherHistoryItem[] = tafForecasts.map((forecast) => {
+    const stale = isForecastStale(forecast.validTo);
+    return {
+      station: forecast.station,
+      kind: "TAF",
+      observedAt: forecast.issuedAt.toISOString(),
+      issuedAt: forecast.issuedAt.toISOString(),
+      validFrom: forecast.validFrom.toISOString(),
+      validTo: forecast.validTo.toISOString(),
+      raw: forecast.raw,
+      forecast: forecast.parsed,
+      stale,
+      sync,
+    };
+  });
+
+  // Merge & sort by observedAt desc, then apply pagination
+  const combined = [...obsItems, ...tafItems].sort(
+    (a, b) =>
+      new Date(b.observedAt).getTime() - new Date(a.observedAt).getTime(),
+  );
+  const offset = (params.page - 1) * params.size;
+  const paginated = combined.slice(offset, offset + params.size);
+
+  return paginated;
 }
 
 export async function getObservationHistoryCount(
   params: GetObservationHistoryParams,
 ): Promise<number> {
-  return await db.$count(weatherObservations, observationHistoryWhere(params));
+  // kind = TAF → count forecasts
+  if (params.kind === "TAF") {
+    return await db.$count(weatherForecasts, forecastHistoryWhere(params));
+  }
+
+  // kind = METAR/SPECI → count observations
+  if (params.kind === "METAR" || params.kind === "SPECI") {
+    return await db.$count(
+      weatherObservations,
+      observationHistoryWhere(params),
+    );
+  }
+
+  // kind kosong → count observations + forecasts
+  const observationCount = await db.$count(
+    weatherObservations,
+    observationHistoryWhere(params),
+  );
+  const forecastCount = await db.$count(
+    weatherForecasts,
+    forecastHistoryWhere(params),
+  );
+  return observationCount + forecastCount;
 }
 
 export async function getActiveForecast(

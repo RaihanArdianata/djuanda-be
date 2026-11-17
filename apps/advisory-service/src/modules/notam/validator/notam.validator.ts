@@ -9,10 +9,17 @@ const SORT_BY_VALUES = [
 
 const NOTAM_STATUS_VALUES = ["ACTIVE", "CANCELLED", "EXPIRED"] as const;
 const NOTAM_TYPE_VALUES = ["NOTAMN", "NOTAMR", "NOTAMC"] as const;
+const NOTAM_PHASE_VALUES = [
+  "berlaku",
+  "akan-datang",
+  "kedaluwarsa",
+  "dibatalkan",
+] as const;
 
 export const listNotamQuerySchema = z
   .object({
     status: z.enum(NOTAM_STATUS_VALUES).optional(),
+    phase: z.enum(NOTAM_PHASE_VALUES).optional(),
     fir: z.string().trim().min(1).max(8).optional(),
     icaoLocation: z.string().trim().min(1).max(8).optional(),
     qcode: z.string().trim().min(1).max(16).optional(),

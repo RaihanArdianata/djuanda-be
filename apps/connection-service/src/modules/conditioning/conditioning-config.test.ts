@@ -23,8 +23,6 @@ describe("conditioningConfigFromEnv", () => {
     });
     expect(c.mlat.enabled).toBe(true);
     expect(c.mlat.options).toMatchObject({
-      maxGroundSpeedKt: 100,
-      maxAirSpeedKt: 700,
       minConfidence: 0.4,
       unreliableThreshold: 3,
       recoveryThreshold: 3,
@@ -59,8 +57,6 @@ describe("conditioningConfigFromEnv", () => {
       STABILIZER_STAND_KT: "8",
       STABILIZER_RADIUS_M: "30",
       STABILIZER_MOVE_RADIUS_M: "5",
-      MLAT_MAX_GROUND_SPEED_KT: "90",
-      MLAT_MAX_AIR_SPEED_KT: "650",
       MLAT_MIN_CONFIDENCE: "0.5",
       MLAT_UNRELIABLE_THRESHOLD: "4",
       MLAT_RECOVERY_THRESHOLD: "2",
@@ -77,8 +73,6 @@ describe("conditioningConfigFromEnv", () => {
       moveRadiusM: 5,
     });
     expect(c.mlat.options).toMatchObject({
-      maxGroundSpeedKt: 90,
-      maxAirSpeedKt: 650,
       minConfidence: 0.5,
       unreliableThreshold: 4,
       recoveryThreshold: 2,

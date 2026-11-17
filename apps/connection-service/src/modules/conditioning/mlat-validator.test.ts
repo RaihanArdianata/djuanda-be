@@ -123,44 +123,30 @@ describe("mlat-validator evaluation logic", () => {
     expect(v.stats().unreliableReports).toBe(0);
   });
 
-  test("detects ground speed anomaly and retracts after threshold", () => {
-    const c = clock(1_000_000);
-    const v = createMlatValidator({ now: c.now, unreliableThreshold: 3 });
-    const normal = track({
-      trackId: "GIA202",
-      protocol: "asterix-cat020",
-      onGround: true,
-      groundSpeed: 20,
-    });
-    // First: valid report, shown
-    expect(v.check(normal)).toEqual({ action: "pass" });
-
-    // Anomalous speed report 1 (> 100 kt on ground)
-    c.advance(1000);
-    const bad1 = track({
+  test("passes aircraft with high ground speed (takeoff roll)", () => {
+    const v = createMlatValidator();
+    const takeoff = track({
       trackId: "GIA202",
       protocol: "asterix-cat020",
       onGround: true,
       groundSpeed: 180,
     });
-    expect(v.check(bad1).action).toBe("hold");
+    expect(v.check(takeoff)).toEqual({ action: "pass" });
+    expect(v.stats().inspected).toBe(1);
+    expect(v.stats().unreliableReports).toBe(0);
+  });
 
-    // Anomalous speed report 2
-    c.advance(1000);
-    expect(v.check(bad1).action).toBe("hold");
-
-    // Anomalous speed report 3: reaches unreliableThreshold, triggers retract
-    c.advance(1000);
-    const verdict3 = v.check(bad1);
-    expect(verdict3.action).toBe("retract");
-    if (verdict3.action === "retract") {
-      expect(verdict3.reason).toContain("kecepatan darat");
-    }
-    expect(v.stats().retractedTracks).toBe(1);
-
-    // Subsequent bad reports continue to be held
-    c.advance(1000);
-    expect(v.check(bad1).action).toBe("hold");
+  test("passes aircraft with high air speed (airborne)", () => {
+    const v = createMlatValidator();
+    const airborne = track({
+      trackId: "GIA303",
+      protocol: "asterix-cat020",
+      onGround: false,
+      groundSpeed: 450,
+    });
+    expect(v.check(airborne)).toEqual({ action: "pass" });
+    expect(v.stats().inspected).toBe(1);
+    expect(v.stats().unreliableReports).toBe(0);
   });
 
   test("detects position teleportation / jump", () => {
@@ -225,13 +211,14 @@ describe("mlat-validator evaluation logic", () => {
     // Shown
     expect(v.check(plane)).toEqual({ action: "pass" });
 
-    // 2 anomalies -> retracted
+    // 2 anomalies (altitude above ceiling) -> retracted
     const bad = track({
       trackId: "AWQ505",
       protocol: "asterix-cat020",
-      onGround: true,
-      groundSpeed: 250,
+      onGround: false,
+      groundSpeed: 15,
     });
+    bad.position = { ...offset(0, 0), alt: 12000, onGround: false };
     c.advance(1000);
     expect(v.check(bad).action).toBe("hold");
     c.advance(1000);

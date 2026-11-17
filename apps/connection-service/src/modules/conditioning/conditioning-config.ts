@@ -72,6 +72,16 @@ function fraction(
  *   STABILIZER_MAX_JUMP_KT       langkah lebih cepat dari ini dan dari 3x kecepatan pesawat sendiri = lonjakan palsu di permukaan (80)
  *   STABILIZER_MAX_AIR_JUMP_KT   sama untuk pesawat di udara; satu laporan pencilan puluhan km tidak masuk ke jejak (1000)
  *   STABILIZER_HEADING_MIN_M     arah baru dihitung dari gerak sejauh ini, meter (10)
+ *
+ * Validasi keandalan data MLAT (khusus pesawat, bukan kendaraan):
+ *   MLAT_VALIDATION_ENABLED      default true
+ *   MLAT_MAX_GROUND_JUMP_KT      batas lonjakan posisi di permukaan (150)
+ *   MLAT_MAX_AIR_JUMP_KT         batas lonjakan posisi di udara (800)
+ *   MLAT_MIN_CONFIDENCE          ambang minimum keyakinan (0.4)
+ *   MLAT_UNRELIABLE_THRESHOLD    jumlah laporan anomali berturut-turut sebelum ditarik (3)
+ *   MLAT_RECOVERY_THRESHOLD      jumlah laporan valid berturut-turut untuk pulih (3)
+ *   MLAT_MAX_STALE_MS            batas waktu sebelum dianggap basi (10000)
+ *   MLAT_MAX_ALTITUDE_FT         batas ketinggian cakupan MLAT (5000, 0 = tanpa batas)
  */
 export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
   const warnings: string[] = [];
@@ -132,18 +142,6 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
       options: {
         ...m,
         enabled: !isOff(env.MLAT_VALIDATION_ENABLED),
-        maxGroundSpeedKt: positive(
-          env,
-          "MLAT_MAX_GROUND_SPEED_KT",
-          m.maxGroundSpeedKt,
-          warnings,
-        ),
-        maxAirSpeedKt: positive(
-          env,
-          "MLAT_MAX_AIR_SPEED_KT",
-          m.maxAirSpeedKt,
-          warnings,
-        ),
         maxGroundJumpSpeedKt: positive(
           env,
           "MLAT_MAX_GROUND_JUMP_KT",

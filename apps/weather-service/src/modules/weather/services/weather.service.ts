@@ -6,7 +6,7 @@ import {
   weatherObservations,
   weatherSyncMetadata,
 } from "@repo/database";
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { env } from "@/config/env";
 import { isForecastStale, isObservationStale } from "../lib/staleness";
 import type { GetObservationHistoryParams } from "../validator/weather.validator";

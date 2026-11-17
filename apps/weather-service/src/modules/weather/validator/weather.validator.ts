@@ -17,7 +17,9 @@ export type GetForecastParams = z.infer<typeof getForecastSchema>;
 export const getObservationHistorySchema = z
   .object({
     station: z.string().length(4).optional(),
-    kind: z.union([z.literal("METAR"), z.literal("SPECI")]).optional(),
+    kind: z
+      .union([z.literal("METAR"), z.literal("SPECI"), z.literal("TAF")])
+      .optional(),
     from: z.coerce.date().optional(),
     to: z.coerce.date().optional(),
     page: z.coerce.number().min(1).default(1),

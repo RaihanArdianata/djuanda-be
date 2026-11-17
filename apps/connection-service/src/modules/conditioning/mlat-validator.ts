@@ -7,9 +7,12 @@ import { distanceM, type LatLon } from "./geo";
  * Memeriksa apakah data pesawat yang bersumber dari feed/protokol MLAT (CAT010/CAT011/CAT020/feed mlat)
  * masih layak digunakan dalam pemantauan. Kriteria keandalan:
  *  1. Koordinat valid (bukan NaN/null/0,0).
- *  2. Kecepatan wajar (tidak melebihi batas fisik di darat maupun di udara).
- *  3. Tidak mengalami lonjakan posisi (teleportasi) yang menghasilkan kecepatan turunan ekstrem.
- *  4. Kualitas/confidence memenuhi ambang batas minimum.
+ *  2. Tidak mengalami lonjakan posisi (teleportasi) yang menghasilkan kecepatan turunan ekstrem.
+ *  3. Kualitas/confidence memenuhi ambang batas minimum.
+ *  4. Ketinggian dalam batas cakupan MLAT (opsional, default 5000 ft).
+ *
+ * Catatan: Validasi kecepatan tidak dilakukan karena MLAT terutama untuk surveilans permukaan bandara
+ * dan operasi takeoff/landing memerlukan kecepatan tinggi yang wajar.
  *
  * Ladder tindakan:
  *  - pass: data andal, diteruskan ke fusi dan gambaran udara.
@@ -20,10 +23,6 @@ import { distanceM, type LatLon } from "./geo";
 
 export interface MlatValidatorOptions {
   enabled: boolean;
-  /** Batas kecepatan maksimum pesawat di permukaan, knot (bawaan 100). */
-  maxGroundSpeedKt: number;
-  /** Batas kecepatan maksimum pesawat di udara, knot (bawaan 700). */
-  maxAirSpeedKt: number;
   /** Batas kecepatan lompatan posisi di permukaan, knot (bawaan 150). */
   maxGroundJumpSpeedKt: number;
   /** Batas kecepatan lompatan posisi di udara, knot (bawaan 800). */
@@ -49,8 +48,6 @@ export interface MlatValidatorOptions {
 
 export const DEFAULT_MLAT_VALIDATOR_OPTIONS: MlatValidatorOptions = {
   enabled: true,
-  maxGroundSpeedKt: 100,
-  maxAirSpeedKt: 700,
   maxGroundJumpSpeedKt: 150,
   maxAirJumpSpeedKt: 800,
   minConfidence: 0.4,
@@ -130,24 +127,6 @@ function validateCoordinates(pos: FusedTrackEvent["position"]): string | null {
     (pos.lat === 0 && pos.lon === 0)
   ) {
     return "koordinat di luar batas valid";
-  }
-  return null;
-}
-
-function validateSpeed(
-  event: FusedTrackEvent,
-  onGround: boolean | undefined,
-  maxGroundSpeedKt: number,
-  maxAirSpeedKt: number,
-): string | null {
-  const gs = event.velocity?.groundSpeed;
-  if (gs === undefined || !Number.isFinite(gs)) return null;
-  if (gs < 0) return "kecepatan negatif";
-  if (onGround && gs > maxGroundSpeedKt) {
-    return `kecepatan darat (${Math.round(gs)} kt) melebihi batas (${maxGroundSpeedKt} kt)`;
-  }
-  if (!onGround && gs > maxAirSpeedKt) {
-    return `kecepatan udara (${Math.round(gs)} kt) melebihi batas (${maxAirSpeedKt} kt)`;
   }
   return null;
 }
@@ -285,14 +264,6 @@ export function createMlatValidator(
     const pos = event.position;
     const coordErr = validateCoordinates(pos);
     if (coordErr) return coordErr;
-
-    const speedErr = validateSpeed(
-      event,
-      pos?.onGround,
-      opts.maxGroundSpeedKt,
-      opts.maxAirSpeedKt,
-    );
-    if (speedErr) return speedErr;
 
     const jumpErr = pos
       ? validateJump(

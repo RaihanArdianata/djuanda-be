@@ -1,5 +1,18 @@
 import { db, type NotamMessage, notamMessages } from "@repo/database";
-import { and, asc, desc, eq, gte, lte, type SQL, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  like,
+  lt,
+  lte,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import type { ListNotamQueryInput } from "../validator/notam.validator";
 
 const SORTABLE_COLUMNS = {
@@ -11,15 +24,45 @@ const SORTABLE_COLUMNS = {
 
 export type NotamSortableColumn = keyof typeof SORTABLE_COLUMNS;
 
+const buildPhaseFilter = (phase: string, now: Date): SQL | undefined => {
+  switch (phase) {
+    case "dibatalkan":
+      return eq(notamMessages.status, "CANCELLED");
+    case "kedaluwarsa":
+      return or(
+        eq(notamMessages.status, "EXPIRED"),
+        and(
+          eq(notamMessages.status, "ACTIVE"),
+          lt(notamMessages.effectiveTo, now),
+        ),
+      );
+    case "akan-datang":
+      return and(
+        eq(notamMessages.status, "ACTIVE"),
+        gt(notamMessages.effectiveFrom, now),
+      );
+    case "berlaku":
+      return and(
+        eq(notamMessages.status, "ACTIVE"),
+        lte(notamMessages.effectiveFrom, now),
+        gte(notamMessages.effectiveTo, now),
+      );
+    default:
+      return undefined;
+  }
+};
+
 const buildFilters = (params: ListNotamQueryInput): SQL | undefined => {
+  const now = new Date();
   const filters: (SQL | undefined)[] = [
     params.status ? eq(notamMessages.status, params.status) : undefined,
+    params.phase ? buildPhaseFilter(params.phase, now) : undefined,
     params.fir ? eq(notamMessages.fir, params.fir.toUpperCase()) : undefined,
     params.icaoLocation
       ? eq(notamMessages.icaoLocation, params.icaoLocation.toUpperCase())
       : undefined,
     params.qcode
-      ? eq(notamMessages.qcode, params.qcode.toUpperCase())
+      ? like(notamMessages.qcode, `${params.qcode.toUpperCase()}%`)
       : undefined,
     params.series
       ? eq(notamMessages.series, params.series.toUpperCase())

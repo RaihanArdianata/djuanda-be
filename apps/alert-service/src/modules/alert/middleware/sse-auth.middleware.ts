@@ -1,4 +1,9 @@
-import { getUserById, validateAccessToken, verifyToken } from "@repo/auth";
+import {
+  getUserById,
+  sessionTerminatedError,
+  validateAccessToken,
+  verifyToken,
+} from "@repo/auth";
 import ApiError from "@repo/shared/api-error";
 import { catchAsync } from "@repo/shared/catch-async";
 import type { JWTPayload } from "hono/utils/jwt/types";
@@ -39,7 +44,7 @@ export const sseAuthentication = catchAsync(async (c, next) => {
   }
 
   if (!isValid) {
-    throw new ApiError("SESSION_TERMINATED");
+    throw await sessionTerminatedError(id, c.req.header("User-Agent"));
   }
 
   c.set("jwtPayload", payload);

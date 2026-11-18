@@ -2,11 +2,12 @@ import {
   authTokens,
   db,
   userPermissionsQueryConfig,
+  userSessions,
   users,
 } from "@repo/database";
 import { logger } from "@repo/logger";
 import { sha256Hash } from "@repo/shared/utils/hashing";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNull } from "drizzle-orm";
 import { verifyToken } from "./jwt";
 import type { GetUserType } from "./types";
 
@@ -67,4 +68,29 @@ export async function validateAccessToken(
     isValid: true,
     isExpired: false,
   };
+}
+
+/** Sesi aktif terbaru pengguna: dialah yang menggantikan sesi lama yang diputus oleh login di perangkat lain. */
+export async function getReplacingSession(userId: string): Promise<{
+  deviceInfo: string | null;
+  ipAddress: string | null;
+  createdAt: Date | null;
+} | null> {
+  const [row] = await db
+    .select({
+      deviceInfo: userSessions.deviceInfo,
+      ipAddress: userSessions.ipAddress,
+      createdAt: userSessions.createdAt,
+    })
+    .from(userSessions)
+    .where(
+      and(
+        eq(userSessions.userId, userId),
+        isNull(userSessions.revokedAt),
+        gt(userSessions.expiresAt, new Date()),
+      ),
+    )
+    .orderBy(desc(userSessions.createdAt))
+    .limit(1);
+  return row ?? null;
 }

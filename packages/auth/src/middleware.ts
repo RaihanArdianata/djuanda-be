@@ -3,6 +3,7 @@ import ApiError from "@repo/shared/api-error";
 import { catchAsync } from "@repo/shared/catch-async";
 import { jwt } from "hono/jwt";
 import { getUserById, validateAccessToken } from "./service";
+import { sessionTerminatedError } from "./session-terminated";
 
 export const authentication = catchAsync(async (c, next) => {
   const jwtMiddleware = jwt({
@@ -33,7 +34,7 @@ export const authentication = catchAsync(async (c, next) => {
     if (isExpired) {
       throw new ApiError("INVALID_ACCESS_TOKEN");
     } else if (!isValid) {
-      throw new ApiError("SESSION_TERMINATED");
+      throw await sessionTerminatedError(id, c.req.header("User-Agent"));
     }
 
     c.set("user", findUser);

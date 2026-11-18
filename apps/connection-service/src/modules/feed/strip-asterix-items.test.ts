@@ -13,7 +13,10 @@ describe("withoutAsterixItems", () => {
 
   it("removes the decoded items and keeps the rest of meta", () => {
     const out = withoutAsterixItems(event);
-    expect(out.meta).toEqual({ sourceType: "ASTERIX_UDP", port: 18600 });
+    expect(out.meta as Record<string, unknown>).toEqual({
+      sourceType: "ASTERIX_UDP",
+      port: 18600,
+    });
     expect(out.trackId).toBe("ast_1");
   });
 

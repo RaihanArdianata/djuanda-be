@@ -30,9 +30,9 @@
     "typescript": "^6.0.3"
   },
   "dependencies": {
-    "@aeroswarm/codec": "^0.1.13",
+    "@aeroswarm/codec": "^0.1.14",
     "@aeroswarm/core": "^0.2.13",
-    "@aeroswarm/ingest": "^0.1.12",
+    "@aeroswarm/ingest": "^0.1.16",
     "@aeroswarm/live-server": "^0.1.9",
     "bcryptjs": "^3.0.3"
   },

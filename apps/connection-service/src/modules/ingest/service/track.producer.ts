@@ -109,15 +109,63 @@ function toTrackUpdatedEvent(
   };
 }
 
-/** Event track lengkap apa adanya, kunci `trackId`. Event tanpa `trackId` dilewati. */
+/**
+ * Bentuk tetap untuk konsumen: setiap field yang dikenal `FusedTrackEvent` selalu ada, bernilai `null` bila sensor tidak
+ * mengirimnya (bukan hilang), jadi pembaca tidak perlu menebak "kosong" atau "tidak dikirim". Field di luar daftar ini
+ * (mis. `meta`, `confidence`) ikut apa adanya.
+ */
+const NULL_FIELDS: Record<string, readonly string[]> = {
+  identity: [
+    "icao24",
+    "callsign",
+    "squawk",
+    "targetType",
+    "vehicleFleet",
+    "aircraftType",
+    "wake",
+  ],
+  route: ["adep", "ades"],
+  details: [
+    "trackNumber",
+    "timeOfDay",
+    "emitterCategory",
+    "lengthM",
+    "widthM",
+    "orientationDeg",
+  ],
+  dataSource: ["sac", "sic"],
+  position: ["lat", "lon", "alt", "altSource", "onGround"],
+  velocity: ["groundSpeed", "heading", "verticalRate"],
+};
+
+/** `value` dengan setiap kunci di `keys` terisi: yang tidak ada (atau undefined) menjadi null. */
+function withNulls(
+  value: unknown,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const src =
+    value !== null && typeof value === "object"
+      ? (value as Record<string, unknown>)
+      : {};
+  const out: Record<string, unknown> = { ...src };
+  for (const k of keys) out[k] = src[k] ?? null;
+  return out;
+}
+
+/** Event track lengkap dalam bentuk tetap (lihat NULL_FIELDS), kunci `trackId`. Event tanpa `trackId` dilewati. */
 export function toFullTrackMessages(
   events: unknown[],
 ): Array<{ key: string; value: string }> {
   const out: Array<{ key: string; value: string }> = [];
   for (const e of events) {
-    const trackId = (e as { trackId?: unknown } | null)?.trackId;
+    const event = e as Record<string, unknown> | null;
+    const trackId = event?.trackId;
     if (typeof trackId !== "string" || trackId === "") continue;
-    out.push({ key: trackId, value: JSON.stringify(e) });
+    const shaped: Record<string, unknown> = { ...event };
+    for (const [group, keys] of Object.entries(NULL_FIELDS)) {
+      shaped[group] = withNulls(event?.[group], keys);
+    }
+    out.push({ key: trackId, value: JSON.stringify(shaped) });
   }
   return out;
 }

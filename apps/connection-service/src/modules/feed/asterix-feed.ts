@@ -11,6 +11,7 @@ import {
 import { logger } from "@repo/logger";
 import type { FusedTrackEventLike } from "../ingest/service/ingest.service";
 import { loadAsterixFeedConfigs, type NamedFeedConfig } from "./asterix-config";
+import { withoutAsterixItems } from "./strip-asterix-items";
 
 /** What a started feed must offer — satisfied by `AsterixFeedSource`. */
 export interface RunnableFeed {
@@ -118,10 +119,12 @@ function route(
       if (!isFused(ev.event)) return;
       const track = fuseTrack(ev.event, fuse);
       if (!track) return;
+      // persist menerima event penuh (item mentah ikut ke topik Kafka asmgcs.tracks.full); peta live tidak.
       safely("persist", () => persist({ ...track }));
       if (handlers.onTrack) {
         const fn = handlers.onTrack;
-        safely("onTrack", () => fn(track));
+        const live = withoutAsterixItems(track);
+        safely("onTrack", () => fn(live));
       }
       return;
     }

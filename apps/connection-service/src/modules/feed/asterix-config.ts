@@ -117,7 +117,22 @@ export function loadAsterixFeedConfigs(env: Env): FeedConfigResult {
       warnings.push(`ASTERIX_FEEDS "${extra.name}": ${clash} — skipped`);
     else feeds.push(extra);
   }
-  return { feeds, warnings };
+  return { feeds: withRawItems(feeds, env), warnings };
+}
+
+/**
+ * ASTERIX_RAW_ITEMS (bawaan: aktif): setiap track membawa semua nilai item hasil dekode di `meta.asterix`, untuk topik Kafka
+ * `asmgcs.tracks.full`. `false`/`0`/`off` mematikannya. Perlu @aeroswarm/ingest yang mengenal opsi `rawItems`; versi lama
+ * mengabaikannya.
+ */
+function withRawItems(feeds: NamedFeedConfig[], env: Env): NamedFeedConfig[] {
+  const raw = env.ASTERIX_RAW_ITEMS?.trim().toLowerCase();
+  if (raw === "false" || raw === "0" || raw === "off" || raw === "no")
+    return feeds;
+  return feeds.map((f) => ({
+    ...f,
+    config: { ...f.config, rawItems: true } as NamedFeedConfig["config"],
+  }));
 }
 
 function feedClash(

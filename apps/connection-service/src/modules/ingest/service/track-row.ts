@@ -1,4 +1,5 @@
 import type { aeroswarmTracks } from "@repo/database";
+import { withoutAsterixItems } from "../../feed/strip-asterix-items";
 
 export type TrackRow = typeof aeroswarmTracks.$inferInsert;
 
@@ -49,6 +50,6 @@ export function toTrackRow(event: TrackRowSource): TrackRow {
     protocol: text(event.protocol),
     sac: event.dataSource?.sac ?? null,
     sic: event.dataSource?.sic ?? null,
-    data: event,
+    data: withoutAsterixItems(event),
   };
 }

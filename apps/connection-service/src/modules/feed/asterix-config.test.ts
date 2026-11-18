@@ -317,3 +317,30 @@ describe("loadAsterixFeedConfigs", () => {
     });
   });
 });
+
+describe("ASTERIX_RAW_ITEMS", () => {
+  const udp = { AEROSWARM_FEED_UDP_PORT: "30000" };
+  const rawItems = (f: { config: unknown }): unknown =>
+    (f.config as { rawItems?: boolean }).rawItems;
+
+  it("is on by default, for every feed", () => {
+    const { feeds } = loadAsterixFeedConfigs({
+      ...udp,
+      ASTERIX_FEEDS: JSON.stringify([
+        { name: "mlat", transport: "udp", port: 18600 },
+      ]),
+    });
+    expect(feeds).toHaveLength(2);
+    for (const f of feeds) expect(rawItems(f)).toBe(true);
+  });
+
+  it("is switched off by false, 0, off or no", () => {
+    for (const v of ["false", "0", "off", "no", " FALSE "]) {
+      const { feeds } = loadAsterixFeedConfigs({
+        ...udp,
+        ASTERIX_RAW_ITEMS: v,
+      });
+      expect(rawItems(first(feeds))).toBeUndefined();
+    }
+  });
+});

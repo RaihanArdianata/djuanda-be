@@ -68,3 +68,22 @@ describe("toTrackRow", () => {
     }
   });
 });
+
+describe("toTrackRow with decoded items", () => {
+  it("keeps the raw ASTERIX items out of the stored event", () => {
+    const event = {
+      trackId: "ast_9",
+      fusedAt: 1_762_000_000_000,
+      meta: {
+        port: 18600,
+        asterix: { category: 20, items: { "010": { SAC: 1 } } },
+      },
+    };
+    const row = toTrackRow(event);
+    expect((row.data as { meta: Record<string, unknown> }).meta).toEqual({
+      port: 18600,
+    });
+    // The event the Kafka full topic gets is not touched.
+    expect(event.meta.asterix.category).toBe(20);
+  });
+});

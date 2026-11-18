@@ -676,8 +676,10 @@ export async function getOperationalStatistics(
       // `data`), direduksi ke `ev` per (track, jam, type, label). Seluruh ringkasan
       // diturunkan dari `ev`, jadi tabel tidak dibaca ulang dan tidak ada baris
       // per-track/per-event yang dikirim ke JavaScript.
+      // Tanpa kata kunci MATERIALIZED: itu sintaks PostgreSQL 12 ke atas, sedangkan server database kantor PostgreSQL 11. CTE `ev`
+      // dibaca dua kali, jadi PostgreSQL 12 ke atas pun otomatis menyimpannya (PostgreSQL 11 selalu); hasilnya sama.
       db.execute<MovementAggQueryRow>(sql`
-        WITH ev AS MATERIALIZED (
+        WITH ev AS (
           SELECT
             m.track_id,
             m.hour_local,

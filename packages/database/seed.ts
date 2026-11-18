@@ -125,9 +125,41 @@ async function findRoleByName(name: string): Promise<{ id: number }> {
 }
 
 /**
+ * Bentrokan username/telepon dengan pengguna lain diselesaikan dengan MENGGANTI NAMA baris lain itu (username dan telepon
+ * miliknya diberi akhiran `-old-<id>`), bukan menghapusnya. Matikan dengan SEED_RESOLVE_CONFLICTS=0: seed lalu berhenti
+ * dengan pesan yang menyebut siapa saja yang bentrok.
+ */
+const resolveConflicts: boolean = !["0", "false", "no", "off"].includes(
+  (process.env.SEED_RESOLVE_CONFLICTS ?? "").trim().toLowerCase(),
+);
+
+interface UserRow {
+  id: string;
+  email: string;
+  username: string;
+  phone: string;
+}
+
+/** Memberi baris `row` username dan telepon unik bila memegang nilai yang diminta seed; kembalikan yang diubah. */
+async function freeUsernameAndPhone(
+  row: UserRow,
+  wanted: { username: string; phone: string },
+): Promise<void> {
+  const suffix = row.id.slice(0, 8);
+  const set: { username?: string; phone?: string } = {};
+  if (row.username === wanted.username)
+    set.username = `${row.username}-old-${suffix}`;
+  if (row.phone === wanted.phone) set.phone = `old-${suffix}`;
+  if (Object.keys(set).length === 0) return;
+  await db.update(users).set(set).where(eq(users.id, row.id));
+  console.log(
+    `Pengguna ${row.email} bentrok; diganti nama: ${JSON.stringify(set)} (data tidak dihapus).`,
+  );
+}
+
+/**
  * Membuat atau memperbarui satu pengguna seed. Pencocokan deterministik: email dulu; tanpa kecocokan email, pengguna seed
- * dengan email lama dikenali dari username atau telepon. Bila lebih dari satu baris cocok, atau username/telepon baru sudah
- * dipakai pengguna lain, seed berhenti dengan pesan yang menyebut siapa saja (tidak menebak baris mana yang diubah).
+ * dengan email lama dikenali dari username atau telepon.
  */
 async function upsertUser(values: {
   email: string;
@@ -136,46 +168,55 @@ async function upsertUser(values: {
   username: string;
   roleId?: number;
 }): Promise<{ id: string }> {
+  const columns = {
+    id: users.id,
+    email: users.email,
+    username: users.username,
+    phone: users.phone,
+  };
   const [byEmail] = await db
-    .select({ id: users.id })
+    .select(columns)
     .from(users)
     .where(eq(users.email, values.email))
     .limit(1);
-  let targetId: string | undefined = byEmail?.id;
+  let target: UserRow | undefined = byEmail;
 
-  if (!targetId) {
+  if (!target) {
     const rows = await db
-      .select({ id: users.id, email: users.email })
+      .select(columns)
       .from(users)
       .where(
         or(eq(users.username, values.username), eq(users.phone, values.phone)),
       );
-    if (rows.length > 1) {
+    if (rows.length > 1 && !resolveConflicts) {
       throw new Error(
         `Lebih dari satu pengguna cocok dengan username "${values.username}" atau telepon "${values.phone}": ${rows.map((r) => r.email).join(", ")}. Samakan atau hapus salah satunya dulu.`,
       );
     }
-    targetId = rows[0]?.id;
+    // Yang username-nya sama dipilih lebih dulu; sisanya diurus sebagai bentrokan di bawah.
+    target = rows.find((r) => r.username === values.username) ?? rows[0];
   }
 
-  if (targetId) {
+  if (target) {
     const clash = await db
-      .select({ email: users.email })
+      .select(columns)
       .from(users)
       .where(
         and(
-          ne(users.id, targetId),
+          ne(users.id, target.id),
           or(
             eq(users.username, values.username),
             eq(users.phone, values.phone),
           ),
         ),
       );
-    if (clash.length > 0) {
+    if (clash.length > 0 && !resolveConflicts) {
       throw new Error(
         `Username "${values.username}" atau telepon "${values.phone}" sudah dipakai pengguna lain: ${clash.map((c) => c.email).join(", ")}.`,
       );
     }
+    for (const row of clash) await freeUsernameAndPhone(row, values);
+
     const [updated] = await db
       .update(users)
       .set({
@@ -185,7 +226,7 @@ async function upsertUser(values: {
         username: values.username,
         roleId: values.roleId,
       })
-      .where(eq(users.id, targetId))
+      .where(eq(users.id, target.id))
       .returning({ id: users.id });
     return updated;
   }

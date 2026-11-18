@@ -143,6 +143,9 @@ services:
         # aeroswarm_tracks in Postgres, not this topic).
         converge ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks} 86400000 1073741824
 
+        # Track LENGKAP (semua field, tidak dipangkas) untuk aplikasi lain. Event lebih besar, jadi retensi lebih pendek.
+        converge ${AEROSWARM_TRACK_FULL_KAFKA_TOPIC:-asmgcs.tracks.full} 21600000 1073741824
+
         # Alert lifecycle -> notification-service; alerts also persist to
         # the alerts table, so 3d Kafka history is ample for replay/debug.
         converge ${ALERT_KAFKA_ALERT_TOPIC:-asmgcs.alerts} 259200000 1073741824

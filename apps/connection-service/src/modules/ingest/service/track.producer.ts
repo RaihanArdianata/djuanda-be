@@ -13,6 +13,13 @@ const brokers = (
 const TRACK_TOPIC: string =
   process.env.AEROSWARM_TRACK_KAFKA_TOPIC || "asmgcs.tracks";
 
+/**
+ * Topik kedua berisi event track LENGKAP (semua field hasil dekode dan fusi, tidak dipangkas) untuk aplikasi lain.
+ * `asmgcs.tracks` tetap berbentuk ringkas karena itu kontrak alert-service. Kosongkan nilainya untuk mematikan topik ini.
+ */
+const FULL_TRACK_TOPIC: string =
+  process.env.AEROSWARM_TRACK_FULL_KAFKA_TOPIC ?? "asmgcs.tracks.full";
+
 const kafka =
   brokers.length > 0
     ? new Kafka({ clientId: "connection-service", brokers })
@@ -102,6 +109,19 @@ function toTrackUpdatedEvent(
   };
 }
 
+/** Event track lengkap apa adanya, kunci `trackId`. Event tanpa `trackId` dilewati. */
+export function toFullTrackMessages(
+  events: unknown[],
+): Array<{ key: string; value: string }> {
+  const out: Array<{ key: string; value: string }> = [];
+  for (const e of events) {
+    const trackId = (e as { trackId?: unknown } | null)?.trackId;
+    if (typeof trackId !== "string" || trackId === "") continue;
+    out.push({ key: trackId, value: JSON.stringify(e) });
+  }
+  return out;
+}
+
 export async function startTrackProducer(): Promise<void> {
   if (!producer) {
     logger.info(
@@ -136,7 +156,22 @@ export async function publishTrackBatch(events: unknown[]): Promise<void> {
       value: JSON.stringify(e),
     }));
 
-  if (messages.length === 0) return;
+  if (messages.length > 0) {
+    await producer.send({ topic: TRACK_TOPIC, messages });
+  }
 
-  await producer.send({ topic: TRACK_TOPIC, messages });
+  // Topik lengkap untuk aplikasi lain: kegagalannya tidak boleh mengganggu alur alert-service di atas.
+  if (FULL_TRACK_TOPIC) {
+    const full = toFullTrackMessages(events);
+    if (full.length > 0) {
+      await producer
+        .send({ topic: FULL_TRACK_TOPIC, messages: full })
+        .catch((err: unknown) =>
+          logger.warn(
+            { err, topic: FULL_TRACK_TOPIC },
+            "full track publish failed",
+          ),
+        );
+    }
+  }
 }

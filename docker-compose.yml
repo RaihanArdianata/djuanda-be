@@ -17,6 +17,9 @@ services:
     container_name: backend-djuanda-redis
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-}"]
+    # Loopback host saja: connection-service memakai network host dan menjangkau Redis lewat sini.
+    ports:
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -62,11 +65,13 @@ services:
       - --reserve-memory=0M
       - --overprovisioned
       - --node-id=0
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092,TUNNEL://0.0.0.0:19093
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092,TUNNEL://${ADVERTISED_KAFKA_HOST}:19093
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092,TUNNEL://0.0.0.0:19093,HOST://0.0.0.0:19094
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${ADVERTISED_KAFKA_HOST:?set ADVERTISED_KAFKA_HOST in .env — the address AeroSwarm's producer can reach}:19092,TUNNEL://${ADVERTISED_KAFKA_HOST}:19093,HOST://127.0.0.1:19094
     ports:
       - "19092:19092"
       - "19093:19093"
+      # Loopback host saja: connection-service (network host) menjangkau Kafka lewat sini.
+      - "127.0.0.1:19094:19094"
     volumes:
       - redpanda-data:/var/lib/redpanda/data
     healthcheck:
@@ -326,6 +331,10 @@ services:
       args:
         APP_DIR: connection-service
     restart: unless-stopped
+    # Network host: feed radar dan MLAT berupa multicast (224.1.1.109) dan broadcast di LAN sensor. Jaringan bridge Docker tidak
+    # menerima multicast dan tidak bisa berbagi port UDP dengan proses lain di host, jadi service ini memakai jaringan host.
+    # Akibatnya: `ports:` tidak dipakai, dan Redis, pgbouncer, Redpanda dijangkau lewat loopback host (bukan nama service).
+    network_mode: host
     env_file: .env
     environment:
       CONNECTION_SERVICE_PORT: ${CONNECTION_SERVICE_PORT:-3005}
@@ -337,19 +346,21 @@ services:
       AFTN_FEED_UDP_PORT: ${AFTN_FEED_UDP_PORT:-}
       AFTN_FEED_SOURCE_ID: ${AFTN_SOURCE_ID:-aftn-udp}
       AEROSWARM_FLIGHTPLAN_TOPIC: ${AEROSWARM_FLIGHTPLAN_TOPIC:-aeroswarm.flightplan.warr}
-      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@127.0.0.1:6432/${POSTGRES_DB:-backend_djuanda}
       # Kafka ingest consumer (alternative to http/websocket — see
       # docs/asmgcs/004-*.md). Unset AEROSWARM_INGEST_KAFKA_BROKERS to run
       # without it; the http/websocket ingest paths are unaffected either way.
-      AEROSWARM_INGEST_KAFKA_BROKERS: ${AEROSWARM_INGEST_KAFKA_BROKERS:-redpanda:9092}
+      AEROSWARM_INGEST_KAFKA_BROKERS: ${AEROSWARM_INGEST_KAFKA_BROKERS:-127.0.0.1:19094}
       AEROSWARM_INGEST_KAFKA_TOPIC: ${AEROSWARM_INGEST_KAFKA_TOPIC:-aeroswarm.ingest.warr}
       AEROSWARM_INGEST_KAFKA_GROUP_ID: connection-service
       # Outbound: fused tracks -> asmgcs.tracks untuk alert-service
-      AEROSWARM_TRACK_KAFKA_BROKERS: ${AEROSWARM_TRACK_KAFKA_BROKERS:-redpanda:9092}
+      AEROSWARM_TRACK_KAFKA_BROKERS: ${AEROSWARM_TRACK_KAFKA_BROKERS:-127.0.0.1:19094}
       AEROSWARM_TRACK_KAFKA_TOPIC: ${AEROSWARM_TRACK_KAFKA_TOPIC:-asmgcs.tracks}
-      KAFKA_BROKERS: redpanda:9092
+      KAFKA_BROKERS: 127.0.0.1:19094
+      # Nilai di .env (redpanda:9092) tidak bisa dipakai di network host.
+      AFTN_KAFKA_BROKERS: 127.0.0.1:19094
       KAFKA_MOVEMENT_TOPIC: ${KAFKA_MOVEMENT_TOPIC:-asmgcs.movement}
-      REDIS_HOST: redis
+      REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
@@ -362,22 +373,7 @@ services:
         required: false
       redis:
         condition: service_healthy
-    # Exposed directly (not via gateway): AeroSwarm's http connector POSTs
-    # ingest here, and the AeroSwarm dashboard connects here for this
-    # airport's replay/history (client-side federation). Host port follows
-    # CONNECTION_SERVICE_PORT — kalau kamu ganti port di .env, connector
-    # AeroSwarm & history_endpoint airport juga harus diarahkan ke port baru.
-    ports:
-      - "${CONNECTION_SERVICE_PORT:-3005}:${CONNECTION_SERVICE_PORT:-3005}"
-      # Radar/AFTN yang dikirim AeroSwarm lewat UDP. Port yang dibuka sama
-      # dengan port yang didengarkan feed (AEROSWARM_FEED_UDP_PORT,
-      # AFTN_FEED_UDP_PORT). Satu port UDP di host hanya bisa dipegang satu
-      # proses: kalau AeroSwarm masih mendengarkan 2026 di host yang sama,
-      # pakai port lain di sini.
-      - "${AEROSWARM_FEED_UDP_PORT:-2026}:${AEROSWARM_FEED_UDP_PORT:-2026}/udp"
-      - "${AFTN_FEED_UDP_PORT:-2028}:${AFTN_FEED_UDP_PORT:-2028}/udp"
-      # Feed MLAT (ASTERIX_FEEDS, nama "mlat"). Samakan dengan port di ASTERIX_FEEDS.
-      - "${MLAT_FEED_UDP_PORT:-18600}:${MLAT_FEED_UDP_PORT:-18600}/udp"
+    # Tanpa `ports:` (network host): API di CONNECTION_SERVICE_PORT dan listener UDP feed langsung terbuka di host.
     logging:
       driver: "json-file"
       options:
@@ -394,7 +390,7 @@ services:
     environment:
       WORKER_SERVICE_PORT: ${WORKER_SERVICE_PORT:-3003}
       # /ws/tracks/live is relayed here to connection-service (WebSocket traffic enters via the worker).
-      CONNECTION_SERVICE_URL: http://connection-service:${CONNECTION_SERVICE_PORT:-3005}
+      CONNECTION_SERVICE_URL: http://host.docker.internal:${CONNECTION_SERVICE_PORT:-3005}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@pgbouncer:6432/${POSTGRES_DB:-backend_djuanda}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -418,6 +414,9 @@ services:
       start_period: 10s
     ports:
       - "${WORKER_SERVICE_PORT:-3003}:${WORKER_SERVICE_PORT:-3003}"
+    # connection-service memakai network host: dijangkau lewat gateway host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   alert-service:
     container_name: backend-djuanda-alert-service
@@ -657,7 +656,7 @@ services:
       ALERT_SERVICE_URL: http://alert-service:${ALERT_SERVICE_PORT:-3006}
       WEATHER_SERVICE_URL: http://weather-service:${WEATHER_SERVICE_PORT:-3008}
       ADVISORY_SERVICE_URL: http://advisory-service:${ADVISORY_SERVICE_PORT:-3007}
-      CONNECTION_SERVICE_URL: http://connection-service:${CONNECTION_SERVICE_PORT:-3005}
+      CONNECTION_SERVICE_URL: http://host.docker.internal:${CONNECTION_SERVICE_PORT:-3005}
       WS_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/ws
       SSE_SERVICE_URL: http://worker-service:${WORKER_SERVICE_PORT:-3003}/sse
       AERODROME_SERVICE_URL: http://aerodrome-service:${AERODROME_SERVICE_PORT:-3009}
@@ -665,6 +664,9 @@ services:
       PLAYBACK_SERVICE_URL: http://playback-service:${PLAYBACK_SERVICE_PORT:-3011}
     ports:
       - "8080:8080"
+    # connection-service memakai network host: dijangkau lewat gateway host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       auth-service:
         condition: service_healthy

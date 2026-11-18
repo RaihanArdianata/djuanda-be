@@ -193,11 +193,12 @@ services:
       # Console is loopback-only — SSH tunnel in if you need the UI:
       #   ssh -L 9001:localhost:9001 <vps>
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    # --noproxy: container menerima HTTP_PROXY dari konfigurasi Docker di host; tanpa ini healthcheck ke localhost lewat proxy dan gagal.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -fs http://localhost:9000/minio/health/ready || exit 1",
+          "curl -fs --noproxy '*' http://localhost:9000/minio/health/ready || exit 1",
         ]
       interval: 10s
       timeout: 5s
@@ -215,6 +216,9 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       PLAYBACK_BUCKET: ${PLAYBACK_BUCKET:-playback-files}
+      # Panggilan ke minio:9000 tidak boleh lewat proxy kantor.
+      NO_PROXY: minio,localhost,127.0.0.1
+      no_proxy: minio,localhost,127.0.0.1
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

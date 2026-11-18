@@ -663,7 +663,8 @@ services:
       STATISTICS_SERVICE_URL: http://statistics-service:${STATISTICS_SERVICE_PORT:-3010}
       PLAYBACK_SERVICE_URL: http://playback-service:${PLAYBACK_SERVICE_PORT:-3011}
     ports:
-      - "8080:8080"
+      # Port host bisa diganti bila 8080 sudah dipakai proses lain di server (mis. GATEWAY_HOST_PORT=18080). Port di container tetap 8080.
+      - "${GATEWAY_HOST_PORT:-8080}:8080"
     # connection-service memakai network host: dijangkau lewat gateway host.
     extra_hosts:
       - "host.docker.internal:host-gateway"

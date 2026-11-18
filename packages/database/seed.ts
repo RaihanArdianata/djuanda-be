@@ -31,8 +31,20 @@ function getEnv(name: string): string {
 
 const superadminEmail: string = getEnv("SEED_SUPERADMIN_EMAIL");
 const superadminPassword: string = getEnv("SEED_SUPERADMIN_PASSWORD");
+const superadminUsername: string = getEnv("SEED_SUPERADMIN_USERNAME");
+const superadminName: string =
+  process.env.SEED_SUPERADMIN_NAME || "Super Admin";
+const superadminPhone: string =
+  process.env.SEED_SUPERADMIN_PHONE || "08999999990";
+// Nama peran yang dicari di database (tabel user_roles); error bila tidak ada.
+const superadminRoleName: string = process.env.SEED_SUPERADMIN_ROLE || "Owner";
+
 const adminEmail: string = getEnv("SEED_ADMIN_EMAIL");
 const adminPassword: string = getEnv("SEED_ADMIN_PASSWORD");
+const adminUsername: string = getEnv("SEED_ADMIN_USERNAME");
+const adminName: string = process.env.SEED_ADMIN_NAME || "Admin";
+const adminPhone: string = process.env.SEED_ADMIN_PHONE || "089999999991";
+const adminRoleName: string = process.env.SEED_ADMIN_ROLE || "Admin";
 
 async function getOrCreateRole(
   name: string,
@@ -77,6 +89,22 @@ async function getOrCreatePermission(
     .returning({ id: permissions.id });
 
   return created;
+}
+
+/** Peran yang sudah ada di database menurut namanya; bila tidak ada, error yang menyebut peran apa saja yang ada. */
+async function findRoleByName(name: string): Promise<{ id: number }> {
+  const [found] = await db
+    .select({ id: userRoles.id })
+    .from(userRoles)
+    .where(eq(userRoles.name, name))
+    .limit(1);
+  if (found) return found;
+
+  const all = await db.select({ name: userRoles.name }).from(userRoles);
+  const names = all.map((r) => r.name).join(", ") || "(belum ada)";
+  throw new Error(
+    `Peran "${name}" tidak ada di database. Peran yang ada: ${names}. Atur SEED_SUPERADMIN_ROLE / SEED_ADMIN_ROLE.`,
+  );
 }
 
 async function upsertUser(values: {
@@ -207,11 +235,15 @@ async function seed(): Promise<void> {
   await grant(roleUser.id, permAlertClear.id);
   await grant(roleUser.id, permAlertVerify.id);
 
+  const superadminRole = await findRoleByName(superadminRoleName);
+  const adminRole = await findRoleByName(adminRoleName);
+
   const superadmin = await upsertUser({
     email: superadminEmail,
-    name: "Super Admin Test",
-    phone: "081234567899",
-    username: "superadmin test",
+    name: superadminName,
+    phone: superadminPhone,
+    username: superadminUsername,
+    roleId: superadminRole.id,
   });
 
   const superadminHash = await bcryptHash(superadminPassword);
@@ -228,10 +260,10 @@ async function seed(): Promise<void> {
 
   const adminUser = await upsertUser({
     email: adminEmail,
-    name: "Admin Toko ABC",
-    phone: "081298765432",
-    username: "admintokoabc",
-    roleId: roleUser.id,
+    name: adminName,
+    phone: adminPhone,
+    username: adminUsername,
+    roleId: adminRole.id,
   });
 
   const adminHash = await bcryptHash(adminPassword);

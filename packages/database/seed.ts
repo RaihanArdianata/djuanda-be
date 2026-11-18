@@ -46,6 +46,23 @@ const adminName: string = process.env.SEED_ADMIN_NAME || "Admin";
 const adminPhone: string = process.env.SEED_ADMIN_PHONE || "089999999991";
 const adminRoleName: string = process.env.SEED_ADMIN_ROLE || "Admin";
 
+/**
+ * Izin RBAC berbentuk `PATH.AKSI`. rbacMiddleware mencocokkan awal path request (huruf kecil) dan metode HTTP:
+ * GET = VIEW, POST = CREATE, PUT/PATCH = EDIT, DELETE = DELETE. Satu baris per awal path yang dijaga rbacMiddleware di
+ * service (alert, aerodrome, playback, statistics, weather, user, roles, permissions). Owner dan Admin menerima semuanya.
+ */
+const RBAC_PATHS = [
+  "ALERT",
+  "AERODROME",
+  "PLAYBACK",
+  "STATISTICS",
+  "WEATHER",
+  "USERS",
+  "ROLES",
+  "PERMISSIONS",
+] as const;
+const RBAC_ACTIONS = ["VIEW", "CREATE", "EDIT", "DELETE"] as const;
+
 async function getOrCreateRole(
   name: string,
   description?: string,
@@ -154,15 +171,10 @@ async function seed(): Promise<void> {
   const roleAdmin = await getOrCreateRole("Admin");
   const roleUser = await getOrCreateRole("USER");
 
-  const permManageUsers = await getOrCreatePermission(
-    "Manage Users",
-    "users.manage",
-    "Kelola data user",
-  );
-
   // Hapus alert permission lowercase lama (kalau sudah pernah di-seed) supaya
   // konsisten dengan convention UPPERCASE permission code.
-  const staleAlertCodes = ["alert.view", "alert.create"];
+  // "users.manage" juga dihapus: kodenya tidak cocok dengan metode HTTP mana pun, diganti USERS.VIEW/CREATE/EDIT/DELETE.
+  const staleAlertCodes = ["alert.view", "alert.create", "users.manage"];
   for (const code of staleAlertCodes) {
     const existing = await db
       .select({ id: permissions.id })
@@ -220,13 +232,26 @@ async function seed(): Promise<void> {
       .onConflictDoNothing();
 
   for (const role of [roleOwner, roleAdmin]) {
-    await grant(role.id, permManageUsers.id);
     await grant(role.id, permAlertView.id);
     await grant(role.id, permAlertCreate.id);
     await grant(role.id, permAlertEdit.id);
     await grant(role.id, permAlertClear.id);
     await grant(role.id, permAlertVerify.id);
     await grant(role.id, permAlertDelete.id);
+  }
+
+  // Semua fitur terbuka untuk Owner dan Admin: setiap kombinasi PATH.AKSI yang dicek rbacMiddleware.
+  for (const path of RBAC_PATHS) {
+    for (const action of RBAC_ACTIONS) {
+      const perm = await getOrCreatePermission(
+        `${action} ${path}`,
+        `${path}.${action}`,
+        `${action} untuk ${path.toLowerCase()}`,
+      );
+      for (const role of [roleOwner, roleAdmin]) {
+        await grant(role.id, perm.id);
+      }
+    }
   }
 
   // Operator (role USER) minimal perlu lihat + acknowledge/clear/verify alert.

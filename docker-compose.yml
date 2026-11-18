@@ -372,6 +372,8 @@ services:
       # pakai port lain di sini.
       - "${AEROSWARM_FEED_UDP_PORT:-2026}:${AEROSWARM_FEED_UDP_PORT:-2026}/udp"
       - "${AFTN_FEED_UDP_PORT:-2028}:${AFTN_FEED_UDP_PORT:-2028}/udp"
+      # Feed MLAT (ASTERIX_FEEDS, nama "mlat"). Samakan dengan port di ASTERIX_FEEDS.
+      - "${MLAT_FEED_UDP_PORT:-18600}:${MLAT_FEED_UDP_PORT:-18600}/udp"
     logging:
       driver: "json-file"
       options:

@@ -10,7 +10,7 @@ jobs:
     concurrency:
       group: backend-djuanda-production
       cancel-in-progress: true
-    runs-on: [self-hosted, kantor-231]
+    runs-on: [self-hosted, kantor-231, prod-123]
     timeout-minutes: 30
 
     env:

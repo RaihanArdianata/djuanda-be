@@ -1,7 +1,7 @@
 // biome-ignore-start lint/suspicious/noConsole: seed output
 
 import { bcryptHash } from "@repo/shared/utils/hashing";
-import { eq, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import {
   credentials,
   db,
@@ -124,6 +124,11 @@ async function findRoleByName(name: string): Promise<{ id: number }> {
   );
 }
 
+/**
+ * Membuat atau memperbarui satu pengguna seed. Pencocokan deterministik: email dulu; tanpa kecocokan email, pengguna seed
+ * dengan email lama dikenali dari username atau telepon. Bila lebih dari satu baris cocok, atau username/telepon baru sudah
+ * dipakai pengguna lain, seed berhenti dengan pesan yang menyebut siapa saja (tidak menebak baris mana yang diubah).
+ */
 async function upsertUser(values: {
   email: string;
   name: string;
@@ -131,19 +136,46 @@ async function upsertUser(values: {
   username: string;
   roleId?: number;
 }): Promise<{ id: string }> {
-  const existing = await db
+  const [byEmail] = await db
     .select({ id: users.id })
     .from(users)
-    .where(
-      or(
-        eq(users.email, values.email),
-        eq(users.username, values.username),
-        eq(users.phone, values.phone),
-      ),
-    )
+    .where(eq(users.email, values.email))
     .limit(1);
+  let targetId: string | undefined = byEmail?.id;
 
-  if (existing.length > 0) {
+  if (!targetId) {
+    const rows = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(
+        or(eq(users.username, values.username), eq(users.phone, values.phone)),
+      );
+    if (rows.length > 1) {
+      throw new Error(
+        `Lebih dari satu pengguna cocok dengan username "${values.username}" atau telepon "${values.phone}": ${rows.map((r) => r.email).join(", ")}. Samakan atau hapus salah satunya dulu.`,
+      );
+    }
+    targetId = rows[0]?.id;
+  }
+
+  if (targetId) {
+    const clash = await db
+      .select({ email: users.email })
+      .from(users)
+      .where(
+        and(
+          ne(users.id, targetId),
+          or(
+            eq(users.username, values.username),
+            eq(users.phone, values.phone),
+          ),
+        ),
+      );
+    if (clash.length > 0) {
+      throw new Error(
+        `Username "${values.username}" atau telepon "${values.phone}" sudah dipakai pengguna lain: ${clash.map((c) => c.email).join(", ")}.`,
+      );
+    }
     const [updated] = await db
       .update(users)
       .set({
@@ -153,7 +185,7 @@ async function upsertUser(values: {
         username: values.username,
         roleId: values.roleId,
       })
-      .where(eq(users.id, existing[0].id))
+      .where(eq(users.id, targetId))
       .returning({ id: users.id });
     return updated;
   }

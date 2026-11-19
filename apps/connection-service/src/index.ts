@@ -35,6 +35,7 @@ import { flightPlanPublisherFromEnv } from "./modules/flightplan/flightplan.prod
 import { restoreFlightPlans } from "./modules/flightplan/flightplan-restore";
 import { fetchStoredFlightPlanEvents } from "./modules/flightplan/flightplan-restore.db";
 import { callsignFromPlan } from "./modules/flightplan/plan-callsign";
+import { isPlausibleFlightPlan } from "./modules/flightplan/plausible-flightplan";
 import { fusionConfigFromEnv } from "./modules/fusion/fusion-config";
 import {
   isValidMonitorToken,
@@ -304,6 +305,15 @@ liveRuntime.state.on("removed", ({ trackId }): void => {
 // advisory-service stores them (it reads the same topic AeroSwarm used to fill).
 const flightPlanPublisher = flightPlanPublisherFromEnv(process.env);
 const onFlightPlan = (event: FlightPlanEvent): void => {
+  const plausible = isPlausibleFlightPlan(event);
+  if (!plausible.ok) {
+    // Data acak yang kebetulan mirip AFTN (mis. aliran lain di port radar): tidak disimpan dan tidak diteruskan.
+    logger.warn(
+      { reason: plausible.reason, sourceId: event.sourceId },
+      "flight plan dibuang: bukan pesan AFTN yang sah",
+    );
+    return;
+  }
   feedMetrics.aftnMessagesReceived.inc();
   liveRuntime.feedHandlers.onFlightPlan?.(event);
   flightPlanPublisher

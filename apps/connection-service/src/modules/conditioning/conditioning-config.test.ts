@@ -167,3 +167,32 @@ describe("createConditioning", () => {
     expect(result.reason).toContain("bayangan");
   });
 });
+
+describe("GHOST_ESTABLISHED_REPORTS", () => {
+  it("defaults to 10", () => {
+    expect(conditioningConfigFromEnv({}).ghost.options.establishedReports).toBe(
+      10,
+    );
+  });
+
+  it("takes a whole number, and 0 switches the rule off", () => {
+    expect(
+      conditioningConfigFromEnv({ GHOST_ESTABLISHED_REPORTS: "25" }).ghost
+        .options.establishedReports,
+    ).toBe(25);
+    expect(
+      conditioningConfigFromEnv({ GHOST_ESTABLISHED_REPORTS: "0" }).ghost
+        .options.establishedReports,
+    ).toBe(0);
+  });
+
+  it("warns and keeps the default for a value it cannot use", () => {
+    for (const bad of ["-1", "2.5", "abc"]) {
+      const cfg = conditioningConfigFromEnv({ GHOST_ESTABLISHED_REPORTS: bad });
+      expect(cfg.ghost.options.establishedReports).toBe(10);
+      expect(
+        cfg.warnings.some((w) => w.includes("GHOST_ESTABLISHED_REPORTS")),
+      ).toBe(true);
+    }
+  });
+});

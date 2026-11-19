@@ -38,6 +38,23 @@ function positive(
   return fallback;
 }
 
+/** Bilangan bulat 0 atau lebih dari env (0 = mati); nilai bawaan (dengan peringatan) bila tidak bisa dipakai. */
+function wholeFromZero(
+  env: Env,
+  key: string,
+  fallback: number,
+  warnings: string[],
+): number {
+  const raw = str(env[key]);
+  if (raw === undefined) return fallback;
+  const n = Number(raw);
+  if (Number.isInteger(n) && n >= 0) return n;
+  warnings.push(
+    `${key}="${raw}" is not a whole number of 0 or more — using ${fallback}`,
+  );
+  return fallback;
+}
+
 /** Angka pecahan dari env; nilai bawaan (dengan peringatan) bila diisi tetapi tidak bisa dipakai. */
 function fraction(
   env: Env,
@@ -63,6 +80,7 @@ function fraction(
  *   GHOST_RADIUS_M               dalam jarak ini dari target beridentitas = bayangan (40)
  *   GHOST_MIN_REPORTS            laporan sebelum target tanpa identitas dianggap nyata (3)
  *   GHOST_MAX_AGE_MS             laporan target beridentitas yang lebih tua tidak dipakai sebagai pembanding (2000)
+ *   GHOST_ESTABLISHED_REPORTS    target tanpa identitas dengan sekian laporan dianggap mapan: jadi induk gema, tidak pernah gema (10; 0 = mati)
  *
  * Penstabil target di permukaan (diam jadi titik, bergerak jadi garis mulus, arah stabil):
  *   TRACK_STABILIZER_ENABLED     default true
@@ -103,6 +121,12 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           true,
         ),
         maxAgeMs: positive(env, "GHOST_MAX_AGE_MS", g.maxAgeMs, warnings),
+        establishedReports: wholeFromZero(
+          env,
+          "GHOST_ESTABLISHED_REPORTS",
+          g.establishedReports,
+          warnings,
+        ),
       },
     },
     stabilizer: {

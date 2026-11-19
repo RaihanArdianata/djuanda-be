@@ -133,3 +133,129 @@ describe("ghost filter", () => {
     expect(filter.check(ghost(300, 1)).action).toBe("hold");
   });
 });
+
+describe("ghost filter: echoes of an identity-less target that is itself established", () => {
+  const anon = (id: string, north: number, east: number, over = {}) =>
+    track({ trackId: id, icao24: id, north, east, ...over });
+
+  /** Target tanpa identitas "r1-1-100" sampai mapan (cukup laporan dan sudah tampil). */
+  function establish(
+    filter: ReturnType<typeof createGhostFilter>,
+    c: ReturnType<typeof clock>,
+    reports: number,
+  ): void {
+    for (let i = 0; i < reports; i++) {
+      filter.check(anon("r1-1-100", 300, 0));
+      c.advance(100);
+    }
+  }
+
+  it("holds a young identity-less target that sticks to an established one", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 3,
+      establishedReports: 10,
+    });
+    establish(filter, c, 12);
+    expect(filter.check(anon("r1-1-100", 300, 0)).action).toBe("pass");
+    // Three echoes appear a few metres away, one after another.
+    for (const [id, metres] of [
+      ["r1-1-200", 6],
+      ["r1-1-201", 14],
+      ["r1-1-202", 25],
+    ] as const) {
+      for (let i = 0; i < 4; i++) {
+        filter.check(anon("r1-1-100", 300, 0));
+        c.advance(100);
+        expect(filter.check(anon(id, 300, metres)).action).toBe("hold");
+        c.advance(100);
+      }
+    }
+    expect(filter.stats().ghostReports).toBeGreaterThanOrEqual(12);
+  });
+
+  it("retracts an echo that had already been shown once its parent turns established", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 1,
+      establishedReports: 5,
+    });
+    // The echo shows up first (one report is enough to show), the parent is not established yet.
+    expect(filter.check(anon("r1-1-300", 300, 8)).action).toBe("pass");
+    establish(filter, c, 8);
+    const verdict = filter.check(anon("r1-1-300", 300, 8));
+    expect(verdict.action).toBe("retract");
+  });
+
+  it("does not suppress a target that has lasted establishedReports reports (two vehicles side by side)", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 3,
+      establishedReports: 10,
+    });
+    establish(filter, c, 12);
+    let last = "hold";
+    for (let i = 0; i < 20; i++) {
+      filter.check(anon("r1-1-100", 300, 0));
+      c.advance(100);
+      last = filter.check(anon("r1-1-400", 300, 15)).action;
+      c.advance(100);
+    }
+    expect(last).toBe("pass");
+  });
+
+  it("lets two targets that start together both through (neither is the older, established one)", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 3,
+      establishedReports: 10,
+    });
+    let a = "hold";
+    let b = "hold";
+    for (let i = 0; i < 6; i++) {
+      a = filter.check(anon("r1-1-500", 300, 0)).action;
+      b = filter.check(anon("r1-1-501", 300, 12)).action;
+      c.advance(100);
+    }
+    expect([a, b]).toEqual(["pass", "pass"]);
+  });
+
+  it("leaves a young target alone when it is far from the established one", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 1,
+      establishedReports: 10,
+    });
+    establish(filter, c, 12);
+    expect(filter.check(anon("r1-1-600", 300, 200)).action).toBe("pass");
+  });
+
+  it("only compares with an established target of the same sensor", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 1,
+      establishedReports: 10,
+    });
+    establish(filter, c, 12);
+    expect(
+      filter.check(anon("r1-1-700", 300, 5, { sac: 2, sic: 2 })).action,
+    ).toBe("pass");
+  });
+
+  it("is off with establishedReports 0", () => {
+    const c = clock();
+    const filter = createGhostFilter({
+      now: c.now,
+      minReports: 1,
+      establishedReports: 0,
+    });
+    establish(filter, c, 12);
+    expect(filter.check(anon("r1-1-800", 300, 5)).action).toBe("pass");
+  });
+});

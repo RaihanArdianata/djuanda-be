@@ -12,6 +12,10 @@ import { distanceM } from "./geo";
  *  1. Target tanpa identitas yang berada dalam `radiusM` dari target BERIDENTITAS dari sensor yang sama (laporan terakhir tidak lebih lama
  *     dari `maxAgeMs`) dianggap bayangan dan tidak diteruskan.
  *  2. Target tanpa identitas baru dianggap nyata setelah `minReports` laporan; sebelum itu ditahan.
+ *  3. Gema yang tidak punya induk beridentitas: target tanpa identitas yang masih muda (kurang dari `establishedReports` laporan) dan
+ *     menempel dalam `radiusM` pada target tanpa identitas LAIN yang sudah mapan (tampil, dan sudah `establishedReports` laporan atau
+ *     lebih, dari sensor yang sama) dianggap gema dari target mapan itu. Target yang bertahan sampai `establishedReports` laporan
+ *     dianggap nyata (mis. dua kendaraan berdampingan) dan tidak lagi disaring. 0 mematikan aturan ini.
  * Penyaringan dilakukan SEBELUM fusi, jadi bayangan tidak ikut disimpan, tidak tampil di peta, dan tidak sampai ke alert-service.
  */
 
@@ -24,6 +28,11 @@ export interface GhostFilterOptions {
   maxAgeMs: number;
   /** State target yang diam sekian lama dibuang, ms. */
   forgetAfterMs: number;
+  /**
+   * Target tanpa identitas dengan sekian laporan atau lebih dianggap mapan: ia boleh menjadi "induk" gema (aturan 3), dan tidak
+   * pernah dianggap gema lagi. 0 mematikan aturan 3.
+   */
+  establishedReports: number;
   now?: () => number;
 }
 
@@ -32,6 +41,7 @@ export const DEFAULT_GHOST_OPTIONS: GhostFilterOptions = {
   minReports: 3,
   maxAgeMs: 2_000,
   forgetAfterMs: 120_000,
+  establishedReports: 10,
 };
 
 export type GhostVerdict =
@@ -74,6 +84,9 @@ interface Identified {
 }
 
 interface Anonymous {
+  lat: number;
+  lon: number;
+  sensor: string;
   reports: number;
   farStreak: number;
   shown: boolean;
@@ -133,8 +146,39 @@ export function createGhostFilter(
     return { action: "pass" };
   };
 
-  const checkAnonymous = (event: FusedTrackEvent, at: number): GhostVerdict => {
+  /** `other` layak menjadi induk gema bagi `st`: tampil, bukan bayangan, masih aktif, mapan, dan lebih tua dari `st`. */
+  const canBeParent = (other: Anonymous, st: Anonymous, at: number): boolean =>
+    other.sensor === st.sensor &&
+    at - other.lastAt <= opts.maxAgeMs &&
+    other.shown &&
+    !other.ghost &&
+    other.reports >= opts.establishedReports &&
+    other.reports > st.reports;
+
+  /** Ada target tanpa identitas lain yang mapan dari sensor yang sama di dekat `st`; `st` sendiri harus masih muda. */
+  const nearEstablishedAnonymous = (
+    trackId: string,
+    st: Anonymous,
+    at: number,
+  ): boolean => {
+    if (opts.establishedReports <= 0) return false;
+    if (st.reports >= opts.establishedReports) return false;
+    for (const [id, other] of anonymous) {
+      if (id === trackId || !canBeParent(other, st, at)) continue;
+      if (distanceM(st, other) <= opts.radiusM) return true;
+    }
+    return false;
+  };
+
+  const checkAnonymous = (
+    event: FusedTrackEvent,
+    pos: { lat: number; lon: number },
+    at: number,
+  ): GhostVerdict => {
     const st = anonymous.get(event.trackId) ?? {
+      lat: pos.lat,
+      lon: pos.lon,
+      sensor: sensorKey(event),
       reports: 0,
       farStreak: 0,
       shown: false,
@@ -144,7 +188,12 @@ export function createGhostFilter(
     anonymous.set(event.trackId, st);
     st.reports++;
     st.lastAt = at;
-    return nearIdentified(event, at) ? onGhost(st) : onClear(st);
+    st.lat = pos.lat;
+    st.lon = pos.lon;
+    const echo =
+      nearIdentified(event, at) ||
+      nearEstablishedAnonymous(event.trackId, st, at);
+    return echo ? onGhost(st) : onClear(st);
   };
 
   return {
@@ -174,7 +223,7 @@ export function createGhostFilter(
         });
         return { action: "pass" };
       }
-      return checkAnonymous(event, at);
+      return checkAnonymous(event, pos, at);
     },
 
     forget(trackId: string): void {

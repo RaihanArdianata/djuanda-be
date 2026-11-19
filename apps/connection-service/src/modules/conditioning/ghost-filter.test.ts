@@ -259,3 +259,21 @@ describe("ghost filter: echoes of an identity-less target that is itself establi
     expect(filter.check(anon("r1-1-800", 300, 5)).action).toBe("pass");
   });
 });
+
+describe("ghost filter: hideUnidentified", () => {
+  it("holds every identity-less target, far from everything, and still passes identified ones", () => {
+    const c = clock();
+    const filter = createGhostFilter({ now: c.now, hideUnidentified: true });
+    for (let i = 0; i < 10; i++) {
+      expect(filter.check(ghost(500, i)).action).toBe("hold");
+      c.advance(100);
+    }
+    expect(filter.check(sjy(0, 0)).action).toBe("pass");
+  });
+
+  it("is off by default", () => {
+    const c = clock();
+    const filter = createGhostFilter({ now: c.now, minReports: 1 });
+    expect(filter.check(ghost(500, 0)).action).toBe("pass");
+  });
+});

@@ -33,6 +33,11 @@ export interface GhostFilterOptions {
    * pernah dianggap gema lagi. 0 mematikan aturan 3.
    */
   establishedReports: number;
+  /**
+   * Sembunyikan SEMUA target tanpa identitas (id sintetis `r1-1-123`), bukan hanya gema. Peta hanya menampilkan target yang
+   * beridentitas. Kendaraan atau pesawat yang memang tidak mengirim identitas ikut hilang, jadi bawaannya mati.
+   */
+  hideUnidentified: boolean;
   now?: () => number;
 }
 
@@ -42,6 +47,7 @@ export const DEFAULT_GHOST_OPTIONS: GhostFilterOptions = {
   maxAgeMs: 2_000,
   forgetAfterMs: 120_000,
   establishedReports: 10,
+  hideUnidentified: false,
 };
 
 export type GhostVerdict =
@@ -222,6 +228,10 @@ export function createGhostFilter(
           sensor: sensorKey(event),
         });
         return { action: "pass" };
+      }
+      if (opts.hideUnidentified) {
+        counters.ghostReports++;
+        return { action: "hold", reason: "bayangan" };
       }
       return checkAnonymous(event, pos, at);
     },

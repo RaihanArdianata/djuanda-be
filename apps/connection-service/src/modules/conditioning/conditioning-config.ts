@@ -80,6 +80,7 @@ function fraction(
  *   GHOST_RADIUS_M               dalam jarak ini dari target beridentitas = bayangan (40)
  *   GHOST_MIN_REPORTS            laporan sebelum target tanpa identitas dianggap nyata (3)
  *   GHOST_MAX_AGE_MS             laporan target beridentitas yang lebih tua tidak dipakai sebagai pembanding (2000)
+ *   GHOST_HIDE_UNIDENTIFIED      sembunyikan SEMUA target tanpa identitas (r1-1-123), bukan hanya gema (default true; false/0/off/no menampilkannya)
  *   GHOST_ESTABLISHED_REPORTS    target tanpa identitas dengan sekian laporan dianggap mapan: jadi induk gema, tidak pernah gema (10; 0 = mati)
  *
  * Penstabil target di permukaan (diam jadi titik, bergerak jadi garis mulus, arah stabil):
@@ -121,6 +122,8 @@ export function conditioningConfigFromEnv(env: Env): ConditioningConfig {
           true,
         ),
         maxAgeMs: positive(env, "GHOST_MAX_AGE_MS", g.maxAgeMs, warnings),
+        // Bawaan aktif di aplikasi; pustaka ghost-filter sendiri bawaannya mati.
+        hideUnidentified: !isOff(env.GHOST_HIDE_UNIDENTIFIED),
         establishedReports: wholeFromZero(
           env,
           "GHOST_ESTABLISHED_REPORTS",

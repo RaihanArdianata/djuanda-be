@@ -152,7 +152,11 @@ describe("createConditioning", () => {
 
   it("turns a retraction into a dropped event with a reason", () => {
     const c = clock();
-    const cfg = conditioningConfigFromEnv({ GHOST_MIN_REPORTS: "1" });
+    // Target tanpa identitas ditampilkan (bawaan aplikasi menyembunyikannya), supaya penarikan gema yang sempat tampil teruji.
+    const cfg = conditioningConfigFromEnv({
+      GHOST_MIN_REPORTS: "1",
+      GHOST_HIDE_UNIDENTIFIED: "false",
+    });
     cfg.ghost.options.now = c.now;
     const cond = createConditioning(cfg);
     expect(
@@ -193,6 +197,23 @@ describe("GHOST_ESTABLISHED_REPORTS", () => {
       expect(
         cfg.warnings.some((w) => w.includes("GHOST_ESTABLISHED_REPORTS")),
       ).toBe(true);
+    }
+  });
+});
+
+describe("GHOST_HIDE_UNIDENTIFIED", () => {
+  it("is on by default", () => {
+    expect(conditioningConfigFromEnv({}).ghost.options.hideUnidentified).toBe(
+      true,
+    );
+  });
+
+  it("is switched off by false, 0, off or no", () => {
+    for (const v of ["false", "0", "off", "no", " FALSE "]) {
+      expect(
+        conditioningConfigFromEnv({ GHOST_HIDE_UNIDENTIFIED: v }).ghost.options
+          .hideUnidentified,
+      ).toBe(false);
     }
   });
 });

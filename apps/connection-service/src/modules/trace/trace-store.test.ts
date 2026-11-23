@@ -37,6 +37,49 @@ describe("createTraceStore", () => {
     });
   });
 
+  it("merges a repeated step even when other stages were recorded in between", () => {
+    const store = createTraceStore({ perAircraft: 5 });
+    // Setiap laporan menulis tiga tahap bergantian; sebelumnya ini memenuhi buffer dengan 30 baris dari 10 laporan.
+    for (let i = 0; i < 100; i++) {
+      const at = 1_000 + i * 1_000;
+      store.record(
+        { ...base, stage: "ingest", outcome: "diterima", sensor: "cat020" },
+        at,
+      );
+      store.record({ ...base, stage: "fusi", outcome: "dipakai" }, at);
+      store.record(
+        { ...base, stage: "gambaran-udara", outcome: "tampil", lat: i, lon: i },
+        at,
+      );
+    }
+    const [a] = store.query("GIA322");
+    expect(a?.entries).toHaveLength(3);
+    expect(a?.entries.map((e) => e.count)).toEqual([100, 100, 100]);
+    expect(a?.entries[2]).toMatchObject({
+      firstAt: 1_000,
+      lastAt: 100_000,
+      lat: 99,
+    });
+  });
+
+  it("keeps the whole history of what changed: shown, held for a while, shown again", () => {
+    const store = createTraceStore();
+    store.record({ ...base, stage: "ingest", outcome: "diterima" }, 1_000);
+    store.record(
+      { ...base, stage: "ingest", outcome: "ditahan", detail: "bayangan" },
+      2_000,
+    );
+    store.record(
+      { ...base, stage: "ingest", outcome: "ditahan", detail: "bayangan" },
+      3_000,
+    );
+    store.record({ ...base, stage: "ingest", outcome: "diterima" }, 4_000);
+    const [a] = store.query("GIA322");
+    const held = a?.entries.find((e) => e.outcome === "ditahan");
+    expect(held).toMatchObject({ count: 2, firstAt: 2_000, lastAt: 3_000 });
+    expect(a?.entries.map((e) => e.outcome)).toEqual(["ditahan", "diterima"]);
+  });
+
   it("keeps a step that changed as a new entry", () => {
     const store = createTraceStore();
     store.record({ ...base, stage: "fusi", outcome: "dipakai" });

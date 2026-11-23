@@ -2,8 +2,9 @@
  * Penelusuran pesawat: di tahap mana sebuah pesawat terakhir terlihat atau dibuang, dan kenapa. Pertanyaan "kenapa pesawat X tidak tampil di
  * peta" tidak bisa dijawab dari statistik, karena pembuangan terjadi diam-diam di beberapa tahap (ingest, fusi, gambaran udara).
  *
- * Tiap tahap mencatat apa yang ia lakukan pada sebuah pesawat. Catatan yang sama berturut-turut digabung (dengan hitungan), jadi buffer
- * tiap pesawat memuat peralihan, bukan setiap laporan. Semuanya di memori, dibatasi per pesawat dan jumlah pesawat.
+ * Tiap tahap mencatat apa yang ia lakukan pada sebuah pesawat. Catatan yang sama digabung (dengan hitungan, waktu pertama dan terakhir),
+ * jadi buffer tiap pesawat memuat langkah-langkah yang berbeda, bukan setiap laporan. Semuanya di memori, dibatasi per pesawat dan
+ * jumlah pesawat.
  */
 
 export type TraceStage = "ingest" | "fusi" | "gambaran-udara";
@@ -69,17 +70,13 @@ interface Stored {
   entries: TraceEntry[];
 }
 
-/** Catatan terakhir yang sama dengan yang baru (tahap, hasil, keterangan, sensor): digabung, bukan ditambah. */
-function sameStep(
-  last: TraceEntry | undefined,
-  input: TraceInput,
-): last is TraceEntry {
+/** Catatan yang sama dengan yang baru (tahap, hasil, keterangan, sensor): digabung, bukan ditambah. */
+function sameStep(entry: TraceEntry, input: TraceInput): boolean {
   return (
-    last !== undefined &&
-    last.stage === input.stage &&
-    last.outcome === input.outcome &&
-    last.detail === input.detail &&
-    last.sensor === input.sensor
+    entry.stage === input.stage &&
+    entry.outcome === input.outcome &&
+    entry.detail === input.detail &&
+    entry.sensor === input.sensor
   );
 }
 
@@ -145,9 +142,15 @@ export function createTraceStore(options: TraceOptions = {}): TraceStore {
       const rec = touch(key);
       identify(rec, input);
 
-      const last = rec.entries[rec.entries.length - 1];
-      if (sameStep(last, input)) {
-        mergeStep(last, input, now);
+      // Satu laporan menulis tiga tahap bergantian (ingest, fusi, gambaran udara), jadi yang digabung adalah catatan terakhir yang SAMA di
+      // mana pun letaknya, bukan hanya yang paling belakang; kalau tidak, buffer penuh dalam beberapa laporan dan riwayatnya hilang.
+      // Catatan yang digabung dipindah ke belakang supaya urutan tetap menurut sentuhan terakhir.
+      for (let i = rec.entries.length - 1; i >= 0; i--) {
+        const entry = rec.entries[i];
+        if (!entry || !sameStep(entry, input)) continue;
+        rec.entries.splice(i, 1);
+        mergeStep(entry, input, now);
+        rec.entries.push(entry);
         return;
       }
       rec.entries.push(newStep(input, now));
